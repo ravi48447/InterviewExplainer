@@ -1,0 +1,62 @@
+[
+  {
+    "id": "py-sqla-q050",
+    "slug": "sqlalchemy-async-session-concurrency",
+    "question": "How do you handle database transactions correctly in an async FastAPI + SQLAlchemy application?",
+    "title": "Async SQLAlchemy Transactions in FastAPI",
+    "direct_answer": "Use a session-per-request dependency that yields a session, commits on success, and rolls back on exception. Use expire_on_commit=False to prevent lazy loads after commit in async context. For complex transactions spanning multiple service calls, pass the session explicitly as a parameter rather than creating multiple sessions. For read-heavy endpoints with no mutations, use autocommit=True or separate read sessions to reduce lock contention.",
+    "interviewer_intent": "Tests production async SQLAlchemy knowledge — transaction management is where async apps commonly have subtle bugs.",
+    "company_tags": [
+      "stripe",
+      "amazon"
+    ],
+    "answer": {
+      "sections": [
+        {
+          "type": "overview",
+          "title": "Async transaction management",
+          "content": "Async SQLAlchemy requires explicit session management. The session-per-request pattern (yield from FastAPI dependency) ensures each request has its own isolated transaction scope.\n\nKey async-specific issues:\n\n1. expire_on_commit: by default, SQLAlchemy expires all attributes after commit so they're refreshed from DB on next access. In async context, this triggers a new query inside async code that may be outside an active session. Set expire_on_commit=False or use db.refresh(obj) explicitly.\n\n2. Greenlet errors: accessing lazy relationships, expired attributes, or relationships outside the async context raises MissingGreenlet. Use selectinload proactively.\n\n3. Connection pool: each async session uses one connection from the pool. Long-held sessions starve other requests. Commit early, or use shorter-lived sessions for reads.\n\n4. Nested transactions: SQLAlchemy 2.0 supports nested transactions via session.begin_nested() (savepoints). Useful for partial rollback within a larger transaction."
+        },
+        {
+          "type": "code",
+          "title": "Async transaction patterns",
+          "content": "from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\n\nengine = create_async_engine(\n    'postgresql+asyncpg://user:pw@host/db',\n    pool_size=10,\n    max_overflow=20,\n    echo=False\n)\n\nasync_session = async_sessionmaker(\n    engine,\n    expire_on_commit=False,  # prevents post-commit lazy load errors\n    class_=AsyncSession\n)\n\n# Session dependency\nasync def get_db():\n    async with async_session() as session:\n        try:\n            yield session\n            await session.commit()\n        except Exception:\n            await session.rollback()\n            raise\n\n# Passing session to service functions\nclass UserService:\n    async def create_with_audit(self, db: AsyncSession, user_data: dict) -> User:\n        user = User(**user_data)\n        db.add(user)\n        await db.flush()  # get user.id\n\n        audit = AuditLog(user_id=user.id, action='create')\n        db.add(audit)\n        # Both committed together by the dependency\n        return user\n\n    async def transfer_credits(self, db: AsyncSession, from_id: int, to_id: int, amount: int):\n        from_user = await db.get(User, from_id)\n        to_user = await db.get(User, to_id)\n\n        # Nested transaction (savepoint) for partial rollback\n        async with db.begin_nested():\n            from_user.credits -= amount\n            to_user.credits += amount\n            # If this savepoint fails, outer transaction can continue\n\n        return from_user, to_user"
+        }
+      ]
+    },
+    "followup_questions": [
+      "How do you handle optimistic locking in SQLAlchemy?",
+      "What is connection pool exhaustion and how do you prevent it?",
+      "How do you test SQLAlchemy code with pytest and a test database?"
+    ],
+    "seo": {
+      "metaTitle": "Async SQLAlchemy FastAPI Transactions — Session Management Best Practices",
+      "metaDescription": "SQLAlchemy async transactions: session-per-request pattern, expire_on_commit=False, nested transactions with savepoints, and connection pool configuration."
+    },
+    "speakable_v2": {
+      "archetype": "D",
+      "pillar": "P03",
+      "hook": "The most common async SQLAlchemy bug: accessing an expired attribute after commit triggers a MissingGreenlet error because the session context is gone.",
+      "beats": [
+        {
+          "kind": "expire_on_commit",
+          "layout": "paragraph",
+          "content": "Set expire_on_commit=False in async_sessionmaker. Without it, SQLAlchemy expires all object attributes after commit. When you access them later, it tries to load from the DB — in async code, that can fail with MissingGreenlet if you're outside the session context."
+        },
+        {
+          "kind": "session_scope",
+          "layout": "paragraph",
+          "content": "One session per request via FastAPI dependency. Pass the session into service functions — don't create separate sessions inside service methods. Multiple sessions mean multiple transactions, which breaks atomicity."
+        },
+        {
+          "kind": "nested",
+          "layout": "paragraph",
+          "content": "begin_nested() creates a savepoint. Useful for transactions that should partially succeed — the savepoint can fail and roll back to itself without aborting the outer transaction."
+        }
+      ],
+      "cap": "Monitor your connection pool. If pool_size=10 and you have 50 concurrent requests all holding sessions open, 40 requests are waiting for a connection. Commit early to release connections.",
+      "followup_handoff": "Follow up with optimistic locking with version columns, or pytest fixtures for async SQLAlchemy testing.",
+      "tts_overrides": {}
+    }
+  }
+]

@@ -1,0 +1,380 @@
+{
+  "topic": "Contract Testing",
+  "topicSlug": "contract-testing",
+  "questions": [
+    {
+      "id": "ms-ct-001",
+      "slug": "consumer-driven-contract-testing-pact-spring-cloud-contract",
+      "question": "How does consumer-driven contract testing work, and how do you implement it with Pact or Spring Cloud Contract?",
+      "title": "Consumer-Driven Contract Testing with Pact / Spring Cloud Contract",
+      "direct_answer": "Contract testing verifies that a producer service meets the contracts expected by its consumers — without spinning up the full system. **Consumer-driven**: consumers write expectations (e.g., 'when I call GET /users/42, I expect this JSON shape'); the contract is published to a broker; producer's CI runs the contract as a test against its real code. Breaks fail CI before deploying. **Pact** (polyglot, pact-broker hosted) and **Spring Cloud Contract** (Groovy DSL, Maven plugin, WireMock stubs) are the two dominant tools. Solves the 'integration test explosion' problem in microservices: no need for full end-to-end environments for every PR.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Modern microservices testing strategies beyond unit and integration tests",
+        "common_mistake": "Relying only on end-to-end tests (slow, flaky, environment-heavy); writing producer-driven contracts that consumers ignore",
+        "to_stand_out": "Discuss the test pyramid for microservices, consumer-driven vs producer-driven, provider verification, contract broker workflow, breaking change detection, and how contract tests replace many integration tests"
+      },
+      "company_tags": [
+        "pact",
+        "spring",
+        "netflix",
+        "atlassian",
+        "Netflix",
+        "Amazon"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Contract Testing Exists",
+            "content": "Microservices have a testing problem. End-to-end tests (spin up all 20 services, hit one endpoint, assert response) are slow, flaky, expensive, and fail for reasons unrelated to the code change. Integration tests that mock every dependency drift from reality and miss real breaking changes. Unit tests don't catch cross-service API incompatibilities.\n\nContract testing fills the gap: **verify that the producer honors the contract the consumer expects, without running both together**.\n\nThe flow:\n\n1.\n- **Consumer** writes a test describing what it expects from the producer: 'When I call `GET /users/42`, I expect a 200 with JSON containing fields `id`, `name`, `email`'.\n2.\n- This generates a **contract document** (JSON file) capturing the expectation.\n3.\n- The contract is published to a **contract broker** (Pact Broker, Spring Cloud Contract WireMock, etc.).\n4.\n- **Producer's CI** pulls all contracts consumers expect and runs them as tests against the real producer code.\n- If the producer changes and breaks a contract, CI fails.\n5.\n- **Consumer's CI** uses the contract to generate stubs — tests run against the stub, not the real producer.\n- Fast, deterministic.\n\n**Consumer-driven** means the consumer expresses the expectation; the producer must honor it. This flips traditional API-design thinking: instead of the producer dictating the API, the contract reflects what clients actually use.\n\n**Two dominant tools in 2026:**\n- **Pact** — polyglot (JS, Java, Go, Ruby, Python, .NET), hosted Pact Broker, industry standard for cross-team contracts\n- **Spring Cloud Contract** — JVM-focused, Groovy DSL, generates WireMock stubs, tight Spring ecosystem integration\n\nContract tests replace a large share of integration and end-to-end tests. Teams go from 'end-to-end test suite takes 2 hours, flaky 30%' to 'unit + contract tests take 5 minutes, deterministic, catch real breaking changes'."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Contract Testing Workflow (Pact)",
+            "content": "```mermaid\nflowchart TB\n    subgraph ConsumerSide[Consumer CI Pipeline]\n        CT[Consumer test:<br/>expects producer response] --> Gen[Generate pact file<br/>JSON contract]\n        Gen --> Stub[Pact stubs mock producer]\n        Stub --> ConsumerTest[Run consumer tests<br/>against stubs]\n    end\n    Gen -->|publish| Broker[Pact Broker<br/>contract registry]\n    subgraph ProducerSide[Producer CI Pipeline]\n        Pull[Pull contracts<br/>from broker] --> Verify[Verify producer<br/>against contracts]\n        Verify -->|pass| Tag[Tag version as verified]\n        Verify -->|fail| Block[Block deploy]\n        Tag --> Deploy[Deploy producer]\n    end\n    Broker --> Pull\n    Deploy --> CanIDeploy{can-i-deploy check}\n    CanIDeploy -->|all consumer contracts verified| Allow[Allow production]\n    CanIDeploy -->|any failing| Reject[Reject deploy]\n    style Broker fill:#fff9c4\n    style Verify fill:#90caf9\n    style CanIDeploy fill:#e1bee7\n```"
+          },
+          {
+            "type": "step",
+            "title": "Implementation: Pact (Polyglot)",
+            "content": "**Consumer side (e.g., Order Service consuming User Service)**\n\n```java\n@ExtendWith(PactConsumerTestExt.class)\n@PactTestFor(providerName = \"UserService\", port = \"8080\")\npublic class UserClientContractTest {\n\n    @Pact(consumer = \"OrderService\", provider = \"UserService\")\n    public V4Pact getUserPact(PactDslWithProvider builder) {\n        return builder\n            .given(\"user 42 exists\")\n            .uponReceiving(\"get user 42 request\")\n                .method(\"GET\")\n                .path(\"/users/42\")\n                .headers(\"Accept\", \"application/json\")\n            .willRespondWith()\n                .status(200)\n                .headers(\"Content-Type\", \"application/json\")\n                .body(new PactDslJsonBody()\n                    .integerType(\"id\", 42)\n                    .stringType(\"name\", \"Alice\")\n                    .stringType(\"email\", \"alice@example.com\"))\n            .toPact(V4Pact.class);\n    }\n\n    @Test\n    @PactTestFor(pactMethod = \"getUserPact\")\n    void shouldGetUser(MockServer mockServer) {\n        UserClient client = new UserClient(mockServer.getUrl());\n        User user = client.getUser(42L);\n\n        assertThat(user.getId()).isEqualTo(42L);\n        assertThat(user.getName()).isEqualTo(\"Alice\");\n        assertThat(user.getEmail()).isEqualTo(\"alice@example.com\");\n    }\n}\n```\n\nRunning this test generates `build/pacts/OrderService-UserService.json`:\n\n```json\n{\n  \"consumer\": {\"name\": \"OrderService\"},\n  \"provider\": {\"name\": \"UserService\"},\n  \"interactions\": [{\n    \"description\": \"get user 42 request\",\n    \"providerStates\": [{\"name\": \"user 42 exists\"}],\n    \"request\": {\"method\": \"GET\", \"path\": \"/users/42\"},\n    \"response\": {\"status\": 200, \"body\": {\"id\": 42, \"name\": \"Alice\", \"email\": \"alice@example.com\"}}\n  }]\n}\n```\n\nPublish to Pact Broker:\n\n```bash\npact-broker publish build/pacts \\\n  --consumer-app-version=$GIT_SHA \\\n  --branch=$GIT_BRANCH \\\n  --broker-base-url=https://pact-broker.internal\n```\n\n**Producer side (UserService)**\n\n```java\n@Provider(\"UserService\")\n@PactBroker(host = \"pact-broker.internal\", port = \"443\")\n@IgnoreNoPactsToVerify\npublic class UserServicePactVerificationTest {\n\n    @BeforeEach\n    void setupTarget(PactVerificationContext context) {\n        context.setTarget(new HttpTestTarget(\"localhost\", 8080));\n    }\n\n    @State(\"user 42 exists\")\n    public void userExists() {\n        // Seed the DB or mock the repository so GET /users/42 returns Alice\n        userRepository.save(new User(42L, \"Alice\", \"alice@example.com\"));\n    }\n\n    @TestTemplate\n    @ExtendWith(PactVerificationInvocationContextProvider.class)\n    void pactVerificationTestTemplate(PactVerificationContext context) {\n        context.verifyInteraction();\n    }\n}\n```\n\nThis test pulls all consumer contracts from the broker, starts UserService on port 8080, replays each request, and verifies responses match. If the API changes (field renamed, field removed, status code changed), the test fails.\n\n**`can-i-deploy` gate in CI:**\n\n```bash\npact-broker can-i-deploy \\\n  --pacticipant=UserService \\\n  --version=$GIT_SHA \\\n  --to-environment=production\n```\n\nReturns success only if all consumer contracts for the current UserService version are verified. Prevents deploying a producer that would break consumers in production."
+          },
+          {
+            "type": "step",
+            "title": "Spring Cloud Contract (JVM-Native)",
+            "content": "**Producer side (defines the contract in Groovy/YAML/Java)**\n\n```groovy\n// src/test/resources/contracts/getUser.groovy\nContract.make {\n    description \"should return user 42\"\n    request {\n        method 'GET'\n        url '/users/42'\n        headers { contentType(applicationJson()) }\n    }\n    response {\n        status OK()\n        body([\n            id: 42,\n            name: 'Alice',\n            email: 'alice@example.com'\n        ])\n        headers { contentType(applicationJson()) }\n    }\n}\n```\n\nPlugin configuration in `pom.xml`:\n\n```xml\n<plugin>\n  <groupId>org.springframework.cloud</groupId>\n  <artifactId>spring-cloud-contract-maven-plugin</artifactId>\n  <extensions>true</extensions>\n  <configuration>\n    <baseClassForTests>com.example.UserServiceContractBase</baseClassForTests>\n  </configuration>\n</plugin>\n```\n\nThe plugin auto-generates JUnit tests that replay each contract's request against the real controller. It also packages the contracts as a `stubs` JAR in Maven.\n\n**Consumer side (uses producer's stubs)**\n\n```xml\n<dependency>\n  <groupId>org.springframework.cloud</groupId>\n  <artifactId>spring-cloud-starter-contract-stub-runner</artifactId>\n</dependency>\n```\n\n```java\n@SpringBootTest\n@AutoConfigureStubRunner(\n    ids = \"com.example:user-service:+:stubs:8080\",\n    stubsMode = StubRunnerProperties.StubsMode.REMOTE,\n    repositoryRoot = \"https://artifactory.internal\")\npublic class OrderServiceTest {\n\n    @Autowired UserClient userClient;\n\n    @Test\n    void shouldFetchUser() {\n        User u = userClient.getUser(42L);\n        assertThat(u.getName()).isEqualTo(\"Alice\");\n    }\n}\n```\n\nStub Runner starts WireMock on port 8080 with stubs matching the producer's contracts. Consumer tests run against the stub; if the producer's contract changes, consumer's next build pulls new stubs and either passes (compatible) or fails (incompatible).\n\n**Key difference from Pact**: Spring Cloud Contract is producer-driven by default (producer owns the contract; consumer consumes stubs). Pact is consumer-driven (consumer expresses expectations; producer verifies). Spring Cloud Contract can also do consumer-driven with explicit contract publishing."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Best Practices",
+            "content": "**Consumer-driven vs producer-driven.** Consumer-driven (Pact style) catches 'what consumers actually use' — good for real-world API evolution where not all fields are used.\n- Producer-driven (SCC default) keeps API design in producer hands — good when the producer is more stable or consumers shouldn't dictate API shape.\n- Many teams use both depending on stability.\n\n**Contract tests don't replace everything.** The test pyramid:\n- Unit tests (fast, many): business logic\n- Contract tests: cross-service API compatibility\n- Integration tests (few): real database, real message broker\n- End-to-end (very few): full system smoke tests\n\nContract tests eliminate most integration tests for API compatibility; they don't catch business logic bugs, database issues, or UX flows.\n\n**Pact Broker is stateful infrastructure.** Running your own requires a Postgres DB and maintenance. Pactflow.io is the SaaS option. Atlassian, IBM, others run it internally.\n\n**Breaking changes categorization:**\n- **Adding fields** — non-breaking (consumers ignore unknown)\n- **Renaming fields** — breaking (consumer can't find expected field)\n- **Removing fields** — breaking (consumer expected it)\n- **Changing types** — breaking (string → int crashes parser)\n- **Changing status codes** — breaking\n- **Changing content types** — breaking\n\nContract tests catch all of these before deploy.\n\n**Flakiness is minimal.** Contracts are deterministic — no networks, no timing, no external dependencies. Tests run in seconds. This is a huge win over end-to-end tests.\n\n**Evolving contracts safely.** Add field → consumer tests still pass. Deprecate field → warn consumers via broker. Remove field → wait until no consumer contract requires it (broker shows which consumer version uses which field).\n\n**Matchers vs exact values.** Use type matchers (`integerType`, `stringType`) not exact values (`42`, 'Alice') in contracts. Tests should verify shape, not specific data; data comes from provider states.\n\n**Provider states are critical.** `@State(\"user 42 exists\")` tells the producer to set up DB such that `GET /users/42` returns a valid response. Without it, verification fails with 'user not found'. Invest in provider state management.\n\n**Contract testing for async (Kafka, SQS).** Pact supports message contracts: consumer defines 'I expect a message with this schema on topic orders'; producer verifies its emitted messages match. Same workflow, different transport.\n\n**Versioning and environments.** Tag contract versions with branch/environment (dev, staging, prod). `can-i-deploy --to-environment=production` checks all prod-deployed consumers' contracts pass against the candidate producer version.\n\n**Organizational buy-in needed.** Both consumer and producer teams must adopt. Unilateral consumer-driven contracts that producers don't verify are useless. Pact Broker is the coordination point.\n\n**CI integration.** Both producer and consumer pipelines must publish/verify contracts on every PR. Without CI enforcement, contracts rot.\n\n**Testing pacts against mocks (not real implementations).** Some teams use Pact stubs to mock producers in integration tests. Combined with producer-side verification, this covers both sides.\n\n**OpenAPI is not contract testing.** OpenAPI describes the API shape; contract tests verify it's honored. Complementary. Some tools (Prism, Dredd) can verify producers against OpenAPI, which is a lightweight alternative to Pact.\n\n**Schema Registry (Kafka) is message-level contract testing.** Confluent Schema Registry enforces Avro/Protobuf schemas at publish time. Consumer-driven evolution rules (forward/backward compatible) are similar philosophy.\n\n**Spring Cloud Contract + Pact interop.** SCC can generate Pact files; Pact broker can host SCC contracts. Choose based on ecosystem (JVM-only → SCC; polyglot → Pact)."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Contract testing verifies cross-service API compatibility** without spinning up the full system\n- **Consumer-driven** (Pact): consumer writes expectations; producer verifies; breaks fail CI\n- **Producer-driven** (Spring Cloud Contract default): producer defines contract; generates consumer stubs\n- **Pact Broker / `can-i-deploy`** gate prevents deploying a producer that would break consumer contracts\n- **Replaces many integration and end-to-end tests** — deterministic, fast (seconds vs minutes)\n- **Two dominant tools**: Pact (polyglot, industry standard) and Spring Cloud Contract (JVM-native, Groovy DSL)\n- **Use matchers, not exact values** — verify shape, not specific data\n- **Provider states** are critical — set up DB/mocks so verification has valid data\n- **Async messaging supported** — Pact Message for Kafka/SQS topic contracts\n- **Both teams must buy in** — unilateral consumer contracts without producer verification are useless"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Microservices have a testing problem. End-to-end tests are slow, flaky, expensive. Integration tests that mock everything drift from reality. Unit tests miss cross-service API incompatibilities.\n\nContract testing fills the gap: verify that the producer honors the contract the consumer expects, without running both together.\n\n**The flow**\n- Consumer writes a test describing what it expects from the producer\n- The test generates a contract document (JSON file)\n- The contract is published to a contract broker like Pact Broker\n- Producer's CI pulls contracts from the broker and verifies against its real code\n- If the producer changes and breaks a contract, CI fails before deploy\n- Consumer's CI uses the contract to generate stubs; tests run against stubs, not real producer\n\n**Consumer-driven vs producer-driven**\n- Consumer-driven (Pact): consumer expresses expectations; producer must honor; catches 'what consumers actually use'\n- Producer-driven (Spring Cloud Contract default): producer defines contract; consumers use generated stubs\n- Many teams use both depending on service stability\n\n**Two dominant tools in 2026**\n\n*Pact*\n- Polyglot: JS, Java, Go, Ruby, Python, .NET\n- Hosted Pact Broker for contract registry\n- Industry standard for cross-team contracts\n- can-i-deploy command gates production deploys against all consumer contracts\n\n*Spring Cloud Contract*\n- JVM-focused: Groovy DSL, Maven plugin\n- Generates WireMock stubs consumers use\n- Tight Spring ecosystem integration\n- Contracts packaged as stub JARs in Maven/Artifactory\n\n**Implementation pattern (Pact)**\n\n*Consumer side*\n- Write test with PactDsl: given state, expect request, define response\n- Running the test generates a pact JSON file\n- Publish pact to Pact Broker tagged with branch/version\n\n*Producer side*\n- Test annotated @Provider pulls all consumer contracts from broker\n- Provider states method seeds DB to make contract scenarios valid\n- Test replays each request against real producer; asserts response matches\n- Breaking change fails verification\n\n*can-i-deploy gate*\n- Before deploying producer, check broker: 'are all consumers' contracts for this version verified?'\n- If yes, safe to deploy; if no, block\n\n**Breaking changes contract tests catch**\n- Renaming fields\n- Removing fields consumers use\n- Changing field types\n- Changing status codes\n- Changing content types\n\n**Adding fields is non-breaking**\n- Consumers ignore unknown fields\n- Deprecating requires broker to show which consumer versions still use the field\n\n**Provider states are critical**\n- Producer test needs DB in state where GET /users/42 returns valid data\n- @State('user 42 exists') method seeds the DB\n- Invest in provider state management; otherwise verification fails with 'not found'\n\n**Matchers, not exact values**\n- Use integerType, stringType in contracts\n- Verify shape, not specific data\n- Data comes from provider states\n\n**Async messaging works too**\n- Pact supports message contracts for Kafka, SQS\n- Consumer: 'I expect messages on topic orders with this schema'\n- Producer verifies emitted messages match\n\n**Test pyramid placement**\n- Unit tests: business logic, fast and many\n- Contract tests: cross-service API compatibility, medium count\n- Integration tests: real DB, real message broker, few\n- End-to-end: full system smoke tests, very few\n- Contract tests eliminate most integration tests for API compatibility\n- Don't catch business logic bugs or UX flows\n\n**Organizational buy-in required**\n- Both consumer and producer teams must adopt\n- Unilateral consumer contracts without producer verification are useless\n- Pact Broker is the coordination point\n- CI enforcement on every PR keeps contracts from rotting\n\n**vs OpenAPI**\n- OpenAPI describes API shape; contract tests verify it's honored\n- Complementary; Prism, Dredd can do lightweight OpenAPI-based verification\n- Not a replacement\n\n**The strategic answer**\n- Contract testing is the essential middle of the test pyramid for microservices\n- Consumer-driven catches real consumer dependencies\n- Producer-driven is simpler when producer is the stable party\n- Pact for polyglot; Spring Cloud Contract for JVM-first teams\n- CI gates production deploys via can-i-deploy\n- Replaces most end-to-end tests with fast deterministic verification"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle contract testing for Kafka or async messaging with Pact?",
+        "What's the difference between bi-directional contract testing and traditional Pact?",
+        "How does Confluent Schema Registry enforce message compatibility in Kafka?",
+        "When would you choose Spring Cloud Contract over Pact for a JVM-only team?"
+      ],
+      "seo": {
+        "meta_title": "Consumer-Driven Contract Testing with Pact and Spring Cloud Contract",
+        "meta_description": "How to implement contract testing in microservices. Pact, Spring Cloud Contract, consumer-driven vs producer-driven, broker workflow, can-i-deploy.",
+        "keywords": [
+          "contract testing",
+          "pact consumer driven",
+          "spring cloud contract",
+          "microservices testing",
+          "pact broker"
+        ],
+        "metaDescription": "Contract testing verifies that a producer service meets the contracts expected by its consumers — without spinning up the full system.",
+        "metaTitle": "Consumer-Driven Contract Testing with Pact / Spring Cloud Contract"
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P04",
+        "hook": "Microservices have a testing problem.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Microservices have a testing problem. End-to-end tests (spin up all 20 services, hit one endpoint, assert response) are slow, flaky, expensive, and fail for reasons unrelated to the code change. Integration tests that mock every dependency drift from reality and miss real breaking changes. Unit tests don't catch cross-service API incompatibilities. Contract testing fills the gap: verify that the producer honors the contract the consumer expects, without running both together."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Consumer-driven vs producer-driven",
+              "Consumer-driven (Pact style) catches 'what consumers actually use' — good for real-world API evolution where not all fields are used",
+              "Producer-driven (SCC default) keeps API design in producer hands — good when the producer is more stable or consumers shouldn't dictate API shape",
+              "Many teams use both depending on stability",
+              "Contract tests don't replace everything"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Consumer-driven vs producer-driven. Consumer-driven (Pact style) catches 'what consumers actually use' — good for real-world API evolution where not all fields are used. Producer-driven (SCC default) keeps API design in producer hands — good when the producer is more stable or consumers shouldn't dictate API shape. Many teams use both depending on stability. Contract tests don't replace everything. The test pyramid: Unit tests (fast, many): business logic Contract tests: cross-service API compatibility Integration tests (few): real database, real message broker End-to-end (very few): full system smoke tests Contract tests eliminate."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Microservices have a testing problem. End-to-end tests (spin up all 20 services, hit one endpoint, assert response) are slow, flaky, expensive, and fail for reasons unrelated to the code change. Integration tests that mock every dependency drift from reality and miss real breaking changes. Unit tests don't catch cross-service API incompatibilities. Contract testing fills the gap: verify that the producer."
+          }
+        ],
+        "cap": "The flow Consumer writes a test describing what it expects from the producer The test generates a contract document (JSON file) The contract is published to a contract broker like Pact Broker Producer",
+        "familiarity_anchors": [
+          "Contract",
+          "Consumer",
+          "Breaks"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle contract testing for Kafka or async messaging with Pact?",
+          "What's the difference between bi-directional contract testing and traditional Pact?",
+          "How does Confluent Schema Registry enforce message compatibility in Kafka?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "ms-ct-002",
+      "slug": "spring-cloud-contract-producer-consumer-testing",
+      "question": "How do you set up Spring Cloud Contract end-to-end — producer contracts, generated tests, stubs, and consumer verification?",
+      "title": "Spring Cloud Contract: Producer Contracts, Stub Runner, Consumer Verification",
+      "direct_answer": "**Spring Cloud Contract** is producer-driven: the producer writes contracts in Groovy or YAML DSL describing request/response pairs; the `spring-cloud-contract-maven-plugin` auto-generates **JUnit tests** (verifying the producer implements the contract) and publishes **WireMock stubs** as a JAR. Consumers pull the stub JAR with `@AutoConfigureStubRunner` and test their code against those stubs — no live producer needed. Breaking-change detection: modifying a contract re-runs producer tests in CI, and consumers pulling the latest stubs catch mismatches. Workflow: write contract, `mvn verify` on producer, publish stubs, consumer `StubRunner` test.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Hands-on knowledge of Spring Cloud Contract — DSL, plugin, stub runner, verifier module — not just the concept",
+        "common_mistake": "Writing contracts in the consumer repo (that's the Pact model, not SCC); forgetting to configure the base test class that sets up the producer; publishing stubs to local-only repo so consumers can't pull them",
+        "to_stand_out": "Walk through the full Maven lifecycle including auto-generated test class naming, the BaseClass pattern, stub runner's IDs vs classifier resolution, and how to contract-test messaging contracts over Kafka"
+      },
+      "company_tags": [
+        "Spring",
+        "Pivotal",
+        "Atlassian",
+        "Amazon",
+        "Netflix",
+        "ING"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Producer Owns the Contract; Stub JAR Becomes the Integration Boundary",
+            "content": "Spring Cloud Contract (SCC) flips the Pact mental model.\n- Where Pact is consumer-driven (consumer tests record expectations as a contract that the producer must verify), SCC is **producer-driven**: the producer writes the contract, auto-generates both its own verification tests and a WireMock stub JAR, and publishes that JAR.\n- Consumers pull the JAR and run their tests against the stubs — fast, offline, no shared environment.\n\nThe mental shift: the producer is the source of truth for its own API. The contract file lives in the producer repo (`src/test/resources/contracts/...`). The Maven plugin reads the contracts during `mvn verify` and does two things simultaneously:\n\n1. **Generates JUnit tests** under `target/generated-test-sources/contracts/` that call the producer's actual controllers via MockMvc/WebTestClient and assert request/response match the contract. If the producer implementation drifts from the contract, the test fails, breaking CI.\n\n2. **Packages WireMock stubs** into `<artifactId>-stubs.jar` classifier. This JAR is published alongside the producer's normal artifact. It contains request/response mappings that replay the contract.\n\nConsumers add `@AutoConfigureStubRunner` to their tests, specify which stub JAR to pull (by Maven coordinates), and hit the running WireMock server as if it were the real producer. No live producer. No shared integration environment. Tests run in milliseconds.\n\n**The key workflow:** producer writes contract, producer CI verifies the contract, producer publishes stub JAR, consumer pulls stub JAR in tests, consumer verifies its integration.\n- Breaking changes fail either the producer's own contract test (if implementation doesn't match) or the consumer's test (if the consumer expected an old contract shape). CI catches mismatches before a deploy."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "SCC End-to-End Workflow",
+            "content": "```mermaid\nflowchart LR\n    Producer[Producer service<br/>order-service] -->|writes contracts| Contracts[contracts/*.groovy]\n    Contracts -->|spring-cloud-contract<br/>maven plugin| Jar[Stub JAR published<br/>to artifactory]\n    Jar -->|StubRunner downloads| Consumer[Consumer service<br/>inventory-service tests]\n    Consumer -->|hits WireMock stub| Stub[(WireMock<br/>auto-generated)]\n    Contracts -->|auto-generated tests| ProducerCI[Producer CI<br/>verify against real impl]\n    ProducerCI -->|pass| Deploy[Producer safe to deploy]\n    ProducerCI -->|fail| Block[CI blocked<br/>breaking change detected]\n```"
+          },
+          {
+            "type": "step",
+            "title": "Producer Setup: Plugin, Base Class, Contract DSL",
+            "content": "**Producer pom.xml:**\n\n```xml\n<dependencies>\n  <dependency>\n    <groupId>org.springframework.cloud</groupId>\n    <artifactId>spring-cloud-starter-contract-verifier</artifactId>\n    <scope>test</scope>\n  </dependency>\n</dependencies>\n\n<build>\n  <plugins>\n    <plugin>\n      <groupId>org.springframework.cloud</groupId>\n      <artifactId>spring-cloud-contract-maven-plugin</artifactId>\n      <version>4.1.4</version>\n      <extensions>true</extensions>\n      <configuration>\n        <baseClassForTests>com.example.order.BaseContractTest</baseClassForTests>\n        <testFramework>JUNIT5</testFramework>\n        <contractsDirectory>src/test/resources/contracts</contractsDirectory>\n      </configuration>\n    </plugin>\n  </plugins>\n</build>\n```\n\n**Contract in Groovy DSL** — `src/test/resources/contracts/orders/shouldReturnOrder.groovy`:\n\n```groovy\npackage contracts.orders\n\nimport org.springframework.cloud.contract.spec.Contract\n\nContract.make {\n    description(\"should return order by id\")\n    request {\n        method GET()\n        url \"/orders/42\"\n        headers { contentType(applicationJson()) }\n    }\n    response {\n        status OK()\n        headers { contentType(applicationJson()) }\n        body([\n            id: 42,\n            customerId: \"cust-7\",\n            status: \"CONFIRMED\",\n            totalCents: 19900\n        ])\n        bodyMatchers {\n            jsonPath('$.id', byRegex('[0-9]+').asInteger())\n            jsonPath('$.status', byRegex('CONFIRMED|PENDING|CANCELLED'))\n        }\n    }\n}\n```\n\nYAML is supported as an alternative; Groovy is more expressive (regex matchers, dynamic values).\n\n**Base test class** — the generated tests extend this; you set up the Spring context and inject the controller into MockMvc/WebTestClient:\n\n```java\n@SpringBootTest(webEnvironment = MOCK)\n@AutoConfigureMockMvc\npublic abstract class BaseContractTest {\n\n    @Autowired MockMvc mockMvc;\n    @MockBean OrderService orderService;\n\n    @BeforeEach\n    void setup() {\n        when(orderService.getOrder(42L)).thenReturn(\n            new Order(42L, \"cust-7\", \"CONFIRMED\", 19_900));\n        RestAssuredMockMvc.mockMvc(mockMvc);\n    }\n}\n```\n\n**What `mvn verify` produces:**\n- `target/generated-test-sources/contracts/.../OrdersTest.java` — JUnit test named after the contract filename, extending `BaseContractTest`\n- `target/<artifactId>-<version>-stubs.jar` — WireMock mappings for every contract\n\nRun the producer CI: if `OrderController` drifts (returns `status=\"NEW\"` instead of `\"CONFIRMED\"`), the generated test fails. If contracts are malformed, plugin fails. The stub JAR is published to the Maven repo alongside the normal artifact.\n\n**Publishing stubs:**\n\n```bash\nmvn deploy -DaltDeploymentRepository=stubs::default::https://artifactory.example.com/stubs-local\n```\n\nProducer teams typically publish to an artifact manager (Artifactory, Nexus). Git-based publishing is also supported (commit stubs to a Git repo) for teams avoiding artifact infrastructure."
+          },
+          {
+            "type": "step",
+            "title": "Consumer Setup: StubRunner and Test-Time Stubs",
+            "content": "**Consumer pom.xml:**\n\n```xml\n<dependency>\n  <groupId>org.springframework.cloud</groupId>\n  <artifactId>spring-cloud-starter-contract-stub-runner</artifactId>\n  <scope>test</scope>\n</dependency>\n```\n\n**Consumer test** using `@AutoConfigureStubRunner`:\n\n```java\n@SpringBootTest\n@AutoConfigureStubRunner(\n    ids = \"com.example:order-service:+:stubs:8090\",\n    stubsMode = StubsMode.REMOTE,\n    repositoryRoot = \"https://artifactory.example.com/stubs-local\"\n)\nclass InventoryServiceIntegrationTest {\n\n    @Autowired InventoryService inventoryService;\n\n    @Test\n    void reservesStockForConfirmedOrder() {\n        // orderClient internally calls http://localhost:8090/orders/42\n        // StubRunner serves the WireMock stub on port 8090\n        var result = inventoryService.reserveForOrder(42L);\n        assertThat(result.reserved()).isTrue();\n    }\n}\n```\n\n**The `ids` format** is `groupId:artifactId:version:classifier:port`. `+` as version means 'latest', classifier `stubs` matches the producer's stub JAR, and port pins the WireMock server.\n\n**stubsMode options:**\n- `REMOTE` — pulls from the configured artifactory (production)\n- `LOCAL` — uses `~/.m2` local stubs (developer iteration)\n- `CLASSPATH` — stubs on test classpath (tight integration)\n\n**Messaging contracts (Kafka / RabbitMQ):**\n\nSCC supports message contracts identically:\n\n```groovy\nContract.make {\n    label \"orderCreated\"\n    input {\n        triggeredBy(\"createOrder()\")\n    }\n    outputMessage {\n        sentTo \"orders-topic\"\n        body([orderId: 42, status: \"CREATED\"])\n        headers { header(\"type\", \"OrderCreated\") }\n    }\n}\n```\n\nThe consumer test uses `StubTrigger` to fire the producer-side event and assert consumption. Works with Spring Cloud Stream, Spring Kafka, Spring AMQP.\n\n**Breaking-change workflow in CI:**\n\n1. Producer team changes contract (adds field, renames status enum)\n2. Producer CI runs `mvn verify` — generated test may fail if implementation doesn't yet match\n3. Producer publishes new stub version\n4. Consumer teams' next CI run pulls latest stub (if `version=+` or pinned to LATEST)\n5. Consumer tests fail if the consumer's code broke\n6. Producer coordinates rollout: new stub version with backward-compat → consumers upgrade → deprecated fields removed\n\n**Version pinning strategy:** some teams pin stub versions explicitly in consumer `ids` to avoid surprise breaks. Others run a daily `+` pull to surface compatibility regressions early. A mature org does both: pinned in release branches, `+` on a compatibility-drift canary job."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "SCC Strengths, Limitations, and Gotchas",
+            "content": "**Strengths.** Fast (no live producer), deterministic (WireMock stubs are byte-identical per contract version), easy to integrate in Maven/Gradle Spring Boot projects, supports both HTTP and messaging contracts, works well in Spring-first organizations.\n\n**Producer-driven limitation.** In a genuine consumer-driven world, consumers express expectations and producers must adapt.\n- SCC puts the producer in charge of the contract — if the producer decides to change the shape, consumers find out at their next CI.\n- Pact reverses this: consumers publish their expectations to a broker, and the producer must verify them.\n- For organizations where 20 consumers of one API need to express diverse expectations, Pact fits better.\n\n**Stub fidelity.** SCC stubs are WireMock-based: request/response mappings with matchers.\n- They are *not* a real implementation — complex server-side logic (workflows, auth flows) can't be captured in a static contract.\n- Use contract tests for API shape and happy-path semantics; integration tests for server logic.\n\n**Base class maintenance burden.** Every contract generates a test that extends your base class; the base class must stub the right services to return the right values for each contract. Large teams end up with one unwieldy base class or hierarchy. Prefer one base class per domain/controller.\n\n**Stub version management.** Pinning `version=+` (latest) gives you the newest stub but risks surprise breaks. Pinning a specific version is safer but requires manual bumps. Tools like Renovate can automate stub-version updates in consumer PRs.\n\n**Cross-team coordination still required.** SCC catches breaking changes at CI — but the *fix* still requires producer and consumer teams to coordinate.\n- A breaking contract change needs producer releasing compatible v2, consumers upgrading, then producer removing v1 support.\n- SCC tells you *what* broke, not *how* to fix it.\n\n**Groovy DSL learning curve.** Groovy syntax is readable but has edge cases (escaping, dynamic matchers). YAML is simpler but less expressive — dynamic regex matchers are awkward. Most teams stick with Groovy after a week.\n\n**CI publishing order.** If producer publishes new stubs while consumer CI is running, the consumer might pull a stub newer than the producer currently deployed. Solution: pin versions in production release branches; use `+` only in development branches.\n\n**Messaging contracts are sharper.** HTTP contract tests have overlap with proper integration tests via WireMock anyway; the clear win for SCC is messaging. Testing 'producer writes this message to Kafka' without spinning up Kafka + consumer is otherwise painful.\n\n**SCC vs OpenAPI-based mocks.** Tools like Prism mock an OpenAPI spec.\n- Similar outcome, different discipline — OpenAPI-first means the spec is the contract; SCC means the contract is executable in both producer and consumer tests.\n- OpenAPI mocks lack the producer-side verification step; a server that drifts from its own OpenAPI spec goes undetected.\n\n**Consumer-side stub limitations.** If the stub port is hardcoded in consumer code, tests become brittle. Use `@Value(\"${order-service.url}\")` with `${stubrunner.runningstubs.order-service.port}` in test properties; StubRunner injects the resolved port.\n\n**When to use SCC vs Pact vs nothing.**\n- SCC: Spring-heavy stack, producer-team has bandwidth for contracts, messaging contracts needed\n- Pact: polyglot services (Ruby, Node, Go producers), consumer-driven philosophy, diverse consumer expectations\n- Nothing: 2-service system where a single integration test suffices; or large OpenAPI-first organizations using spec-as-contract\n\n**In interviews** — mention the producer-driven philosophy, stub JAR as the integration boundary, base class for test wiring, and at least one concrete workflow step (e.g., `mvn verify` generating both the test and stubs). That demonstrates hands-on experience vs theoretical knowledge."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **SCC is producer-driven** — contract file lives in producer repo; Pact is consumer-driven\n- **`mvn verify` generates both JUnit tests and WireMock stubs** simultaneously from contracts\n- **Stub JAR is the integration boundary** — published with classifier `stubs`, pulled by consumer via `@AutoConfigureStubRunner`\n- **BaseClass pattern** — generated tests extend your base; you stub services to return contract values\n- **Groovy DSL is standard** — YAML supported; Groovy more expressive with matchers\n- **`ids = \"group:artifact:+:stubs:port\"`** — pull latest stub on port for consumer tests\n- **Messaging contracts supported** — sentTo/outputMessage for Kafka, RabbitMQ\n- **Breaking changes fail CI** — producer's generated test if impl drifts; consumer's test if shape mismatches\n- **Version pinning vs latest (+)** — pin in release branches, `+` for drift canaries\n- **Limitation: static stubs can't model server logic** — use for shape and happy path, not workflow state"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**What Spring Cloud Contract is**\n- Producer-driven contract testing framework from Spring Cloud\n- Producer writes contracts in Groovy or YAML DSL\n- Maven plugin auto-generates two artifacts: JUnit tests that verify the producer, and a WireMock stub JAR published alongside the service\n- Consumers pull the stub JAR and test against WireMock as if it were the real producer\n- No live producer needed in consumer tests; no shared integration environment\n\n**The producer setup**\n- Add spring-cloud-starter-contract-verifier dependency in test scope\n- Add spring-cloud-contract-maven-plugin with baseClassForTests configured\n- Write contracts under src/test/resources/contracts in Groovy DSL\n- Contracts describe request and response: method, URL, headers, body, matchers\n- Create a base class that sets up Spring context and mocks collaborators so generated tests can call real controllers\n- mvn verify generates tests, runs them, builds the stub JAR\n\n**The consumer setup**\n- Add spring-cloud-starter-contract-stub-runner dependency\n- Use @AutoConfigureStubRunner with ids = group:artifact:version:stubs:port\n- StubsMode REMOTE pulls from artifactory; LOCAL uses ~/.m2; CLASSPATH uses classpath\n- Consumer code hits localhost:port and sees WireMock responses that match the contract\n\n**The key workflow**\n- Producer writes contract in its own repo\n- Producer CI runs mvn verify, fails if implementation drifts\n- Producer publishes stub JAR to artifactory\n- Consumer CI pulls stub, runs tests against it\n- If producer changes contract in a breaking way, either producer's own test fails or consumer's test fails — CI catches it before deploy\n\n**Contrast with Pact**\n- Pact is consumer-driven: consumers record expectations, producer verifies them against the broker\n- SCC is producer-driven: producer is the source of truth\n- Pact fits polyglot orgs and diverse consumer expectations\n- SCC fits Spring-heavy orgs; also excels at messaging contracts\n\n**Messaging contracts**\n- SCC supports Kafka and RabbitMQ contracts the same way\n- sentTo and outputMessage describe produced messages\n- triggeredBy runs a producer method that emits the message\n- Consumer tests assert correct consumption without running real brokers\n\n**Version pinning strategy**\n- Pin specific stub version in release branches for stability\n- Use + (latest) in canary jobs to detect drift early\n- Automate bumps with Renovate or similar\n\n**Common pitfalls**\n- Forgetting to configure BaseClass — generated tests fail at compile\n- Publishing stubs only to local Maven — consumers in CI can't pull\n- Writing contracts so loose they catch nothing — add bodyMatchers with regexes\n- Mixing contract tests with integration tests — keep them separate; contract for shape, integration for logic\n- Hardcoding ports in consumer tests — use ${stubrunner.runningstubs...port}\n\n**Limitations to acknowledge**\n- Static stubs cannot model stateful server logic\n- Producer must coordinate breaking changes; SCC tells you what broke, not how to fix it\n- Base class maintenance grows with contract count\n\n**The strategic answer**\n- SCC makes the contract executable on both sides: producer test + consumer stub from one DSL\n- Replaces many end-to-end integration tests with fast, offline contract tests\n- Use it where producer owns the API and can afford to maintain contracts\n- Pair with OpenAPI for external API docs; SCC is internal CI discipline"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you write a contract test for a Kafka-produced message using Spring Cloud Contract?",
+        "What's the difference between stubsMode REMOTE, LOCAL, and CLASSPATH, and when do you use each?",
+        "How do you manage stub version skew between producer and consumer repos?",
+        "When would you choose Pact over Spring Cloud Contract?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Cloud Contract End-to-End — Producer Contracts, Stub Runner, Consumer Tests",
+        "metaDescription": "Spring Cloud Contract full workflow: Groovy DSL contracts, Maven plugin generates tests and WireMock stubs, consumer StubRunner, breaking-change detection."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P04",
+        "hook": "What Spring Cloud Contract is Producer-driven contract testing framework from Spring Cloud Producer writes contracts in Groovy or YAML DSL Maven plugin auto-generates two artifacts: JUnit tests that v",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Spring Cloud Contract (SCC) flips the Pact mental model. Where Pact is consumer-driven (consumer tests record expectations as a contract that the producer must verify), SCC is producer-driven: the producer writes the contract, auto-generates both its own verification tests and a WireMock stub JAR, and publishes that JAR. Consumers pull the JAR and run their tests against the stubs — fast, offline, no shared environment. The mental shift: the producer."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Fast (no live producer), deterministic (WireMock stubs are byte-identical per contract version), easy to integrate in Maven/Gradle Spring Boot projects, supports both HTTP and messaging contracts, works well in Spring-first organizations",
+              "Producer-driven limitation",
+              "In a genuine consumer-driven world, consumers express expectations and producers must adapt",
+              "SCC puts the producer in charge of the contract — if the producer decides to change the shape, consumers find out at their next CI",
+              "Pact reverses this: consumers publish their expectations to a broker, and the producer must verify them"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Strengths. Fast (no live producer), deterministic (WireMock stubs are byte-identical per contract version), easy to integrate in Maven/Gradle Spring Boot projects, supports both HTTP and messaging contracts, works well in Spring-first organizations. Producer-driven limitation. In a genuine consumer-driven world, consumers express expectations and producers must adapt. SCC puts the producer in charge of the contract — if the producer decides to change the shape, consumers find out at their next CI. Pact reverses this: consumers publish their expectations to a broker, and the producer must verify them. For organizations where."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Spring Cloud Contract (SCC) flips the Pact mental model. Where Pact is consumer-driven (consumer tests record expectations as a contract that the producer must verify), SCC is producer-driven: the producer writes the contract, auto-generates both its own verification tests and a WireMock stub JAR, and publishes that JAR. Consumers pull the JAR and run their tests against the stubs —."
+          }
+        ],
+        "cap": "What Spring Cloud Contract is Producer-driven contract testing framework from Spring Cloud Producer writes contracts in Groovy or YAML DSL Maven plugin auto-generates two artifacts: JUnit tests that v",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Contract"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you write a contract test for a Kafka-produced message using Spring Cloud Contract?",
+          "What's the difference between stubsMode REMOTE, LOCAL, and CLASSPATH, and when do you use each?",
+          "How do you manage stub version skew between producer and consumer repos?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "ms-ct-003",
+      "slug": "pact-vs-spring-cloud-contract-comparison",
+      "question": "Compare Pact and Spring Cloud Contract — when do you choose each, and how do they differ in philosophy, tooling, and CI integration?",
+      "title": "Pact vs Spring Cloud Contract: Consumer-Driven vs Producer-Driven",
+      "direct_answer": "**Pact** is **consumer-driven**: consumer tests record expectations as a `pact.json` file pushed to the **Pact Broker**; producers pull it and run provider verification. **Spring Cloud Contract** is **producer-driven**: producer writes Groovy/YAML contracts in its own repo, the Maven plugin auto-generates both producer tests and WireMock stub JARs, consumers `StubRunner` the stubs. Pact wins in polyglot orgs (first-class JVM, Ruby, JS, Go, Python clients) and when consumers have divergent expectations. SCC wins in Spring-heavy orgs, especially for **messaging** contracts, and when the producer reasonably owns the API shape. The **Pact Broker** adds `can-i-deploy` matrix-based release gating that SCC lacks out of the box.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Depth comparison of the two dominant contract-testing tools — philosophy differences, not just syntax",
+        "common_mistake": "Treating them as interchangeable ('pick whichever'); missing that `can-i-deploy` is a Pact Broker superpower; forgetting Pact's polyglot strength",
+        "to_stand_out": "Discuss the broker workflow, can-i-deploy compatibility matrix, tag-based environment tracking (dev/prod), and the pragmatic scenario where a team adopts both: Pact for external consumer expectations, SCC for internal Spring-first messaging"
+      },
+      "company_tags": [
+        "Spring",
+        "Pact",
+        "Atlassian",
+        "Netflix",
+        "Amazon",
+        "ING",
+        "DiUS"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Tools, Two Philosophies, Overlapping But Not Identical Outcomes",
+            "content": "Both tools solve the same high-level problem: **avoid deploying a producer that breaks its consumers without spinning up full end-to-end environments**. They differ in who owns the contract and what the CI pipeline looks like.\n\n**Pact — consumer-driven.** Each consumer writes a unit-style test using a Pact mock provider.\n- During the test, Pact records actual HTTP interactions into a `pact.json` file (the contract).\n- Consumer CI pushes this contract to the **Pact Broker** (a central service, self-hosted or PactFlow SaaS).\n- Producer CI pulls all contracts consumed against it and runs provider verification — replaying requests from the contract against the real producer and asserting responses.\n- The broker tracks verification results per version, per consumer, per environment, enabling the **`can-i-deploy`** command: 'can I deploy consumer v1.3 to prod given all providers currently in prod?'.\n\n**Spring Cloud Contract — producer-driven.** The producer writes contracts in Groovy/YAML in its repo. `mvn verify` auto-generates JUnit tests (proving the producer honours the contract) and WireMock stubs JAR (for consumers).\n- Stubs are published to Artifactory/Nexus/Git.\n- Consumers use `@AutoConfigureStubRunner` to pull the JAR, spin up WireMock in their tests, and hit it as if it were the real producer. No broker, no `can-i-deploy` built in.\n\nThe philosophical difference is real.\n- In consumer-driven testing, the producer must serve what consumers need — pressure flows upstream.\n- In producer-driven, the producer documents its API and consumers accept or break.\n- Which is correct depends on organizational dynamics: when one central team owns an API many others depend on, producer-driven (SCC or OpenAPI-first) reflects reality.\n- When diverse consumer teams have evolving needs and the API team must track them, consumer-driven (Pact) formalizes that pressure.\n\n**Tooling maturity.** Pact has clients in Ruby, JavaScript, Java, Python, Go, .NET, Swift, Rust — true polyglot. SCC is JVM-first (Java, Kotlin, Groovy); Spring Cloud Stream bindings make it the clear winner for Kafka/RabbitMQ contracts in Spring shops."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Pact Broker Flow vs SCC Stub JAR Flow",
+            "content": "```mermaid\nflowchart TB\n    subgraph Pact[Pact - Consumer-Driven]\n        C1[Consumer test<br/>mock provider] -->|generates| P1[pact.json<br/>consumer contract]\n        P1 -->|publish| PB[Pact Broker]\n        PB -->|pull on provider CI| V1[Provider verification<br/>against real impl]\n        V1 -->|verification result<br/>can-i-deploy| PB\n    end\n    subgraph SCC[Spring Cloud Contract - Producer-Driven]\n        Prod[Producer writes<br/>groovy contracts] -->|publish stubs| Artifactory[Stub artifact<br/>artifactory]\n        Prod -->|auto-gen tests| ProdCI[Producer CI verifies<br/>own contracts]\n        Artifactory -->|StubRunner pulls| CTest[Consumer test<br/>with WireMock stub]\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Side-by-Side: Consumer Test and Producer Verification",
+            "content": "**Pact consumer test (Java):**\n\n```java\n@ExtendWith(PactConsumerTestExt.class)\n@PactTestFor(providerName = \"order-service\")\nclass InventoryClientPactTest {\n\n    @Pact(consumer = \"inventory-service\")\n    V4Pact orderExists(PactDslWithProvider builder) {\n        return builder\n            .given(\"an order with id 42 exists\")\n            .uponReceiving(\"a request for order 42\")\n                .path(\"/orders/42\")\n                .method(\"GET\")\n            .willRespondWith()\n                .status(200)\n                .headers(Map.of(\"Content-Type\", \"application/json\"))\n                .body(newJsonBody(o -> {\n                    o.numberType(\"id\", 42);\n                    o.stringType(\"customerId\", \"cust-7\");\n                    o.stringMatcher(\"status\", \"CONFIRMED|PENDING|CANCELLED\", \"CONFIRMED\");\n                }).build())\n            .toPact(V4Pact.class);\n    }\n\n    @Test\n    @PactTestFor(pactMethod = \"orderExists\")\n    void fetchesOrder(MockServer mockServer) {\n        var client = new OrderClient(mockServer.getUrl());\n        assertThat(client.getOrder(42L).status()).isEqualTo(\"CONFIRMED\");\n    }\n}\n```\n\nRunning the test emits `inventory-service-order-service.json`; Pact Maven plugin publishes to the broker.\n\n**Pact provider verification (on producer side):**\n\n```java\n@Provider(\"order-service\")\n@PactBroker(url = \"https://pactflow.example.com\",\n            authentication = @PactBrokerAuth(token = \"${PACT_BROKER_TOKEN}\"))\n@SpringBootTest(webEnvironment = RANDOM_PORT)\nclass OrderProviderVerifyTest {\n\n    @LocalServerPort int port;\n\n    @BeforeEach\n    void setTarget(PactVerificationContext ctx) {\n        ctx.setTarget(new HttpTestTarget(\"localhost\", port));\n    }\n\n    @TestTemplate\n    @ExtendWith(PactVerificationInvocationContextProvider.class)\n    void pactVerification(PactVerificationContext ctx) { ctx.verifyInteraction(); }\n\n    @State(\"an order with id 42 exists\")\n    void orderExists() {\n        orderRepo.save(new Order(42L, \"cust-7\", \"CONFIRMED\", 19_900));\n    }\n}\n```\n\nProvider CI runs this; it pulls all contracts, replays requests, reports pass/fail to the broker.\n\n**SCC equivalent — producer writes the contract:**\n\n```groovy\n// producer-repo: src/test/resources/contracts/orders/getOrder.groovy\nContract.make {\n    request {\n        method GET(); url \"/orders/42\"\n    }\n    response {\n        status OK()\n        body([id: 42, customerId: \"cust-7\", status: \"CONFIRMED\"])\n        bodyMatchers {\n            jsonPath('$.status', byRegex('CONFIRMED|PENDING|CANCELLED'))\n        }\n    }\n}\n```\n\n```java\n// consumer-repo test\n@SpringBootTest\n@AutoConfigureStubRunner(\n    ids = \"com.example:order-service:+:stubs:8090\",\n    stubsMode = StubsMode.REMOTE,\n    repositoryRoot = \"https://artifactory.example.com/stubs-local\")\nclass InventoryServiceStubTest {\n    @Test void fetchesOrder() {\n        assertThat(orderClient.getOrder(42L).status()).isEqualTo(\"CONFIRMED\");\n    }\n}\n```\n\n**Pact Broker's `can-i-deploy`:**\n\n```bash\npact-broker can-i-deploy \\\n  --pacticipant inventory-service --version 1.3.0 \\\n  --to-environment production\n```\n\nOutputs a compatibility matrix: can v1.3 of inventory-service safely deploy to prod given all providers' prod versions? If any pact is unverified against current prod provider, the command fails and blocks the deploy.\n\nSCC has no native equivalent. You gain this either by manual pinning (consumer declares exact stub version) or by implementing external release gating."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Choosing Between Them — Concrete Scenarios",
+            "content": "**Choose Pact when:**\n- Consumers span multiple languages (Node UI, Go service, Python ML pipeline, Ruby admin tool all call the same Java API)\n- Consumer teams have divergent expectations and the API team must honour them\n- You need release gating via `can-i-deploy` — regulated industries, complex deploy dependencies\n- External SaaS consumers you don't control directly (via PactFlow SaaS)\n- Strong preference for the consumer-driven philosophy (Thoughtworks, Atlassian patterns)\n\n**Choose Spring Cloud Contract when:**\n- The stack is predominantly Spring Boot across producers and consumers\n- You need **messaging contracts** (Kafka, RabbitMQ) — SCC's support is first-class; Pact's is weaker and V3/V4 only\n- Producer team reasonably owns the API shape; consumers adapt\n- You want zero extra infrastructure (no broker); published stubs fit in your existing Maven repo\n- Development iteration with LOCAL stubs mode — work entirely offline\n\n**Choose neither when:**\n- Only 1–2 services exist; one integration test covers everything\n- You already maintain a strict OpenAPI spec and use spec-as-contract (Prism mocks, API linters in CI)\n- Team can't commit to maintaining contracts — broken / stale contracts are worse than no contracts\n\n**Philosophical pitfall.** Teams often want both tools because they're superficially similar. Running both produces duplication and confusion. Pick one as the primary and stick with it; add the other only if a concrete gap exists (e.g., SCC-first org adds Pact for one external Go consumer).\n\n**Broker infrastructure.** Pact Broker (self-hosted or PactFlow SaaS) is extra infrastructure — a running service, auth, backups, upgrade cadence. SCC's stub JAR fits into Artifactory/Nexus/Git you already run. Weigh operational cost against `can-i-deploy` value.\n\n**Testing experience.** Pact tests on the consumer feel like normal unit tests with a magic mock; easy to adopt. SCC consumer tests require StubRunner config and artifact coordinates; slightly more ceremony but the stub is reproducible byte-for-byte.\n\n**Verification feedback loop.** Pact's provider verification shows failure at the *interaction* level ('consumer X's interaction Y failed'). SCC's generated test shows failure at the method level ('orders_getOrderTest failed'). Pact's feedback is slightly richer because the broker aggregates results across many consumers.\n\n**State setup complexity.** Pact's `@State` handlers on the producer can become heavyweight — each consumer test has an 'given' description that the producer must satisfy. Fifty consumers with diverse preconditions becomes a maintenance burden. SCC's BaseClass approach has one place to stub all collaborators per controller, more centralized.\n\n**Kafka / messaging.** SCC with Spring Cloud Stream / Spring Kafka is the strongest option. Pact's async support exists but requires V3/V4 pacts and the feedback loop is clunkier.\n\n**OpenAPI interplay.** Some teams use OpenAPI-first plus contract tests: OpenAPI defines the shape, SCC enforces it server-side and consumer-side. Others use Pact plus OpenAPI-first — Pact ensures consumers stay honest to the spec. Not mutually exclusive; contract tests are runtime discipline, OpenAPI is documentation and tooling.\n\n**Polyglot reality.** If the org is *truly* polyglot — Ruby consumer calling a Java producer calling a Python downstream — Pact's polyglot client is the only option. SCC's JVM monoculture breaks down at the first non-JVM consumer.\n\n**Adoption pragmatics.** Both tools pay dividends after ~5-10 services and ~3-4 teams. Below that threshold, contract testing is usually overhead exceeding value — a handful of integration tests cover it. Above it, the test explosion makes contract tests a hygiene win.\n\n**Cheat-sheet:**\n\n| Concern | Pact | SCC |\n|---|---|---|\n| Philosophy | Consumer-driven | Producer-driven |\n| Polyglot | Excellent | JVM only |\n| Broker | Pact Broker required for full value | None; uses artifact repo |\n| can-i-deploy | Yes | No (manual) |\n| Messaging (Kafka/RabbitMQ) | Adequate (V3/V4) | First-class |\n| Spring Boot integration | Good | Native |\n| Consumer test ceremony | Low (mock-style) | Medium (StubRunner config) |\n| Producer verification | Pulls from broker | Maven plugin generates tests |\n| Breaking-change signal | Broker + CI failure | CI failure |\n| Release gating | can-i-deploy | Manual version pinning |"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Pact = consumer-driven, broker-based**; SCC = producer-driven, stub-JAR-based\n- **Pact Broker's `can-i-deploy`** is a unique release-gating superpower\n- **SCC wins for messaging contracts** (Kafka, RabbitMQ) in Spring ecosystems\n- **Pact wins in polyglot orgs** with Ruby, Go, Node, Python clients\n- **SCC requires no extra infrastructure** — stubs live in your existing Maven repo\n- **Pact's `@State` handlers** scale poorly with many consumers; SCC's BaseClass is more centralized\n- **Both tools demand active maintenance** — stale contracts are worse than none\n- **Running both is usually duplication** — pick one primary; add the other only for concrete gaps\n- **Below ~5-10 services, contract testing is often overhead** — integration tests suffice\n- **OpenAPI-first can complement either** — shape via spec, enforcement via contract tests"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The core philosophical difference**\n- Pact is consumer-driven — consumers record their expectations as a pact file and push it to the Pact Broker\n- Spring Cloud Contract is producer-driven — producer writes contracts in its own repo; the Maven plugin auto-generates both producer verification tests and WireMock stub JARs\n- In Pact the pressure flows upstream from consumer to producer; in SCC the producer owns the shape and consumers adapt\n\n**Tooling differences**\n- Pact requires the Pact Broker — a running service, self-hosted or PactFlow SaaS\n- SCC needs no extra infrastructure; stubs are plain JARs published to Artifactory, Nexus, or Git\n- Pact has polyglot clients: Ruby, JavaScript, Java, Python, Go, dotNET, Swift, Rust\n- SCC is JVM-first; excels at Spring Boot integration\n\n**Unique Pact strength — can-i-deploy**\n- Given a deploy candidate, queries the broker for compatibility across environments\n- Answers 'can consumer v1.3 safely deploy to prod given all providers currently in prod?'\n- If any pact is unverified against current provider in that env, the command fails and blocks the deploy\n- SCC has no native equivalent; teams use manual version pinning or build custom gating\n\n**Unique SCC strength — messaging contracts**\n- Kafka and RabbitMQ contracts supported the same way as HTTP\n- triggeredBy plus outputMessage describe produced messages\n- Spring Cloud Stream bindings make it seamless\n- Pact's async support works but the feedback loop is clunkier\n\n**Consumer test experience**\n- Pact: feels like a unit test with a mock provider; low ceremony\n- SCC: requires @AutoConfigureStubRunner with artifact coordinates; slightly more ceremony\n- Both give byte-for-byte reproducible stubs given a version\n\n**Producer verification**\n- Pact: pull pacts from broker, replay interactions, report results back to broker\n- SCC: Maven plugin generates JUnit tests that extend your BaseClass\n- Pact's broker-level aggregation gives richer cross-consumer visibility\n\n**State setup**\n- Pact uses @State handlers — one per 'given' clause in a consumer pact\n- Scales poorly with 50 consumers that have diverse preconditions\n- SCC uses a centralized BaseClass per controller to stub collaborators — tighter, less fragmented\n\n**Concrete decision rules**\n- Polyglot stack — choose Pact\n- Spring Boot across the board — choose SCC\n- Messaging contracts — choose SCC\n- Need can-i-deploy gating — choose Pact\n- 50 consumers, diverse preconditions — lean Pact for the philosophy, SCC for simplicity\n- Below 5 to 10 services — neither; integration tests suffice\n\n**Common anti-patterns**\n- Running both tools in parallel — duplication and confusion\n- Stale contracts — no one verifies; they rot; worse than no contracts\n- Treating contracts as documentation — they're executable tests, not docs\n- Skipping broker for Pact — you lose can-i-deploy, the main value\n\n**OpenAPI interplay**\n- OpenAPI is documentation and tooling; contract tests are runtime discipline\n- Complementary, not competing: spec defines shape, SCC or Pact enforces it\n- Some orgs use OpenAPI plus Pact; others OpenAPI plus SCC\n\n**The strategic answer**\n- Pact and SCC solve the same 'integration test explosion' problem but from opposite sides\n- Consumer-driven Pact makes sense in polyglot, diverse-consumer orgs with release gating needs\n- Producer-driven SCC fits Spring-heavy orgs, messaging contracts, and teams where the producer owns the API\n- Pick one primary; add the other only for a concrete gap like one external polyglot consumer\n- Without active maintenance, either tool becomes noise"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Pact Broker's `can-i-deploy` command work and why is it a release-gating superpower?",
+        "What's the state-setup difference between Pact @State and SCC BaseClass — which scales better?",
+        "How would you structure contract tests for a Kafka-produced event in Pact vs SCC?",
+        "When would running both Pact and SCC in the same org actually be justified?"
+      ],
+      "seo": {
+        "metaTitle": "Pact vs Spring Cloud Contract — Consumer-Driven vs Producer-Driven",
+        "metaDescription": "Choose between Pact and Spring Cloud Contract. Consumer-driven broker workflow vs producer-driven stub JARs. Polyglot support, can-i-deploy, messaging contracts."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P04",
+        "hook": "The core philosophical difference Pact is consumer-driven — consumers record their expectations as a pact file and push it to the Pact Broker Spring Cloud Contract is producer-driven — producer writes",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Both tools solve the same high-level problem: avoid deploying a producer that breaks its consumers without spinning up full end-to-end environments. They differ in who owns the contract and what the CI pipeline looks like. Pact — consumer-driven. Each consumer writes a unit-style test using a Pact mock provider. During the test, Pact records actual HTTP interactions into a pact.json file (the contract). Consumer CI pushes this contract to the."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Choose Pact when: Consumers span multiple languages (Node UI, Go service, Python ML pipeline, Ruby admin tool all call the same Java API) Consumer teams have divergent expectations and the API team must honour them You need release gating via can-i-deploy — regulated industries, complex deploy dependencies External SaaS consumers you don't control directly (via PactFlow SaaS) Strong preference for the consumer-driven philosophy (Thoughtworks, Atlassian patterns) Choose Spring Cloud Contract when: The stack is predominantly Spring Boot across producers and consumers You need messaging contracts (Kafka, RabbitMQ) — SCC's support is first-class; Pact's is weaker and V3/V4 only Producer team reasonably owns the API shape; consumers adapt You want zero extra infrastructure (no broker); published stubs fit in your existing Maven repo Development iteration with LOCAL stubs mode — work entirely offline Choose neither when: Only 1–2 services exist; one integration test covers everything You already maintain a strict OpenAPI spec and use spec-as-contract (Prism mocks, API linters in CI) Team can't commit to maintaining contracts — broken / stale contracts are worse than no contracts Philosophical pitfall",
+              "Teams often want both tools because they're superficially similar",
+              "Running both produces duplication and confusion",
+              "Pick one as the primary and stick with it; add the other only if a concrete gap exists (e",
+              ", SCC-first org adds Pact for one external Go consumer)"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Choose Pact when: Consumers span multiple languages (Node UI, Go service, Python ML pipeline, Ruby admin tool all call the same Java API) Consumer teams have divergent expectations and the API team must honour them You need release gating via can-i-deploy — regulated industries, complex deploy dependencies External SaaS consumers you don't control directly (via PactFlow SaaS) Strong preference for the consumer-driven philosophy (Thoughtworks, Atlassian patterns) Choose Spring Cloud Contract when: The stack is predominantly Spring Boot across producers and consumers You need messaging contracts (Kafka, RabbitMQ) — SCC's support."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Both tools solve the same high-level problem: avoid deploying a producer that breaks its consumers without spinning up full end-to-end environments. They differ in who owns the contract and what the CI pipeline looks like. Pact — consumer-driven. Each consumer writes a unit-style test using a Pact mock provider. During the test, Pact records actual HTTP interactions into a pact.json."
+          }
+        ],
+        "cap": "The core philosophical difference Pact is consumer-driven — consumers record their expectations as a pact file and push it to the Pact Broker Spring Cloud Contract is producer-driven — producer writes",
+        "familiarity_anchors": [
+          "Broker",
+          "Spring",
+          "Cloud"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Pact Broker's `can-i-deploy` command work and why is it a release-gating superpower?",
+          "What's the state-setup difference between Pact @State and SCC BaseClass — which scales better?",
+          "How would you structure contract tests for a Kafka-produced event in Pact vs SCC?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

@@ -1,0 +1,585 @@
+{
+  "topic": "Batch Fundamentals",
+  "topicSlug": "batch-fundamentals",
+  "domain": "java",
+  "stack": "spring-batch",
+  "experience": "intermediate",
+  "category": "java-backend-intermediate",
+  "questions": [
+    {
+      "id": "sb-001",
+      "slug": "spring-batch-core-concepts-job-step-chunk-tasklet",
+      "question": "What are the core concepts in Spring Batch \u2014 Job, Step, Chunk, and Tasklet \u2014 and how do they relate to each other?",
+      "title": "Spring Batch Core Concepts: Job, Step, Chunk, and Tasklet",
+      "direct_answer": "A Job is the top-level container representing an entire batch process, composed of one or more Steps executed in sequence or conditionally. Each Step can follow either a chunk-oriented model (read-process-write in fixed-size chunks) or a Tasklet model (a single custom unit of work). Together, they give you fine-grained control over large-volume data processing with built-in restart and retry support.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands Spring Batch's execution model before writing any code",
+        "common_mistake": "Confusing Tasklet with Chunk \u2014 candidates often think Tasklet is just a simpler Step, not realizing they are mutually exclusive execution strategies within a Step",
+        "to_stand_out": "Mention JobRepository, JobExecution, and StepExecution as the persistence layer that enables restartability \u2014 most candidates skip this"
+      },
+      "company_tags": [
+        "Amazon",
+        "Goldman Sachs",
+        "JP Morgan",
+        "Capgemini",
+        "Infosys"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch's Chunk Model Is Not Just 'Process Records in Groups' \u2014 It's a Specific Transaction Boundary Design",
+            "content": "Spring Batch was designed for one problem: processing millions of records reliably, with the ability to recover from failures without reprocessing everything. The domain model was designed around that constraint.\n\nA **Job** is the top-level unit of work \u2014 'process today's orders', 'generate monthly invoices'. A Job is composed of **Steps**, each of which does one discrete piece of the work. Each Step chooses one of two mutually exclusive execution strategies.\n\n**Chunk-oriented processing** is the standard model: read N items \u2192 process each \u2192 write all N in a single transaction. The chunk size is the commit interval \u2014 every N items, the transaction commits and progress is persisted. If the job fails at item 7001 with chunk size 100, it restarts at item 7001 (the last committed chunk boundary), not at item 1.\n\n**Tasklet** is for everything that isn't record-by-record processing: downloading a file, sending an email, truncating a staging table, calling an external API once. A Tasklet is a `RepeatStatus.FINISHED` or `RepeatStatus.CONTINUABLE` return from a single `execute()` method. **Chunk and Tasklet are mutually exclusive** \u2014 a step is either chunk-oriented or tasklet-based. This is the `common_mistake` the interviewer is checking: candidates who think Tasklet is a simplified chunk step.\n\nSpring Batch persists execution state in a **JobRepository** \u2014 backed by a relational database. Every Job, Step, and chunk execution is recorded. This metadata enables restartability, auditing, and multi-instance coordination.\n\nThe distinction between Chunk and Tasklet is **the most common mistake** this question tests. Candidates often describe Tasklet as a 'simpler chunk step' \u2014 it isn't. They are mutually exclusive execution strategies. You cannot have both a chunk-oriented reader/writer AND a Tasklet on the same Step. Choose one: chunk model for iterating over records, Tasklet model for discrete one-time operations."
+          },
+          {
+            "type": "step",
+            "title": "The Transaction Boundary in Chunk Processing \u2014 Why Write Phase Failure Is Different From Read Failure",
+            "content": "Understanding the chunk transaction boundary explains most Spring Batch debugging. Each chunk runs inside a single transaction that spans the entire read-process-write cycle for those N items.\n\nThe read phase calls `ItemReader.read()` repeatedly until the chunk size is reached or `null` is returned (data exhausted). Read failures are handled per-item and can be configured with retry and skip policies. **But read failures don't affect the transaction** \u2014 they happen before the transaction boundary or during item reading within the chunk.\n\nThe **write phase is different.** The entire chunk's list of processed items is passed to `ItemWriter.write(Chunk<O> items)` in one call. If the write fails, the entire chunk transaction rolls back \u2014 all N items that were successfully read and processed are discarded and must be reprocessed. This is the architectural reason Spring Batch recommends keeping ItemWriter idempotent.\n\nThe commit interval is the key tuning parameter. Too small (chunk size 1) means one transaction per item \u2014 safe but slow due to commit overhead. Too large (chunk size 10,000) means a failure partway through requires reprocessing thousands of items. For most workloads, 100-500 items per chunk balances throughput with restart granularity.\n\n`@StepScope` is essential for readers and writers that depend on job parameters or runtime data. Without it, a singleton reader shared across multiple job executions would maintain state between runs \u2014 a subtle bug that only manifests when running multiple jobs concurrently."
+          },
+          {
+            "type": "step",
+            "title": "The JobRepository and Execution Metadata \u2014 What Happens Under the Hood at Startup",
+            "content": "When a Job is launched, Spring Batch creates a **JobInstance** \u2014 the combination of Job name and JobParameters. If this combination has never run before, it's a new instance. If it has run before and failed, the existing instance restarts from the last checkpoint.\n\nSpring Batch creates tables in your database: `BATCH_JOB_INSTANCE`, `BATCH_JOB_EXECUTION`, `BATCH_JOB_EXECUTION_PARAMS`, `BATCH_STEP_EXECUTION`. The schema ships with Spring Batch \u2014 `schema-h2.sql`, `schema-mysql.sql`, etc. For tests, an in-memory H2 database with the schema is convenient. **Never use the in-memory `MapJobRepositoryFactoryBean` in production** \u2014 it can't persist state across restarts.\n\nThe **JobExecution** records the state of a single run attempt: start time, end time, exit status (`COMPLETED`, `FAILED`, `STOPPED`). If a Job runs twice with the same parameters and the first run completed successfully, Spring Batch throws a `JobInstanceAlreadyCompleteException` on the second launch \u2014 protecting against accidental re-runs. To force a new run for the same business parameters, use `RunIdIncrementer` to add a technical `run.id` parameter.\n\nIn production, run only one instance of a given Job with given parameters at a time. Spring Batch doesn't prevent concurrent execution by default \u2014 configure your scheduler to prevent overlap or use Spring Batch's `@JobScope` and `JobExecutionDecider` for execution flow control.\n\nThe **interview insight** the `to_stand_out` field targets: most candidates describe Spring Batch as 'processes records in batches' and stop there. The JobRepository is the feature that actually differentiates Spring Batch from writing a simple for-loop with a batch insert. Without JobRepository persistence, you get no automatic restart, no audit trail, no idempotency protection, and no visibility into what failed. It's the metadata model that makes Spring Batch suitable for production financial and operational batch processing. Mentioning this demonstrates you've actually used it in production rather than just read about it."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Job \u2192 Steps \u2192 Chunk/Tasklet is the hierarchy** \u2014 a `Job` is a complete batch process; a `Step` is one phase (read, process, write or a single task); `Chunk` and `Tasklet` are the two execution models for a step.\n- **`JobRepository` persists every execution \u2014 it is not optional** \u2014 Spring Batch stores `JobInstance`, `JobExecution`, and `StepExecution` in the database; without it, restart, skip, and retry do not work.\n- **Chunk processing is transactional per chunk, not per record** \u2014 a chunk of 100 items is read, processed, and written inside one transaction; a write failure rolls back only that chunk's 100 items.\n- **Tasklet is for single operations that are not read-process-write** \u2014 file cleanup, API calls, DDL operations, or sending a completion notification; implement `Tasklet` and return `RepeatStatus.FINISHED`.\n- **`JobInstance` = Job + JobParameters; `JobExecution` = one run attempt** \u2014 re-running a failed job with the same parameters creates a new `JobExecution` for the existing `JobInstance`, not a new instance."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch structures batch processing around a clear hierarchy: Job \u2192 Step \u2192 Chunk or Tasklet. Every level has a well-defined responsibility and is persisted to the `JobRepository`.\n\n**The hierarchy**\n- `Job`: the overall batch process \u2014 'import monthly invoices'; composed of one or more Steps in sequence or conditionally\n- `Step`: one phase of the job \u2014 'read from CSV', 'validate records', 'write to database'; each step has its own execution status and can be restarted independently\n- `Chunk`: the read-process-write model for a step; reads N items, processes each, writes the batch \u2014 all inside one transaction\n- `Tasklet`: a single operation for a step \u2014 not a read-process-write loop; `execute()` returns `RepeatStatus.FINISHED` or `RepeatStatus.CONTINUABLE`\n\n**`JobRepository` \u2014 the persistence layer**\n- Stores `JobInstance` (logical job run), `JobExecution` (physical attempt), `StepExecution` (per-step state)\n- Enables: restart from the last successful checkpoint; skip counting; retry tracking; execution history\n- Spring Boot auto-configures `JobRepository` using the application's `DataSource`\n\n**Chunk transaction model**\n- Chunk size 100: reads 100 records, processes each, writes all 100 in one transaction\n- A write failure rolls back only that chunk \u2014 already committed chunks are not re-processed on restart\n- Larger chunks = fewer transactions = better throughput; smaller chunks = finer-grained checkpointing"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Batch decide whether a failed job can be restarted versus re-run from scratch?",
+        "What happens if two instances of the same Job are launched simultaneously with the same parameters?",
+        "When would you choose a Tasklet over a chunk-oriented Step in production?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Core Concepts: Job, Step, Chunk & Tasklet Explained",
+        "metaDescription": "Understand the four pillars of Spring Batch \u2014 Job, Step, Chunk processing, and Tasklet \u2014 with Java code examples and a clear explanation of the JobRepository for restartability."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Batch structures batch processing around a clear hierarchy: Job \u2192 Step \u2192 Chunk or Tasklet.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Spring Batch was designed for one problem: processing millions of records reliably, with the ability to recover from failures without reprocessing everything. The domain model was designed around that constraint. A Job is the top-level unit of work \u2014 'process today's orders', 'generate monthly invoices'. A Job is composed of Steps, each of which does one discrete piece of the work. Each Step chooses one of two mutually exclusive execution strategies. Chunk-oriented processing is the standard model: read N items \u2192 process each \u2192 write all N in a single."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Understanding the chunk transaction boundary explains most Spring Batch debugging.",
+              "Each chunk runs inside a single transaction that spans the entire read-process-write cycle for those N items.",
+              "The read phase calls ItemReader.read() repeatedly until the chunk size is reached or null is returned (data exhausted).",
+              "Read failures are handled per-item and can be configured with retry and skip policies.",
+              "But read failures don't affect the transaction \u2014 they happen before the transaction boundary or during item reading within the chunk.",
+              "The write phase is different."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Job \u2192 Steps \u2192 Chunk/Tasklet is the hierarchy \u2014 a Job is a complete batch process; a Step is one phase (read, process, write or a single task); Chunk and Tasklet are the two execution models for a step",
+              "JobRepository persists every execution \u2014 it is not optional \u2014 Spring Batch stores JobInstance, JobExecution, and StepExecution in the database; without it, restart, skip, and retry do not work",
+              "Chunk processing is transactional per chunk, not per record \u2014 a chunk of 100 items is read, processed, and written inside one transaction; a write failure rolls back only that chunk's 100 items",
+              "Tasklet is for single operations that are not read-process-write \u2014 file cleanup, API calls, DDL operations, or sending a completion notification; implement Tasklet and return RepeatStatus",
+              "JobInstance = Job + JobParameters; JobExecution = one run attempt \u2014 re-running a failed job with the same parameters creates a new JobExecution for the existing JobInstance, not a new instance"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Confusing Tasklet with Chunk \u2014 candidates often think Tasklet is just a simpler Step, not realizing they are mutually exclusive execution strategies within a Step"
+          }
+        ],
+        "cap": "The hierarchy Job: the overall batch process \u2014 'import monthly invoices'; composed of one or more Steps in sequence or conditionally Step: one phase of the job \u2014 'read from CSV', 'validate records', '",
+        "familiarity_anchors": [
+          "Steps",
+          "Tasklet",
+          "Together"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Batch decide whether a failed job can be restarted versus re-run from scratch?",
+          "What happens if two instances of the same Job are launched simultaneously with the same parameters?",
+          "When would you choose a Tasklet over a chunk-oriented Step in production?"
+        ]
+      }
+    },
+    {
+      "id": "sb-002",
+      "slug": "spring-batch-itemreader-itemprocessor-itemwriter-chunk-processing",
+      "question": "How do ItemReader, ItemProcessor, and ItemWriter work together in Spring Batch chunk processing?",
+      "title": "ItemReader, ItemProcessor, and ItemWriter: Chunk Processing in Spring Batch",
+      "direct_answer": "In chunk-oriented processing, ItemReader reads one item at a time until the chunk size is reached, ItemProcessor optionally transforms or filters each item, and ItemWriter receives the complete chunk as a list to persist in a single transaction. This separation of concerns makes each piece independently testable and swappable without touching the others.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can wire a real-world data pipeline and understands the transaction boundary at the write phase",
+        "common_mistake": "Returning null from ItemProcessor to skip an item is correct, but many candidates try to throw an exception instead, which triggers retry/skip logic unintentionally",
+        "to_stand_out": "Explain that ItemReader.read() returns null to signal end-of-data, and that ItemWriter receives a Chunk<O> (Spring Batch 5) rather than a plain List"
+      },
+      "company_tags": [
+        "TCS",
+        "Wipro",
+        "Accenture",
+        "Deutsche Bank",
+        "Barclays"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Chunk Pipeline Is a Transaction Loop, Not a Stream \u2014 Understanding What Happens When Processing Fails Mid-Chunk",
+            "content": "ItemReader, ItemProcessor, and ItemWriter are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the **transaction boundary**: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction.\n\nThe flow per chunk: call `ItemReader.read()` until the chunk size is reached (or null signals end-of-data) \u2192 collect items \u2192 pass each through `ItemProcessor.process()` \u2192 collect surviving items \u2192 call `ItemWriter.write(chunk)` with the entire list in one transaction. The critical insight: **ItemWriter receives a list, not a single item.** This enables batch inserts (`JdbcBatchItemWriter`, `JpaItemWriter`) that are 10-100x faster than individual inserts.\n\n**Returning null from ItemProcessor** is the correct way to filter items. The null-returned item is silently discarded \u2014 it will not appear in the ItemWriter's list. Many candidates try to throw an exception to skip items, which triggers retry logic and potentially rolls back the chunk. Null-return is the clean skip signal.\n\nThe transaction boundary also explains why **write-phase failures are more expensive than read-phase failures.** If ItemWriter fails partway through a chunk, the entire chunk rolls back \u2014 all the read and processing work is repeated on the next restart from the last committed checkpoint. Design ItemWriters to be idempotent to tolerate this re-execution safely.\n\nSpring Batch 5 changed the `ItemWriter` interface signature: `write(List<T> items)` became `write(Chunk<T> chunk)`. The `Chunk` object wraps the list but also carries the `ChunkContext`, making it possible to access step context metadata inside the writer. If you're migrating from Spring Batch 4 to 5, this is the breaking change that requires updating custom `ItemWriter` implementations. The Spring Data and JDBC built-in writers (`JpaItemWriter`, `JdbcBatchItemWriter`) were updated by the framework."
+          },
+          {
+            "type": "step",
+            "title": "Wiring Reader, Processor, and Writer \u2014 The @StepScope Annotation That Solves Concurrent Job Execution",
+            "content": "A `FlatFileItemReader` reads CSV files; a `JdbcCursorItemReader` streams from a database query; a `JpaPagingItemReader` uses offset-based pagination. The choice depends on data source and volume. **Cursor-based readers hold a database connection open for the entire step** \u2014 appropriate for large datasets but requires a transaction manager that supports long-running transactions. **Paging readers** close the connection after each page, making them safer for very large datasets at the cost of potential gaps if data changes during processing.\n\n`@StepScope` is the annotation that makes readers and writers safe for concurrent job execution and for receiving `@Value(\"#{jobParameters['key']}\")` injection. Without `@StepScope`, the reader bean is a singleton \u2014 if two job instances run concurrently, they share the same reader state and corrupt each other's processing. With `@StepScope`, Spring creates a new reader instance for each Step execution.\n\nA `CompositeItemProcessor` chains multiple `ItemProcessor` instances in sequence, applying each in order and passing the result to the next. This is cleaner than a single monolithic processor with mixed concerns \u2014 a validation processor, an enrichment processor, and a transformation processor can be developed and tested independently, then composed.\n\nFor the `ItemWriter`, prefer **batch-aware writers** over looping implementations. `JdbcBatchItemWriter` issues one batch SQL statement for the entire chunk. Writing one item at a time in a loop inside `ItemWriter.write()` defeats the purpose of chunking \u2014 you lose the batch insert optimization that makes chunk processing fast.\n\n**Testing chunk processing** requires special consideration. Use `@SpringBatchTest` (added in Spring Batch 4.1) to get a `JobLauncherTestUtils` that simplifies launching jobs in tests. For isolated step testing, `JobLauncherTestUtils.launchStep(\"stepName\")` runs a single step without executing the full job. Mock the reader with a `ListItemReader` that provides a fixed dataset, run the step, and assert on the writer output or the database state. This pattern catches most chunk-processing bugs \u2014 null returns from processor, incorrect chunk size, idempotency failures \u2014 without requiring a full integration test setup."
+          },
+          {
+            "type": "step",
+            "title": "Fault Tolerance: Retry, Skip, and the Transaction Interaction You Must Understand",
+            "content": "Spring Batch's fault tolerance operates at two levels: **retry** (attempt the same item again) and **skip** (discard the item and continue). Both interact with the transaction boundary in ways that catch candidates off guard.\n\n**Retry** works for transient failures \u2014 a `DeadlockLoserDataAccessException` from the database, a temporary network error calling an API in ItemProcessor. Configure `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3)` on the step. Spring Batch will reprocess the item up to 3 times before giving up. For retry to work, the reader must support re-reading \u2014 database readers do, file readers generally do not without `@StepScope` and savestate.\n\n**Skip** handles poison records \u2014 items that consistently fail processing or writing and should be excluded from the result. `skip(ValidationException.class).skipLimit(100)` allows up to 100 items to fail with `ValidationException` before the step itself fails. These skipped items are recorded in step execution metadata for audit.\n\nThe subtle interaction: **skip on write failures requires a chunk-level rollback followed by single-item retry.** When a write fails, Spring Batch can't know which item in the chunk caused the failure. It rolls back the chunk, then retries each item individually to identify and skip only the failing item. This means every item in a failed chunk is re-read and re-processed \u2014 ensure idempotency in your processor and that readers support repositioning.\n\nFor non-transactional operations (sending emails, calling external APIs) in a chunk step, be aware that rollback doesn't undo these effects. Handle compensating logic explicitly or move external calls to a separate Tasklet step that runs after the chunk step completes successfully."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ItemReader.read()` returns `null` to signal end of data** \u2014 Spring Batch calls `read()` in a loop until it returns `null`; throwing an exception is for errors, not end-of-input.\n- **`ItemProcessor.process()` returns `null` to skip an item** \u2014 the null item is filtered out and does not reach the `ItemWriter`; the skip is not counted unless configured.\n- **`ItemWriter.write()` receives the entire chunk as a list** \u2014 one write call per chunk; bulk INSERT/UPDATE is possible and recommended; writing item-by-item inside `ItemWriter` defeats chunk batching.\n- **`CompositeItemProcessor` chains multiple processors** \u2014 useful for validation \u2192 transformation \u2192 enrichment pipelines; each processor receives the output of the previous one.\n- **`ItemReader` implementations are not thread-safe by default** \u2014 `FlatFileItemReader` and `JdbcCursorItemReader` maintain cursor state; wrap in `SynchronizedItemStreamReader` for multi-threaded steps."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The chunk-oriented step's three components \u2014 `ItemReader`, `ItemProcessor`, `ItemWriter` \u2014 each have a specific contract. Understanding the contracts prevents subtle bugs like phantom skips or inefficient writes.\n\n**`ItemReader` \u2014 read one item at a time**\n- Spring Batch calls `read()` repeatedly until it returns `null`\n- `null` = end of input; this is the normal termination signal, not an exception\n- Built-in readers: `FlatFileItemReader` (CSV/fixed-width), `JdbcCursorItemReader`, `JdbcPagingItemReader`, `JpaPagingItemReader`, `KafkaItemReader`\n\n**`ItemProcessor` \u2014 transform or filter one item**\n- Receives one item; returns the transformed item or `null` to skip it\n- `null` silently removes the item from the chunk \u2014 it does not reach `ItemWriter`\n- Stateless by design; thread-safe; can be composed with `CompositeItemProcessor` for pipeline steps\n\n**`ItemWriter` \u2014 write the entire chunk**\n- Receives `List<T>` \u2014 all processed items from the chunk\n- Bulk INSERT/UPDATE the entire list in one database call; never loop and write one at a time inside `ItemWriter`\n- Built-in writers: `JdbcBatchItemWriter` (batch SQL), `JpaItemWriter`, `FlatFileItemWriter`, `KafkaItemWriter`\n\n**Thread safety**\n- `FlatFileItemReader` maintains a file cursor \u2014 calling `read()` from multiple threads corrupts the cursor\n- Wrap with `SynchronizedItemStreamReader` or use `JdbcPagingItemReader` (which is re-entrant by page) for multi-threaded steps"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you chain multiple ItemProcessors together for different transformation stages?",
+        "What is the difference between ItemWriter receiving a List versus a Chunk in Spring Batch 5?",
+        "How does Spring Batch handle a scenario where ItemProcessor throws a runtime exception mid-chunk?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch ItemReader, ItemProcessor & ItemWriter: Chunk Processing Guide",
+        "metaDescription": "Learn how ItemReader, ItemProcessor, and ItemWriter collaborate in Spring Batch chunk processing, with Java examples covering CSV reading, filtering with null returns, and JPA writing."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "The chunk-oriented step's three components \u2014 ItemReader, ItemProcessor, ItemWriter \u2014 each have a specific contract.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "ItemReader, ItemProcessor, and ItemWriter are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the transaction boundary: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction. The flow per chunk: call ItemReader.read() until the chunk size is reached (or null signals end-of-data) \u2192 collect items \u2192 pass each through ItemProcessor.process() \u2192 collect surviving items \u2192 call ItemWriter.write(chunk) with the entire list in one transaction. The critical insight: ItemWriter receives a list, not."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "A FlatFileItemReader reads CSV files; a JdbcCursorItemReader streams from a database query; a JpaPagingItemReader uses offset-based pagination.",
+              "The choice depends on data source and volume.",
+              "Cursor-based readers hold a database connection open for the entire step \u2014 appropriate for large datasets but requires a transaction manager that supports long-running transactions.",
+              "Paging readers close the connection after each page, making them safer for very large datasets at the cost of potential gaps if data changes during processing.",
+              "@StepScope is the annotation that makes readers and writers safe for concurrent job execution and for receiving @Value(\"#{jobParameters['key']}\") injection.",
+              "Without @StepScope, the reader bean is a singleton \u2014 if two job instances run concurrently, they share the same reader state and corrupt each other's processing."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "read() returns null to signal end of data \u2014 Spring Batch calls read() in a loop until it returns null; throwing an exception is for errors, not end-of-input",
+              "ItemProcessor",
+              "process() returns null to skip an item \u2014 the null item is filtered out and does not reach the ItemWriter; the skip is not counted unless configured",
+              "write() receives the entire chunk as a list \u2014 one write call per chunk; bulk INSERT/UPDATE is possible and recommended; writing item-by-item inside ItemWriter defeats chunk batching",
+              "CompositeItemProcessor chains multiple processors \u2014 useful for validation \u2192 transformation \u2192 enrichment pipelines; each processor receives the output of the previous one"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Returning null from ItemProcessor to skip an item is correct, but many candidates try to throw an exception instead, which triggers retry/skip logic unintentionally"
+          }
+        ],
+        "cap": "ItemReader \u2014 read one item at a time Spring Batch calls read() repeatedly until it returns null null = end of input; this is the normal termination signal, not an exception Built-in readers: FlatFileI",
+        "familiarity_anchors": [
+          "ItemReader",
+          "ItemProcessor",
+          "ItemWriter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you chain multiple ItemProcessors together for different transformation stages?",
+          "What is the difference between ItemWriter receiving a List versus a Chunk in Spring Batch 5?",
+          "How does Spring Batch handle a scenario where ItemProcessor throws a runtime exception mid-chunk?"
+        ]
+      }
+    },
+    {
+      "id": "sb-003",
+      "slug": "spring-batch-job-parameters-restart-failed-jobs",
+      "question": "How do Job parameters work in Spring Batch, and how do you restart a failed job from where it left off?",
+      "title": "Spring Batch Job Parameters and Restarting Failed Jobs",
+      "direct_answer": "Job parameters uniquely identify a JobInstance \u2014 the same Job name plus the same parameters always map to the same instance, preventing duplicate runs. When a job fails, its JobExecution is marked FAILED in the JobRepository, and re-launching with the same parameters triggers a restart that skips already-committed steps and resumes from the last failed or incomplete step.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of JobInstance vs JobExecution and the idempotency model Spring Batch enforces",
+        "common_mistake": "Adding a timestamp or run-id parameter every time to force a new JobInstance \u2014 valid, but candidates should know it also means losing automatic restart capability for that specific run",
+        "to_stand_out": "Mention @StepScope and @JobScope for late binding of parameters into readers/writers, and how JobParametersIncrementer enables scheduled reruns"
+      },
+      "company_tags": [
+        "IBM",
+        "Cognizant",
+        "SAP",
+        "Oracle",
+        "Societe Generale"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch's JobInstance Model Enforces Idempotency \u2014 And Most Teams Fight It Until They Understand Why It Exists",
+            "content": "Spring Batch distinguishes between three concepts that most developers initially conflate: **JobInstance** (what you're processing), **JobExecution** (a specific attempt to process it), and **JobParameters** (the identity of the instance).\n\nA `JobInstance` is identified by the combination of **Job name + JobParameters**. If you run the `orderProcessingJob` with `processingDate=2024-01-15`, Spring Batch creates one JobInstance for that combination. If that run fails and you relaunch with the same parameters, Spring Batch creates a new `JobExecution` for the **same JobInstance** \u2014 and restarts from the last committed checkpoint, not from scratch.\n\nIf the first run completed successfully (`COMPLETED` status), relaunching with the same parameters throws `JobInstanceAlreadyCompleteException`. This is **intentional** \u2014 it prevents accidental re-processing of already-completed business data. If you genuinely need to rerun a completed job (data correction, reprocessing), you have two options: launch with different parameters that reflect the new execution (e.g., a `reprocessing=true` flag), or clean up the execution metadata from the `BATCH_*` tables.\n\nThis model is the `common_mistake` target: teams add a timestamp or UUID to parameters on every launch to force uniqueness, avoiding the idempotency constraint. That works but defeats the restart model \u2014 each launch is a new instance with no restart capability. The right design separates identity parameters (business keys) from run-control parameters (technical incrementers).\n\nUnderstanding the difference between `JobInstance` and `JobExecution` is the foundation of the entire restart model. Think of `JobInstance` as the business task ('process March statements for account group A') and `JobExecution` as an attempt to complete that task. One business task may have multiple execution attempts if early attempts fail. Spring Batch records every attempt, and the metadata in `BATCH_JOB_EXECUTION` and `BATCH_STEP_EXECUTION` tells you the exact state of each attempt \u2014 what was read, what was committed, where the failure occurred."
+          },
+          {
+            "type": "phase",
+            "title": "How Spring Batch Determines Restart Position \u2014 The Checkpoint Mechanism",
+            "content": "When a failed JobExecution is restarted, Spring Batch uses the **step execution metadata** to determine where to resume. Each Step execution records its status (`COMPLETED`, `FAILED`, `STOPPED`), and for chunk steps, the `readCount` (number of items read in the last successful execution) is the checkpoint.\n\nFor **paging readers**, the restart position is derived from `readCount` \u2014 Spring Batch skips forward by that many items on restart. If 7000 items were processed before failure, the paging reader starts at offset 7000. This requires that the data set is stable between runs \u2014 if items were inserted into the query result set between the failed run and the restart, the offset no longer maps to the same item.\n\nFor **cursor readers**, restarting requires the cursor to be re-opened from the beginning and skipped forward to `readCount`. Some cursor-based readers support `saveState(false)` to disable restart capability (and process from scratch on restart) \u2014 appropriate for short, fast steps where restart overhead exceeds restart benefit.\n\nFor **partitioned jobs** (multiple concurrent step instances), each partition maintains its own step execution and checkpoint. A failed partition restarts only its own partition \u2014 other completed partitions are not re-executed. This is the scalability advantage of partitioning: partial failure only re-runs the affected partition, not the entire dataset."
+          },
+          {
+            "type": "step",
+            "title": "Designing Job Parameters for Production \u2014 Identity, Incrementers, and Operational Flexibility",
+            "content": "JobParameters must serve two purposes simultaneously: **identifying the business scope** of a run (what data is being processed) and **enabling operational flexibility** (re-running, forcing new instances, testing). Conflating these two purposes in a single parameter set leads to operational friction.\n\nA clean production parameter design: **business parameters** are the identity \u2014 `processingDate`, `region`, `batchType`. These uniquely identify what data the job is processing. **Technical parameters** are additive \u2014 `runId` (from `RunIdIncrementer`) creates uniqueness when you need multiple runs against the same business data, such as manual reruns after data corrections.\n\nJob parameters are typed: String, Long, Double, Date. Use the right type \u2014 don't pass a date as a String and parse it in the processor. `@Value(\"#{jobParameters['processingDate']}\")` with type `LocalDate` requires a custom converter; using Spring Batch's native Date type and converting is simpler.\n\n**`@JobScope`** is the correct scope for beans that depend on job parameters but not step parameters \u2014 configuration beans that read job parameters at job launch time, before any steps execute. Use `@StepScope` for readers and writers that need per-step parameters. Both scopes create beans lazily at the appropriate lifecycle point, not at application startup.\n\nFor **scheduled execution**, configure your scheduler (Quartz, Spring `@Scheduled`, Kubernetes CronJob) to pass meaningful parameters \u2014 the processing date, not a run timestamp. This makes the `BATCH_JOB_EXECUTION_PARAMS` table readable as an audit log of what was processed when, rather than a list of meaningless UUIDs.\n\n**Cleaning up execution metadata** is an operational concern often ignored until the `BATCH_JOB_EXECUTION` table grows to millions of rows and queries slow down. Spring Batch 5 includes a `BatchDataSourceScriptDatabaseInitializer` and a `JobExplorerFactoryBean`, and you can pair a scheduled cleanup job (using Spring Batch itself) that deletes old execution metadata beyond a retention window. Alternatively, set up database partitioning on execution start time. For most organizations, 90 days of execution history is enough for auditing \u2014 beyond that, archive to cold storage or delete."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`JobParameters` determine `JobInstance` identity** \u2014 same Job name + same parameters = same `JobInstance`; a `JobInstance` can have multiple `JobExecution`s (initial run + restarts).\n- **Adding a timestamp parameter forces a new `JobInstance`** \u2014 useful for jobs that must re-run from scratch every time; but defeats the restart mechanism for jobs that should resume.\n- **A `FAILED` `JobExecution` can be restarted; a `COMPLETED` one cannot by default** \u2014 Spring Batch prevents re-running a successfully completed `JobInstance` with the same parameters; use `allowStartIfComplete(true)` per step for idempotent steps.\n- **`@StepScope` and `@JobScope` enable late binding of parameters** \u2014 `@Value(\"#{jobParameters['file']}\")` in a `@StepScope` bean is evaluated when the step starts, not when the `ApplicationContext` loads.\n- **Step restartability depends on `ItemReader` stateful checkpointing** \u2014 `FlatFileItemReader` saves its position in `ExecutionContext`; on restart, it seeks to the last committed position and resumes from there."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch's restart capability is one of its most powerful features \u2014 a job that fails at record 50,000 can resume from record 50,001 rather than starting over. This requires understanding how parameters, instances, and executions relate.\n\n**The identity model**\n- `JobInstance` = Job name + `JobParameters`; represents a logical run (e.g., 'import for 2024-01')\n- `JobExecution` = one physical attempt of a `JobInstance`; a failed `JobInstance` gets a new `JobExecution` on restart\n- `StepExecution` = one attempt of one step within a `JobExecution`; stores `readCount`, `writeCount`, `commitCount`, and the `ExecutionContext` for restart state\n\n**Starting vs restarting**\n- First run: `jobLauncher.run(job, params)` creates a new `JobInstance` and a new `JobExecution`\n- Restart: `jobLauncher.run(job, sameParams)` finds the existing `FAILED` `JobInstance` and creates a new `JobExecution` for it; steps that completed successfully are skipped\n- A `COMPLETED` `JobInstance` cannot be re-launched by default \u2014 add `allowStartIfComplete(true)` to steps that need to run again\n\n**Late binding with `@StepScope`**\n- `@StepScope @Bean FlatFileItemReader reader(@Value(\"#{jobParameters['inputFile']}\") String file)` \u2014 the `file` value is not available at context load time; `@StepScope` defers bean creation until the step starts\n- Essential for parameterized readers and writers"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if you try to restart a COMPLETED job without changing its parameters?",
+        "How would you design a daily batch job so that each day's run is independent but also restartable on failure?",
+        "How does Spring Batch store job execution metadata and which tables are involved?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Job Parameters & Restarting Failed Jobs \u2014 Java Guide",
+        "metaDescription": "Learn how Spring Batch Job parameters identify JobInstances, how to restart failed jobs from the last checkpoint, and how to use @StepScope for late parameter binding."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Batch's restart capability is one of its most powerful features \u2014 a job that fails at record 50,000 can resume from record 50,001 rather than starting over.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Spring Batch distinguishes between three concepts that most developers initially conflate: JobInstance (what you're processing), JobExecution (a specific attempt to process it), and JobParameters (the identity of the instance). A JobInstance is identified by the combination of Job name + JobParameters. If you run the orderProcessingJob with processingDate=2024-01-15, Spring Batch creates one JobInstance for that combination. If that run fails and you relaunch with the same parameters, Spring Batch creates a new JobExecution for the same JobInstance \u2014 and restarts from the last committed checkpoint, not from scratch. If the."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "JobParameters must serve two purposes simultaneously: identifying the business scope of a run (what data is being processed) and enabling operational flexibility (re-running, forcing new instances, testing).",
+              "Conflating these two purposes in a single parameter set leads to operational friction.",
+              "A clean production parameter design: business parameters are the identity \u2014 processingDate, region, batchType.",
+              "These uniquely identify what data the job is processing.",
+              "Technical parameters are additive \u2014 runId (from RunIdIncrementer) creates uniqueness when you need multiple runs against the same business data, such as manual reruns after data corrections.",
+              "Job parameters are typed: String, Long, Double, Date."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "JobParameters determine JobInstance identity \u2014 same Job name + same parameters = same JobInstance; a JobInstance can have multiple JobExecutions (initial run + restarts)",
+              "Adding a timestamp parameter forces a new JobInstance \u2014 useful for jobs that must re-run from scratch every time; but defeats the restart mechanism for jobs that should resume",
+              "A FAILED JobExecution can be restarted; a COMPLETED one cannot by default \u2014 Spring Batch prevents re-running a successfully completed JobInstance with the same parameters; use allowStartIfComplete(true) per step for idempotent steps",
+              "@StepScope and @JobScope enable late binding of parameters \u2014 @Value(\"#{jobParameters['file']}\") in a @StepScope bean is evaluated when the step starts, not when the ApplicationContext loads",
+              "Step restartability depends on ItemReader stateful checkpointing \u2014 FlatFileItemReader saves its position in ExecutionContext; on restart, it seeks to the last committed position and resumes from there"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Adding a timestamp or run-id parameter every time to force a new JobInstance \u2014 valid, but candidates should know it also means losing automatic restart capability for that specific run"
+          }
+        ],
+        "cap": "The identity model JobInstance = Job name + JobParameters; represents a logical run (e.g., 'import for 2024-01') JobExecution = one physical attempt of a JobInstance; a failed JobInstance gets a new J",
+        "familiarity_anchors": [
+          "JobInstance",
+          "JobExecution",
+          "FAILED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if you try to restart a COMPLETED job without changing its parameters?",
+          "How would you design a daily batch job so that each day's run is independent but also restartable on failure?",
+          "How does Spring Batch store job execution metadata and which tables are involved?"
+        ]
+      }
+    },
+    {
+      "id": "sb-005",
+      "slug": "spring-batch-retry-skip-logic",
+      "question": "How do you configure retry and skip logic in Spring Batch to handle transient errors and bad records?",
+      "title": "Spring Batch Retry and Skip Logic for Fault-Tolerant Batch Jobs",
+      "direct_answer": "Spring Batch provides built-in retry and skip policies on chunk steps: retry re-attempts processing or writing for a configured exception type up to a limit before failing, while skip silently discards items that cause specified exceptions up to a tolerance count, logging them via a SkipListener. Together they let you build fault-tolerant pipelines that handle transient infrastructure errors and dirty data without stopping an entire batch run.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Understanding of where retry and skip apply (read, process, write phases) and the interaction with transactions",
+        "common_mistake": "Applying skip to write-phase exceptions without considering that a failed write rolls back the entire chunk \u2014 Spring Batch uses a binary search strategy to identify the bad item, which surprises many candidates",
+        "to_stand_out": "Explain the chunk retry rollback cycle and how Spring Batch uses single-item recovery after a write failure to isolate the offending record"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Fidelity",
+        "Morgan Stanley",
+        "Cognizant",
+        "Infosys"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Skip Logic Handles Bad Records by Discarding Them \u2014 Retry Logic Handles Transient Failures by Repeating Them",
+            "content": "Batch jobs processing millions of records will encounter failures. The question is: **should the job stop, retry, or skip the bad record?** Spring Batch provides configurable retry and skip policies that handle both transient failures (database timeout, network blip) and permanent failures (malformed data, validation errors) without stopping the entire job.\n\n**Skip logic** tells Spring Batch to ignore certain exceptions and continue processing. `.faultTolerant().skip(ValidationException.class).skipLimit(100)` allows up to 100 validation errors before the job fails. Skipped items are tracked in the JobRepository \u2014 you know exactly how many and which items were skipped.\n\n**Retry logic** tells Spring Batch to re-attempt a failed operation. `.retry(DeadlockLoserDataAccessException.class).retryLimit(3)` retries database deadlocks up to 3 times. Retries apply to the **processor and writer** \u2014 not the reader. On retry, the chunk is re-processed from scratch (all items re-read from the reader's saved position and re-processed). This is why processor and writer must be idempotent."
+          },
+          {
+            "type": "step",
+            "title": "Combining Retry, Skip, and the Chunk Rollback-Retry Mechanism",
+            "content": "When a writer fails (e.g., constraint violation in a batch insert), Spring Batch **rolls back the entire chunk transaction** and enters a retry-then-skip mode. It re-reads the chunk items one by one, processing and writing each individually to identify the specific failing item. The good items succeed; the bad item is skipped (if configured) or the step fails.\n\nThis **single-item fallback** is critical for isolating failures in batch writes. A batch INSERT of 100 items fails because of one bad record. Without fallback, all 100 items are lost. With fallback, 99 items are committed and 1 is skipped.\n\n**Skip listeners** (`SkipListener`) capture skipped items for logging, alerting, or writing to an error file. Implement `onSkipInRead()`, `onSkipInProcess()`, and `onSkipInWrite()` to handle skips at each stage.\n\n**Retry + Skip together** means: try the chunk, retry on transient errors (deadlock), and if the error is permanent (validation), skip the individual item. The ordering matters \u2014 retry is attempted first; if all retries are exhausted and the exception is skippable, the item is skipped. If it's not skippable, the step fails."
+          },
+          {
+            "type": "step",
+            "title": "Configuring noRollback and Non-Transactional Processors \u2014 When You Don't Want Rollback to Undo Side Effects",
+            "content": "Not every exception should trigger a chunk rollback. `noRollback(ValidationException.class)` tells Spring Batch that a `ValidationException` is expected and doesn't indicate data corruption \u2014 the chunk can continue without rolling back. This is appropriate for exceptions that represent bad input data rather than system failures.\n\nFor **non-transactional operations inside a chunk** (sending notifications, calling external APIs), the standard chunk model is problematic: if the write fails after the external call succeeds, the chunk rolls back but the external API call is already done. Use `processor(itemProcessor()).processorTransactional(false)` to mark the processor as non-transactional \u2014 its side effects won't be undone on rollback, but the processor must be designed to be safe for re-execution.\n\nAlternatively, restructure the job: a **first step** handles the pure data transformation and database writes (fully transactional), and a **second step** reads the successfully-processed records and sends notifications (side effects). The second step can use a simple Tasklet that reads from the output of step 1, decoupling the transactional core from the non-transactional periphery.\n\nFor the **skipListener**, implement `SkipListener<T, S>` to record which items were skipped and why. `onSkipInRead()`, `onSkipInProcess()`, and `onSkipInWrite()` give you the item and the exception, enabling an audit trail of skipped records without stopping the job."
+          },
+          {
+            "type": "step",
+            "title": "Retry with Backoff \u2014 Handling Database Deadlocks and Transient Network Failures Without Overwhelming the System",
+            "content": "Retry without backoff can make transient failures worse. If 100 concurrent chunk writers all retry immediately after a deadlock, they retry into the same contention \u2014 the retry storm can deadlock the database repeatedly. **Exponential backoff** spaces retries out: first retry after 1 second, second after 2 seconds, third after 4 seconds.\n\nConfigure backoff on the step: `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3).backOffPolicy(exponentialBackoff)` where `exponentialBackoff` is a `ExponentialBackOffPolicy` with initial interval, multiplier, and max interval.\n\nFor **retrying at the job level** (not just the step), Spring Batch doesn't have built-in job-level retry. The pattern is to schedule the job with retry logic in the scheduler: if the launch returns `FAILED` exit code, re-launch after a delay. This handles catastrophic failures (database unavailable, disk full) that no step-level retry can fix.\n\nThe `RetryListener` interface provides hooks for `onRetry()` and `onError()` \u2014 log which exception triggered retry, how many attempts have been made, and how long until the next attempt. This observability is essential for operations: without it, you can't distinguish a healthy job retrying a transient error from a job stuck in an infinite retry loop on a permanent error."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Skip and retry are configured per exception type** \u2014 `faultTolerant().skip(ValidationException.class).skipLimit(100)` skips up to 100 validation failures; other exception types still fail the step.\n- **Retry on write triggers single-item recovery for that chunk** \u2014 when a write fails for a chunk of 10, Spring Batch switches to single-item mode: re-reads and re-writes each item individually to identify the failing one; the good items are re-committed.\n- **`SkipListener` is notified for every skipped item** \u2014 implement `onSkipInRead`, `onSkipInProcess`, `onSkipInWrite` to log skipped items, write them to a dead-letter file, or alert.\n- **`RetryListener` is notified on retry events** \u2014 `onError` fires on each retry attempt; `onClose` fires when retries are exhausted; useful for metrics and alerting.\n- **Skip in write is the most complex case** \u2014 the item has been read and processed; the writer rejects it; Spring Batch re-processes the chunk without the bad item; the processor may have side effects that already occurred."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch's fault tolerance features \u2014 skip and retry \u2014 let batch jobs process millions of records while handling individual failures gracefully instead of aborting the entire job.\n\n**Skip**\n- Configure per exception type: `faultTolerant().skip(ParseException.class).skipLimit(1000)`\n- A skipped item is counted against `skipLimit`; exceeding the limit fails the step\n- `SkipListener` receives every skipped item \u2014 use it to write rejected items to a dead-letter file or database table for human review\n\n**Retry**\n- `faultTolerant().retry(TransientDataAccessException.class).retryLimit(3)` \u2014 retries up to 3 times on transient database errors before failing the chunk\n- Use for transient failures (network blip, database deadlock) that are likely to succeed on retry\n\n**The write-failure recovery cycle**\n- Chunk of 100 items writes; one item causes a `ConstraintViolationException`; the entire chunk rolls back\n- Spring Batch switches to single-item mode: re-reads item 1, re-processes, writes \u2014 success; repeats for each item\n- The failing item is skipped (if skip is configured) or causes the step to fail\n- This is why skip is expensive: each write failure can cause N re-reads and re-processes for the chunk\n\n**Don't skip on write when the processor has side effects**\n- If `ItemProcessor` sends an email or calls an API, skipping the write after the processor ran means the side effect already happened\n- Design processors to be idempotent or move side effects to the writer"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Batch handle a skip exception that occurs during a write when an entire chunk needs to be rolled back?",
+        "Can you combine retry and skip on the same step, and if so, what is the order of precedence?",
+        "How would you test retry behavior in a Spring Batch step without actually triggering real transient failures?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Retry and Skip Logic: Fault-Tolerant Batch Processing in Java",
+        "metaDescription": "Configure Spring Batch retry policies with backoff and skip logic with SkipListener to build fault-tolerant batch jobs that handle transient errors and bad records gracefully."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Batch's fault tolerance features \u2014 skip and retry \u2014 let batch jobs process millions of records while handling individual failures gracefully instead of aborting the entire job.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Batch jobs processing millions of records will encounter failures. The question is: should the job stop, retry, or skip the bad record? Spring Batch provides configurable retry and skip policies that handle both transient failures (database timeout, network blip) and permanent failures (malformed data, validation errors) without stopping the entire job. Skip logic tells Spring Batch to ignore certain exceptions and continue processing. .faultTolerant().skip(ValidationException.class).skipLimit(100) allows up to 100 validation errors before the job fails. Skipped items are tracked in the JobRepository \u2014 you know exactly how many and which items."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "When a writer fails (e.g., constraint violation in a batch insert), Spring Batch rolls back the entire chunk transaction and enters a retry-then-skip mode.",
+              "It re-reads the chunk items one by one, processing and writing each individually to identify the specific failing item.",
+              "The good items succeed; the bad item is skipped (if configured) or the step fails.",
+              "This single-item fallback is critical for isolating failures in batch writes.",
+              "A batch INSERT of 100 items fails because of one bad record.",
+              "Without fallback, all 100 items are lost."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Skip and retry are configured per exception type \u2014 faultTolerant()",
+              "skip(ValidationException",
+              "skipLimit(100) skips up to 100 validation failures; other exception types still fail the step",
+              "Retry on write triggers single-item recovery for that chunk \u2014 when a write fails for a chunk of 10, Spring Batch switches to single-item mode: re-reads and re-writes each item individually to identify the failing one; the good items are re-committed",
+              "SkipListener is notified for every skipped item \u2014 implement onSkipInRead, onSkipInProcess, onSkipInWrite to log skipped items, write them to a dead-letter file, or alert"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Applying skip to write-phase exceptions without considering that a failed write rolls back the entire chunk \u2014 Spring Batch uses a binary search strategy to identify the bad item, which surprises many candidates"
+          }
+        ],
+        "cap": "Skip Configure per exception type: faultTolerant().skip(ParseException.class).skipLimit(1000) A skipped item is counted against skipLimit; exceeding the limit fails the step SkipListener receives ever",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "SkipListener"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Batch handle a skip exception that occurs during a write when an entire chunk needs to be rolled back?",
+          "Can you combine retry and skip on the same step, and if so, what is the order of precedence?",
+          "How would you test retry behavior in a Spring Batch step without actually triggering real transient failures?"
+        ]
+      }
+    },
+    {
+      "id": "sb-010",
+      "slug": "spring-batch-vs-spring-integration",
+      "question": "What are the key differences between Spring Batch and Spring Integration, and how do they complement each other?",
+      "title": "Spring Batch vs Spring Integration: When to Use Each",
+      "direct_answer": "Spring Batch is designed for scheduled, finite, high-volume data processing jobs with start/end semantics, restart capability, and transactional chunk processing. Spring Integration is designed for event-driven, continuous, message-based integration workflows connecting heterogeneous systems. They are complementary \u2014 Spring Integration can trigger and orchestrate Spring Batch jobs, and Spring Batch can use Spring Integration channels as item sources or sinks.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Architectural understanding of when batch processing is appropriate versus event-driven integration, and awareness that both frameworks coexist in the Spring ecosystem",
+        "common_mistake": "Thinking Spring Integration can replace Spring Batch for bulk data processing \u2014 it lacks chunk transactions, job restart, skip/retry policies, and the execution metadata model",
+        "to_stand_out": "Describe the canonical integration pattern: Spring Integration polls a directory or message queue, and upon detecting new files, launches a Spring Batch job via a JobLaunchingGateway"
+      },
+      "company_tags": [
+        "Thoughtworks",
+        "Pivotal alumni",
+        "Red Hat",
+        "VMware",
+        "SAP"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch Processes Large Datasets in Scheduled Jobs \u2014 Spring Integration Routes Messages in Real-Time Flows",
+            "content": "Developers confuse these because both handle data movement. The distinction is **timing and pattern.** Spring Batch is for **scheduled, finite workloads** \u2014 process all orders from yesterday, generate a monthly report, migrate data between systems. It starts, processes a known dataset, and completes. Spring Integration is for **continuous, event-driven flows** \u2014 route incoming messages, transform data as it arrives, integrate with external systems in real-time.\n\nSpring Batch is **chunk-oriented with transactional checkpointing.** It reads, processes, and writes data in batches with restart capability. Spring Integration is **message-oriented with routing patterns** \u2014 channels, filters, transformers, routers, and adapters compose enterprise integration patterns (EIP).\n\nThey complement each other. A common pattern: **Spring Integration triggers a Spring Batch job** when a file arrives on an FTP server. Integration detects the file (event), launches the Batch job (processing), and sends a notification when complete (routing). Integration handles the event-driven plumbing; Batch handles the heavy data processing."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Batch vs Integration \u2014 When, How, and What They Process",
+            "content": "The right tool depends on the workload pattern.\n\n| Aspect | Spring Batch | Spring Integration |\n|---|---|---|\n| **Pattern** | Scheduled, finite dataset | Continuous, event-driven |\n| **Processing** | Chunk-oriented (read-process-write) | Message-oriented (route-transform-filter) |\n| **Restart** | Yes \u2014 resume from last checkpoint | No \u2014 messages are processed once or retried |\n| **Scaling** | Partitioning, multi-threaded steps | Channel concurrency, thread pools |\n| **State** | JobRepository tracks execution | Stateless (or message store for aggregation) |\n| **Trigger** | Scheduler, API, file arrival | Continuous \u2014 listens for events |\n| **Example** | Process 10M bank transactions | Route incoming payments to processors |\n\n**Together they cover the full spectrum:** Integration for real-time event routing and triggering, Batch for heavy scheduled processing. Using Batch for real-time processing is wrong (it's designed for finite datasets). Using Integration for processing 10 million database records is wrong (no checkpointing or restart)."
+          },
+          {
+            "type": "when_to_use",
+            "title": "When to Use Spring Batch, When to Use Spring Integration, and When to Use Both Together",
+            "content": "**Use Spring Batch when:** you have a finite, known dataset to process \u2014 yesterday's orders, last month's invoices, records imported from a file or database table. You need restart capability (process 10 million records, fail at 7 million, restart at 7 million). You need chunk-level transaction control, skip/retry policies for bad records, and execution metadata for auditing. Scheduled, 'fire and complete' workloads are the core use case.\n\n**Use Spring Integration when:** you have continuous streams of incoming messages \u2014 webhook events, file drops, database polling, or inter-system message routing. You need transformation pipelines (filter, enrich, split, aggregate) that operate on individual messages as they arrive. Spring Integration excels at connecting disparate systems with adapters \u2014 SFTP, JMS, Kafka, HTTP endpoints \u2014 without custom infrastructure code.\n\n**Use both together for hybrid workloads.** A Spring Integration flow monitors an SFTP server for new files, moves each file to a staging location, and triggers a Spring Batch job to process the file's contents. Spring Integration handles the event-driven trigger (file arrival); Spring Batch handles the reliable bulk processing (chunk commits, restart, skip). This combination is common in ETL pipelines and financial processing systems.\n\nThe test: if you can describe the workload as 'process all records in this dataset', use Batch. If you describe it as 'whenever a message arrives, do X', use Integration. If both descriptions apply to different parts of the same system, use both."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring Batch: bulk data processing; Spring Integration: event-driven message routing** \u2014 Spring Batch processes large datasets in structured jobs with checkpointing; Spring Integration routes messages between systems in real time.\n- **Spring Batch provides restartability, skip, retry, and partitioning** \u2014 built for multi-hour batch jobs that may fail and must resume; Spring Integration has no concept of job state or checkpointing.\n- **Spring Integration triggers Spring Batch jobs** \u2014 canonical pattern: Spring Integration polls an S3 bucket for new files; on detection, it launches a Spring Batch job to process the file; the two frameworks are complementary, not competing.\n- **Spring Integration is channel-based; Spring Batch is step-based** \u2014 Integration wires message channels, transformers, and routers; Batch defines ordered steps with readers, processors, and writers.\n- **Spring Cloud Data Flow orchestrates both** \u2014 provides a UI and REST API to define, deploy, and monitor batch jobs and streaming pipelines built with Batch and Integration."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch and Spring Integration are often confused because both deal with data pipelines. They solve fundamentally different problems and are frequently used together.\n\n**Spring Batch \u2014 structured bulk processing**\n- Designed for: processing millions of records from a file or database on a schedule\n- Key features: `JobRepository` for state persistence, restart from failure, skip/retry policies, partitioned parallel processing, chunk-level transaction management\n- Use when: you have a defined start, a defined end, and need to track how many records were processed, skipped, and committed\n\n**Spring Integration \u2014 event-driven message routing**\n- Designed for: connecting systems and routing messages in real time\n- Key features: message channels, adapters (file system, JMS, AMQP, SFTP, email), transformers, routers, filters\n- No concept of job state, checkpointing, or restart \u2014 it is a continuous pipeline\n\n**The canonical integration pattern**\n- Spring Integration watches an S3 bucket or SFTP folder for new files (inbound file adapter)\n- When a file arrives, Integration launches a Spring Batch job with the file path as a `JobParameter`\n- Spring Batch reads, processes, and writes the file's records with full fault tolerance\n\n**Decision**\n- Bounded dataset, needs restart/skip/retry \u2192 Spring Batch\n- Continuous event stream, system integration, message routing \u2192 Spring Integration\n- Both, with Batch triggered by Integration events \u2192 standard enterprise pattern"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you design a system where new files arriving on SFTP automatically trigger a Spring Batch job?",
+        "Could you use Spring Integration's error handling channels as a replacement for Spring Batch's skip/retry logic?",
+        "When would you choose Apache Camel over Spring Integration for system integration alongside Spring Batch?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch vs Spring Integration: Key Differences and When to Use Each",
+        "metaDescription": "Compare Spring Batch and Spring Integration \u2014 bounded vs unbounded processing, chunk transactions vs message routing, and how they complement each other in enterprise architectures."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Batch and Spring Integration are often confused because both deal with data pipelines.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Developers confuse these because both handle data movement. The distinction is timing and pattern. Spring Batch is for scheduled, finite workloads \u2014 process all orders from yesterday, generate a monthly report, migrate data between systems. It starts, processes a known dataset, and completes. Spring Integration is for continuous, event-driven flows \u2014 route incoming messages, transform data as it arrives, integrate with external systems in real-time. Spring Batch is chunk-oriented with transactional checkpointing. It reads, processes, and writes data in batches with restart capability. Spring Integration is message-oriented with routing patterns."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Developers confuse these because both handle data movement.",
+              "The distinction is timing and pattern.",
+              "Spring Batch is for scheduled, finite workloads \u2014 process all orders from yesterday, generate a monthly report, migrate data between systems.",
+              "It starts, processes a known dataset, and completes.",
+              "Spring Integration is for continuous, event-driven flows \u2014 route incoming messages, transform data as it arrives, integrate with external systems in real-time.",
+              "Spring Batch is chunk-oriented with transactional checkpointing."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Spring Batch: bulk data processing; Spring Integration: event-driven message routing \u2014 Spring Batch processes large datasets in structured jobs with checkpointing; Spring Integration routes messages between systems in real time",
+              "Spring Batch provides restartability, skip, retry, and partitioning \u2014 built for multi-hour batch jobs that may fail and must resume; Spring Integration has no concept of job state or checkpointing",
+              "Spring Integration triggers Spring Batch jobs \u2014 canonical pattern: Spring Integration polls an S3 bucket for new files; on detection, it launches a Spring Batch job to process the file; the two frameworks are complementary, not competing",
+              "Spring Integration is channel-based; Spring Batch is step-based \u2014 Integration wires message channels, transformers, and routers; Batch defines ordered steps with readers, processors, and writers",
+              "Spring Cloud Data Flow orchestrates both \u2014 provides a UI and REST API to define, deploy, and monitor batch jobs and streaming pipelines built with Batch and Integration"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Thinking Spring Integration can replace Spring Batch for bulk data processing \u2014 it lacks chunk transactions, job restart, skip/retry policies, and the execution metadata model"
+          }
+        ],
+        "cap": "Spring Batch \u2014 structured bulk processing Designed for: processing millions of records from a file or database on a schedule Key features: JobRepository for state persistence, restart from failure, sk",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "Integration"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you design a system where new files arriving on SFTP automatically trigger a Spring Batch job?",
+          "Could you use Spring Integration's error handling channels as a replacement for Spring Batch's skip/retry logic?",
+          "When would you choose Apache Camel over Spring Integration for system integration alongside Spring Batch?"
+        ]
+      }
+    }
+  ]
+}

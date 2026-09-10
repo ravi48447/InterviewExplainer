@@ -1,0 +1,288 @@
+{
+  "topic": "Observability Scenarios",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "obs-sc-001",
+      "slug": "p99-latency-spike-debug-walkthrough",
+      "question": "A service's p99 latency jumped from 200ms to 2s after a deploy. Walk me through how you debug it.",
+      "title": "Debugging a P99 Latency Spike with Observability Tools",
+      "direct_answer": "Systematic flow: **(1)** Confirm the alert is real (dashboard shows sustained spike, not a single outlier). **(2)** Check the deploy timeline — correlate the spike with the deploy event. **(3)** Use APM (Datadog, New Relic, Dynatrace) to find the slow endpoint; drill into a slow trace. **(4)** In the trace, identify the slow span — DB query? downstream API? GC pause? **(5)** Check metrics for that component (DB: slow query log, locks; downstream: error rate, latency; JVM: GC time). **(6)** Compare with pre-deploy baseline. **(7)** Decide: rollback or forward-fix. **(8)** Once stable, root-cause with logs + profiler.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Practical incident-response thinking with observability — knowing which tool answers which question",
+        "common_mistake": "Jumping to code without data; reading logs before narrowing via traces; not checking deploy correlation first",
+        "to_stand_out": "Discuss the difference between p99 moving (overall slowness) vs p99 of one endpoint (specific regression), GC tuning, the four golden signals, and rollback-vs-forward-fix decision"
+      },
+      "company_tags": [
+        "datadog",
+        "new-relic",
+        "stripe",
+        "netflix"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Alert Is Real. Now What?",
+            "content": "PagerDuty wakes you at 2 AM: 'payment-service p99 latency > 1s for 10 minutes.' You log in. What you do in the next 10 minutes determines whether this is a 15-minute incident or a 2-hour incident.\n\nThe systematic flow, in order:\n\n1. **Confirm the alert** — is it a real sustained spike or a flaky outlier?\n2. **Check the deploy timeline** — did we ship something that could cause this?\n3. **Use APM to find the slow endpoint** — is it one endpoint or all of them?\n4. **Drill into a slow trace** — which span is taking the time?\n5. **Check that component's metrics** — DB slow queries? Downstream 500s? GC pressure?\n6. **Compare with baseline** — what's different from yesterday?\n7. **Decide: rollback or forward-fix?** — if correlated with deploy, rollback first\n8. **Root-cause after stability** — logs, profiler, heap dump if needed\n\nThe mistake most engineers make is jumping to step 8 (reading logs, analyzing code) before steps 1–7. Logs are noisy; traces and metrics narrow the search space. Use the right tool at the right step."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The Debugging Funnel — From Alert to Root Cause",
+            "content": "```mermaid\nflowchart TB\n    Alert[PagerDuty: p99 > 1s] --> Confirm[Dashboard: is it real?]\n    Confirm -->|yes| Deploy{Deploy in<br/>last 30 min?}\n    Deploy -->|yes| Rollback[Consider rollback<br/>while investigating]\n    Deploy -->|no| APM[APM: which endpoint?]\n    Rollback --> APM\n    APM --> OneE{One endpoint<br/>or all?}\n    OneE -->|one| Trace[Drill into slow trace]\n    OneE -->|all| Infra[Infra issue:<br/>DB/network/noisy neighbor]\n    Trace --> Span{Which span<br/>is slow?}\n    Span -->|DB| DBChk[Slow query log<br/>locks, connection pool]\n    Span -->|Downstream| DsChk[Downstream metrics<br/>errors, latency]\n    Span -->|GC/CPU| JVMChk[JVM metrics<br/>heap, GC time, CPU]\n    Span -->|App code| Profile[CPU profile<br/>thread dump]\n    DBChk --> Fix[Mitigate]\n    DsChk --> Fix\n    JVMChk --> Fix\n    Profile --> Fix\n    Fix --> Postmortem[Postmortem &<br/>root cause]\n    style Alert fill:#ff8a80\n    style Rollback fill:#ffe0b2\n    style Fix fill:#c8e6c9\n    style Postmortem fill:#c5e1a5\n```"
+          },
+          {
+            "type": "step",
+            "title": "Step 1–3: Confirm, Correlate, Narrow",
+            "content": "**Step 1: Confirm the alert.** Open the main service dashboard. Is the p99 line actually elevated for the last 10 minutes, or did one request time out and trigger a noisy alert? Confirmation: 'yes, p99 is sustained at 1.5–2s; baseline is 200ms.'\n\n**Step 2: Check the deploy timeline.** Open the deploy dashboard or CI pipeline. Did we deploy payment-service in the last 30 minutes?\n\n- Yes: the hypothesis is a regression; consider rolling back while you investigate. 'Rollback first, investigate after' is the SRE best practice when there's a clear deploy correlation.\n- No: it's an infra or downstream issue; don't roll back blindly.\n\nAt my company we have a runbook: 'if p99 doubles within 10 minutes of a deploy, rollback and investigate. The developer who broke it can ship a fixed version once the investigation is done.'\n\n**Step 3: Use APM to find the slow endpoint.** Open Datadog APM (or New Relic, Dynatrace, Honeycomb, whatever you use). Look at the service overview.\n\n- Is p99 elevated across all endpoints, or only on one?\n  - All endpoints: think infra — DB saturated? Noisy neighbor? Network? JVM GC? This widens the investigation.\n  - One endpoint (e.g., `POST /payments/charge`): localized regression; much faster to debug.\n\nFilter the APM by endpoint. If one is the culprit, drill into its trace list. Sort by latency descending. Pick a slow trace (say, 1.8s request)."
+          },
+          {
+            "type": "step",
+            "title": "Step 4–5: The Slow Trace and Its Metrics",
+            "content": "**Step 4: Drill into a slow trace.** A distributed trace shows the request as a waterfall of spans: HTTP receive → auth check → DB query → downstream API call → response serialization. Each span has a duration.\n\nLook for the fat span. Common patterns:\n\n- **DB span eating 1.5s**: the query is slow. Maybe a new query was added that does a full table scan. Maybe the query was fine but DB is now under lock contention.\n- **Downstream API call eating 1.5s**: an upstream service is slow. The problem is not in our code.\n- **No single fat span; many small ones add up**: GC pause or CPU saturation is delaying everything. Check JVM metrics.\n- **Gap between spans**: network latency, queue wait, or thread pool starvation.\n\n**Step 5: Check component-level metrics for the slow span.**\n\n*If DB is slow:*\n- RDS CloudWatch: `DatabaseConnections`, `DBLoad`, `CPUUtilization`, `ReadLatency`, `WriteLatency`\n- Postgres: `pg_stat_statements` for slow queries; `pg_stat_activity` for current locks\n- Check: did someone add a new query? Is the query plan using an index? Are connections exhausted?\n\n*If downstream is slow:*\n- Open the downstream service's dashboard\n- Is it slow for everyone, or just us? (Multi-tenant neighbor saturating?)\n- Check their error rate, their dependencies\n- Communicate: ping their oncall\n\n*If GC is slow:*\n- JVM metrics: `jvm.gc.pause.duration`, `jvm.gc.overhead`, `jvm.memory.used.heap.max`\n- Heap near max? → memory leak or just undersized\n- G1 or Shenandoah pauses > 100ms on frequent intervals? → tuning needed or heap too big\n- Correlate with deploy: did we add a caching layer that's holding too much?\n\n*If thread pool starved:*\n- `http.server.requests.active.seconds` climbing\n- Tomcat/Netty threads all busy waiting on downstream\n- Thread dump reveals the culprit (all threads blocked on same resource)"
+          },
+          {
+            "type": "step",
+            "title": "Step 6–8: Decide, Mitigate, Root-Cause",
+            "content": "**Step 6: Compare with baseline.** The key question is 'what changed?' Observability tools let you overlay 'now' with '24 hours ago' or 'pre-deploy':\n\n- DB query count per endpoint: did the new code call the DB more times per request?\n- Response payload size: did responses grow 10x (serialization cost)?\n- Thread count: is the app creating threads it didn't before?\n- Heap usage shape: is it growing instead of sawtooth? (memory leak)\n\n**Step 7: Rollback or forward-fix?**\n\n*Rollback if:*\n- Clear correlation with deploy (within 30 minutes)\n- Impact is severe (users affected, SLA breach)\n- Forward-fix is > 30 minutes away\n- Rollback path is known-good\n\n*Forward-fix if:*\n- Fix is simple and fast (config change, feature flag off, scale up)\n- Rollback would regress other recent changes\n- Issue is not from the deploy (infra, downstream)\n- DB migration was part of deploy and rollback is unsafe\n\nAt my company: default to rollback when unsure. A 5-minute rollback followed by proper root-cause investigation beats a 2-hour forward-fix with users hurting.\n\n**Step 8: Root-cause after stability.**\n\nOnce the fire is out:\n\n1. **Capture artifacts**: thread dumps, heap dumps, logs, traces from the incident window\n2. **Reproduce locally or in staging**: can you trigger the same pattern?\n3. **Profile**: async-profiler or JFR to find CPU hotspots\n4. **Review the diff**: code changes between pre- and post-deploy commit\n5. **Write the postmortem**: timeline, contributing factors, action items\n\nCommon root causes for post-deploy p99 spikes:\n- N+1 query introduced in a JPA entity\n- New code path hitting a slow external API without timeout\n- Cache miss cascade (cache TTL expired, all misses hit DB)\n- GC thrashing (heap pressure from new feature)\n- Connection pool too small for new traffic pattern\n- Thread pool starvation from blocking I/O in reactive code\n- Serialization of a new large field (JSON of a big object)"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Advanced Techniques",
+            "content": "**P99 of the whole service vs P99 of one endpoint.** Aggregate p99 can shift dramatically if one endpoint's traffic share changes. Always slice by endpoint. A sudden p99 jump may be traffic shift (previously rare slow endpoint now called more), not a regression.\n\n**Percentile math is not additive.** p99 of A + p99 of B ≠ p99 of A+B. Don't try to reason about totals from endpoint percentiles; use the service-level percentile histogram.\n\n**Head-based vs tail-based sampling.** Head-based (sample 1% of traces at request entry) misses slow tails statistically. Tail-based sampling (Honeycomb, Lightstep, OTel Collector) keeps slow traces preferentially — better for p99 debugging. Datadog and New Relic do intelligent sampling similar to this.\n\n**The four golden signals** (Google SRE): Latency, Traffic, Errors, Saturation. Check all four during an incident. Latency spike with error rate up → downstream failing; latency up + saturation up → you're out of capacity; latency up + nothing else — unusual, likely GC or a specific slow path.\n\n**GC logs are underused.** Enable GC logging (`-Xlog:gc*:gc.log:time,level,tags`); tools like GCeasy or JITWatch make them readable. A p99 spike with 500ms GC pauses every minute is a clear story.\n\n**Thread dumps during the incident.** If the problem is active right now, capture a thread dump (`jstack <pid>` or via Spring Boot Actuator `/actuator/threaddump`). Tools like FastThread.io analyze them. Threads all blocked on the same lock or all waiting on one downstream API tells you the bottleneck instantly.\n\n**Feature flags as rollback mechanism.** If the regression is behind a feature flag, turning it off is safer and faster than a full rollback. Invest in feature flags for risky changes.\n\n**Distributed tracing coverage gaps.** Traces only show what's instrumented. Manual instrumentation gaps or missing propagation (traceparent header dropped at an ingress) cause blind spots. Audit trace completeness quarterly.\n\n**Runbook culture.** Every alert should link to a runbook: what it means, first actions, how to escalate. A p99-spike runbook prevents confusion at 3 AM.\n\n**SLO-based alerting.** Alert on SLO burn rate, not on raw thresholds. A p99 > 1s alert fires often from natural variance; a '2-hour SLO burn rate > 10x' alert fires when users are actually being hurt. Reduces noise dramatically.\n\n**Synthetic monitoring catches what users report first.** Synthetic checks (Datadog Synthetics, New Relic Synthetics) run every minute from multiple locations; they catch the problem before the first user ticket. Invest in them for critical paths."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Follow the funnel**: alert → confirm → deploy correlation → APM → slow trace → fat span → component metrics → decide → root-cause\n- **Deploy correlation first** — if timing aligns with a deploy, rollback while investigating; don't forward-fix blindly\n- **One endpoint vs all** — narrow to one endpoint if possible; much faster debug than infrastructure-level issues\n- **APM trace shows which span is slow** — DB, downstream, GC, or app code; each has a different investigation path\n- **Use baseline comparison** — what's different from 24 hours ago or pre-deploy; observability tools overlay these\n- **Rollback vs forward-fix decision** — default to rollback when unsure; fastest path to stability\n- **Four golden signals** — Latency, Traffic, Errors, Saturation; check all during an incident\n- **Tail-based sampling catches slow traces** — head-based misses p99 debugging value\n- **Postmortem after stability** — thread dumps, heap dumps, diff review, timeline, action items"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The alert wakes me at 2 AM — p99 latency on payment-service jumped from 200ms to 2 seconds for 10 minutes. What I do in the next 10 minutes determines whether this is a 15-minute incident or a 2-hour incident.\n\n**Step 1: Confirm the alert is real**\n- Open the main service dashboard; is p99 actually sustained, or was it one flaky request?\n- Confirm: 'yes, sustained at 1.5 to 2 seconds; baseline 200ms'\n\n**Step 2: Check the deploy timeline**\n- Open the deploy dashboard; did we ship payment-service in the last 30 minutes?\n- If yes, consider rollback first, investigate after; the SRE best practice when there's clear deploy correlation\n- If no, it's infra or downstream; don't rollback blindly\n\n**Step 3: APM tells me which endpoint is slow**\n- Open Datadog or New Relic; look at service overview\n- Is p99 elevated across all endpoints, or only one?\n- All endpoints: likely infra — DB saturated, GC pressure, noisy neighbor\n- One endpoint: localized regression, much faster to debug\n\n**Step 4: Drill into a slow trace**\n- Sort traces by duration; pick one at 1.8 seconds\n- Look at the waterfall; find the fat span\n- Common patterns: DB span eating the time; downstream API call eating the time; many small spans summing up (GC or CPU); gap between spans (thread pool starvation)\n\n**Step 5: Check component metrics for the slow span**\n- If DB: CloudWatch RDS metrics, pg_stat_statements, lock contention\n- If downstream: check their dashboards, are they slow for everyone or just us, ping their oncall\n- If GC: JVM heap metrics, gc pause duration, is heap near max\n- If thread pool starved: thread dump reveals blocking calls\n\n**Step 6: Compare with baseline**\n- Overlay 'now' vs '24 hours ago' in the dashboard\n- Did DB query count per request change? Did response payload size grow? Heap usage shape changed?\n- The key question: 'what changed?'\n\n**Step 7: Decide rollback or forward-fix**\n- Rollback if: clear deploy correlation, severe impact, forward-fix > 30 min away, rollback path known-good\n- Forward-fix if: simple config change, feature flag off, scale up, rollback would regress other changes\n- Default to rollback when unsure; a 5-minute rollback beats a 2-hour forward-fix with users hurting\n\n**Step 8: Root-cause after stability**\n- Capture artifacts: thread dumps, heap dumps, logs, traces from the incident window\n- Reproduce locally or staging\n- Profile with async-profiler or JFR to find hotspots\n- Review code diff between pre- and post-deploy\n- Write the postmortem: timeline, contributing factors, action items\n\n**Common root causes for post-deploy p99 spikes**\n- N+1 query introduced in a JPA entity\n- New code path hitting a slow external API without timeout\n- Cache TTL expired, all misses hit DB (cache miss cascade)\n- GC thrashing from heap pressure\n- Connection pool too small for new traffic pattern\n- Thread pool starvation from blocking I/O in reactive code\n- Serialization of a new large field in JSON response\n\n**What I'd emphasize in an interview**\n- I use the funnel: alert, confirm, deploy timeline, APM, trace, span, component metrics\n- I don't jump to reading logs until traces and metrics have narrowed the search\n- Deploy correlation is the first question; rollback early saves user pain\n- The four golden signals (latency, traffic, errors, saturation) are my checklist\n- Feature flags and SLO-based alerting reduce this class of incident over time"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between head-based and tail-based sampling in distributed tracing?",
+        "How do you decide between rollback and forward-fix during an incident?",
+        "What are the four golden signals and how do you instrument them in Spring Boot?",
+        "How do you capture thread dumps and heap dumps on a running production JVM?"
+      ],
+      "seo": {
+        "meta_title": "Debugging P99 Latency Spike: Observability Walkthrough",
+        "meta_description": "Systematic flow for debugging a sudden p99 latency spike: APM traces, deploy correlation, component metrics, rollback decision, and root-cause analysis.",
+        "keywords": [
+          "p99 latency debug",
+          "apm investigation",
+          "observability incident",
+          "distributed tracing",
+          "post-deploy latency spike"
+        ],
+        "metaDescription": "Systematic flow: (1) Confirm the alert is real (dashboard shows sustained spike, not a single outlier).",
+        "metaTitle": "Debugging a P99 Latency Spike with Observability Tools"
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P11",
+        "hook": "The alert wakes me at 2 AM — p99 latency on payment-service jumped from 200ms to 2 seconds for 10 minutes.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "PagerDuty wakes you at 2 AM: 'payment-service p99 latency > 1s for 10 minutes.' You log in. What you do in the next 10 minutes determines whether this is a 15-minute incident or a 2-hour incident. The systematic flow, in order: 1. Confirm the alert — is it a real."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Practical incident-response thinking with observability — knowing which tool answers which question"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Step 1: Confirm the alert.",
+              "Open the main service dashboard.",
+              "Is the p99 line actually elevated for the last 10 minutes, or did one request time out and trigger a noisy alert?",
+              "Confirmation: 'yes, p99 is sustained at 1.5–2s; baseline is 200ms.' Step 2: Check the deploy timeline.",
+              "Open the deploy dashboard or CI pipeline.",
+              "Did we deploy payment-service in the last 30 minutes?"
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Follow the funnel: alert → confirm → deploy correlation → APM → slow trace → fat span → component metrics → decide → root-cause Deploy correlation first — if timing aligns with a deploy, rollback while investigating",
+              "don't forward-fix blindly One endpoint vs all — narrow to one endpoint if possible",
+              "much faster debug than infrastructure-level issues APM trace shows which span is slow — DB, downstream, GC, or app code",
+              "each has a different investigation path Use baseline comparison — what's different from 24 hours ago or pre-deploy",
+              "observability tools overlay these Rollback vs forward-fix decision — default to rollback when unsure",
+              "fastest path to stability Four golden signals — Latency, Traffic, Errors, Saturation",
+              "check all during an incident Tail-based sampling catches slow traces — head-based misses p99 debugging value Postmortem after stability — thread dumps, heap dumps, diff review, timeline, action items"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "P99 of the whole service vs P99 of one endpoint. Aggregate p99 can shift dramatically if one endpoint's traffic share changes. Always slice by endpoint. A sudden p99 jump may be traffic shift (previously rare slow endpoint now called more), not a regression. Percentile math is not additive. p99 of A + p99 of B ≠ p99 of A+B. Don't try to reason about totals from endpoint percentiles; use the."
+          }
+        ],
+        "cap": "Step 1: Confirm the alert is real Open the main service dashboard; is p99 actually sustained, or was it one flaky request? Confirm: 'yes, sustained at 1.5 to 2 seconds; baseline 200ms' Step 2: Check.",
+        "familiarity_anchors": [
+          "Systematic",
+          "Confirm",
+          "Check"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between head-based and tail-based sampling in distributed tracing?",
+          "How do you decide between rollback and forward-fix during an incident?",
+          "What are the four golden signals and how do you instrument them in Spring Boot?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    },
+    {
+      "id": "obs-sc-002",
+      "slug": "finding-missing-traces-instrumentation-gap",
+      "question": "Users report an error but it doesn't show up in our APM. How do you find the missing traces?",
+      "title": "Debugging Missing Traces and Instrumentation Gaps",
+      "direct_answer": "Missing traces mean one of: (1) the request didn't reach instrumented code, (2) instrumentation didn't capture it (sampling, async context loss, uncaught exception path), (3) trace context wasn't propagated across a hop. Systematic debug: check access logs (request arrived?), verify APM agent is running (`/metrics`), check sampling rate (might be sampled out), look for async code that loses MDC/trace context, and verify every downstream call forwards `traceparent` headers. Fix with: explicit manual instrumentation for gaps, always-on sampling for error traces, and context propagation helpers for async.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Deep understanding of how distributed tracing actually works and fails",
+        "common_mistake": "Assuming auto-instrumentation covers everything; not considering sampling; missing async context loss",
+        "to_stand_out": "Discuss W3C Trace Context, head vs tail sampling, MDC propagation in CompletableFuture/reactive code, and exception-triggered forced sampling"
+      },
+      "company_tags": [
+        "honeycomb",
+        "datadog",
+        "opentelemetry",
+        "lightstep"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "'Missing' Traces Usually Mean One of Four Things",
+            "content": "Users report a specific bug with an exact error message and timestamp. You search your APM — nothing. The trace is missing. Before assuming the APM is broken, enumerate the four common reasons:\n\n1. **Request didn't reach instrumented code** — rejected at load balancer, WAF, ingress, or proxy. The code never ran.\n2. **Instrumentation didn't capture it** — agent not installed, agent crashed, agent not attached to this process, auto-instrumentation doesn't cover this framework.\n3. **Trace was sampled out** — head-based sampling at 1% means 99% of traces never reach the backend. Errors may or may not be force-sampled depending on config.\n4. **Context propagation broke** — the trace started but the downstream call didn't forward the `traceparent` header. The downstream work exists as an unrelated trace or no trace at all.\n\nCombined with async code (CompletableFuture, reactive, @Async) losing MDC and trace context across thread boundaries, and uncaught exceptions escaping the instrumented path, missing traces are a common source of debug frustration.\n\nThe debug flow is systematic: start from the outermost (did the request arrive?) and work inward (was it instrumented? sampled? propagated?)."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Where Traces Go Missing",
+            "content": "```mermaid\nflowchart TB\n    User[User] --> LB[Load balancer / WAF]\n    LB -->|rejected| Miss1[Trace never created]\n    LB -->|passed| Ing[Ingress / API Gateway]\n    Ing --> App[App with agent]\n    App -->|agent not running| Miss2[No trace captured]\n    App -->|sampled out 99%| Miss3[Trace dropped]\n    App -->|recorded| Span1[Span created]\n    Span1 -->|async code loses context| Miss4[Child spans orphaned]\n    Span1 -->|missing traceparent header| Miss5[Downstream trace disconnected]\n    Span1 --> Down[Downstream service]\n    Down --> Complete[Complete trace]\n    style Miss1 fill:#ff8a80\n    style Miss2 fill:#ff8a80\n    style Miss3 fill:#ff8a80\n    style Miss4 fill:#ff8a80\n    style Miss5 fill:#ff8a80\n    style Complete fill:#c8e6c9\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Debug Flow Step by Step",
+            "content": "**Step 1: Did the request even reach the app?**\n\nCheck access logs at each layer:\n\n```bash\n# ALB access logs\ngrep '2026-04-22T12:34' alb-access.log | head\n\n# nginx ingress logs\nkubectl logs -n ingress-nginx nginx-controller | grep '2026-04-22T12:34'\n\n# App access log (if enabled)\nkubectl logs payment-service-pod | grep 'POST /charge'\n```\n\nIf the app didn't see the request: WAF rule, rate limit, auth rejection at gateway. Check those layers.\n\nIf the app saw it but there's no trace: instrumentation problem.\n\n**Step 2: Is the APM agent attached and working?**\n\n```bash\n# Datadog APM: check /dd-health\ncurl localhost:8126\n\n# New Relic: check agent logs\ntail -f /var/log/newrelic/newrelic_agent.log\n\n# OpenTelemetry: check collector metrics\ncurl localhost:8888/metrics | grep otelcol_exporter\n```\n\nLook for errors: connection refused, quota exceeded, auth failed. A misconfigured agent silently drops traces.\n\n**Step 3: Is the framework auto-instrumented?**\n\nAuto-instrumentation covers common frameworks (Spring MVC, JAX-RS, JDBC, Apache HTTP Client). It may miss:\n- Custom RPC frameworks (gRPC with custom interceptors, proprietary protocols)\n- Reactive code paths (WebFlux is supported but edge cases exist)\n- Batch/scheduled jobs (no HTTP request = no auto-span)\n- Message consumers (Kafka, SQS — some frameworks supported, some not)\n- Native image (GraalVM) if reflection isn't configured\n\nTest: hit a known instrumented endpoint (`GET /actuator/health`) and verify it shows up in APM. If yes, auto-instrumentation works for the basics.\n\n**Step 4: Was it sampled out?**\n\nCheck sampling config:\n\n```yaml\n# Datadog Java agent\nDD_TRACE_SAMPLE_RATE=0.1  # 10% of traces\n\n# OpenTelemetry\nexport OTEL_TRACES_SAMPLER=parentbased_traceidratio\nexport OTEL_TRACES_SAMPLER_ARG=0.01  # 1%\n```\n\nAt 1% sampling, 99 of 100 traces are dropped before being sent. For debugging specific errors, set up:\n\n- **Error-triggered force sampling**: always sample when span has `error=true`\n- **Tail-based sampling** (Honeycomb, OTel Collector tail sampler): sample decision made after trace completes; keeps errors and slow traces preferentially\n- **Debug session**: temporarily raise sample rate (100%) for the affected endpoint\n\n```yaml\n# OTel Collector tail-based sampling\nprocessors:\n  tail_sampling:\n    policies:\n      - name: errors-policy\n        type: status_code\n        status_code: { status_codes: [ERROR] }\n      - name: slow-policy\n        type: latency\n        latency: { threshold_ms: 1000 }\n      - name: random-policy\n        type: probabilistic\n        probabilistic: { sampling_percentage: 10 }\n```\n\n**Step 5: Did context propagation break?**\n\nDistributed trace requires `traceparent` header forwarded on every HTTP/RPC call. Verify:\n\n```java\n// Spring Boot with OTel: auto-propagated by the OkHttp/RestTemplate/WebClient auto-instrumentation\n// Manual HTTP call: set the header yourself if not instrumented\nRequest.Builder builder = new Request.Builder().url(url);\nSpan currentSpan = Span.current();\nSpanContext ctx = currentSpan.getSpanContext();\nbuilder.header(\"traceparent\",\n    String.format(\"00-%s-%s-01\", ctx.getTraceId(), ctx.getSpanId()));\n```\n\nCommon propagation breaks:\n- Custom HTTP clients without instrumentation\n- Kafka/SQS: inject/extract headers manually (W3C Baggage spec)\n- Thread pools: context bound to ThreadLocal; switching threads loses it\n- `@Async` methods: use `Executors.newVirtualThreadPerTaskExecutor()` with proper context propagation, or TaskDecorator\n- CompletableFuture: `.thenApplyAsync(fn, executor)` loses context unless executor is wrapped\n\nFix for async Spring:\n\n```java\n@Bean\npublic TaskDecorator taskDecorator() {\n    return runnable -> {\n        Map<String, String> mdc = MDC.getCopyOfContextMap();\n        Context otelContext = Context.current();\n        return () -> {\n            try (Scope scope = otelContext.makeCurrent()) {\n                if (mdc != null) MDC.setContextMap(mdc);\n                runnable.run();\n            } finally {\n                MDC.clear();\n            }\n        };\n    };\n}\n```\n\n**Step 6: Add manual instrumentation for gaps.**\n\nWhen auto-instrumentation misses code paths:\n\n```java\nTracer tracer = GlobalOpenTelemetry.getTracer(\"payment-service\");\n\npublic void processPayment(Payment payment) {\n    Span span = tracer.spanBuilder(\"payment.process\")\n        .setAttribute(\"payment.id\", payment.getId())\n        .setAttribute(\"payment.amount\", payment.getAmount())\n        .startSpan();\n    try (Scope scope = span.makeCurrent()) {\n        doWork(payment);\n    } catch (Exception e) {\n        span.recordException(e);\n        span.setStatus(StatusCode.ERROR);\n        throw e;\n    } finally {\n        span.end();\n    }\n}\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Preventive Patterns",
+            "content": "**Head-based vs tail-based sampling.** Head-based decides at request start (fast, simple, misses error/slow traces statistically). Tail-based decides after trace completes (requires buffer, keeps important traces, more expensive). For debugging rare errors, tail-based is far better.\n\n**Force-sample on error.** Most APMs can be configured to always keep traces with errors, regardless of sampling rate. Datadog: `DD_TRACE_SAMPLING_RULES` with `sample_rate: 1.0, rule_filter: error`. OTel: SpanKind + SpanStatus-based sampler.\n\n**W3C Trace Context is the standard.** `traceparent` header format: `00-<trace-id>-<span-id>-<flags>`. Baggage header for user context. Supported by Datadog, Grafana Tempo, Jaeger, Zipkin, OTel. Stick to it for interoperability.\n\n**Async context propagation is the #1 gotcha.** ThreadLocal-based context (like Spring's RequestContextHolder or SLF4J MDC) doesn't cross thread boundaries automatically. Every thread pool, @Async, CompletableFuture, reactive pipeline needs explicit context propagation. Spring provides `TaskDecorator`; Reactor provides `Hooks.enableAutomaticContextPropagation()`.\n\n**Kafka and SQS need manual propagation.** Inject `traceparent` into message headers at producer; extract at consumer. OTel instrumentation for Kafka does this automatically; DIY code needs to implement it.\n\n**GraphQL has its own trace model.** A single HTTP request may fan out to dozens of resolvers. Use Apollo Tracing or graphql-java-servlet's OTel integration; don't rely on generic HTTP tracing.\n\n**Batch jobs need explicit tracing.** No HTTP means no auto-span. Start a span at job invocation, end at completion. Correlate with the record being processed.\n\n**Error coverage vs volume trade-off.** Keeping all errors plus 10% of successes gives useful data without 100% cost. Honeycomb's dynamic sampling makes this automatic.\n\n**Don't forget logs.** Even without a trace, you may have logs with a `traceId` in MDC. Logs that include `traceId` can be joined back to partial trace data. Structured logging + consistent traceId in MDC is a critical safety net.\n\n**Synthetic checks with forced sampling.** Synthetic monitors that hit critical paths every minute, with sampling rate 100% for their traces, give you always-on visibility into known critical endpoints.\n\n**Sample rate audit.** Every service should have a sample rate documented; at minimum 1% + errors + slow. Audit quarterly; update per criticality.\n\n**OpenTelemetry is the future.** Vendor-neutral SDK, instruments once, exports to any backend. Datadog and Dynatrace both consume OTel data. Investment in OTel instrumentation pays off long-term via backend portability."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Four reasons for missing traces**: request didn't arrive, agent not capturing, sampled out, context not propagated\n- **Debug flow**: access logs → agent health → auto-instrument coverage → sampling → context propagation\n- **Sampling at 1% misses most traces** — force-sample on error; use tail-based sampling for debugging value\n- **Async context loss is the #1 propagation gotcha** — ThreadLocal-based context doesn't cross thread boundaries; use TaskDecorator, Reactor context, or explicit wrapping\n- **W3C Trace Context (`traceparent` header)** is the standard; all major APMs support it\n- **Kafka, SQS, batch jobs need explicit instrumentation** — no HTTP means no auto-span\n- **Log + traceId as safety net** — structured logs with traceId can recover from sampling misses\n- **OpenTelemetry for backend portability** — instrument once, swap APM backends"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Users report a specific bug with timestamp and error message, but the trace isn't in our APM. Before assuming the APM is broken, there are four common reasons for missing traces.\n\n**The four reasons, in order of likelihood**\n- Request didn't reach instrumented code — rejected at WAF, rate limit, or ingress\n- APM agent didn't capture it — agent crashed, not installed, or auto-instrumentation doesn't cover this framework\n- Trace was sampled out — head-based sampling at 1% drops 99% of traces\n- Context propagation broke — downstream call didn't forward traceparent header, or async code lost context across threads\n\n**The debug flow, systematic and in order**\n- Start outermost: access logs at load balancer, ingress, app. Did the request arrive?\n- Agent health: is the APM agent running, connected, not rate-limited?\n- Auto-instrumentation coverage: is this framework actually covered? Test with a known endpoint\n- Sampling: is the sample rate so low that specific requests are usually dropped?\n- Context propagation: does the downstream call forward traceparent? Is async code preserving context?\n\n**The sampling fix**\n- Head-based sampling (decide at request start) drops traces before they can be flagged as interesting\n- Tail-based sampling decides after the trace completes — keeps errors and slow traces preferentially\n- Force-sample on error: always keep traces with error status, regardless of sample rate\n- Configure in the APM agent or OTel Collector tail sampling processor\n\n**The async context propagation problem**\n- ThreadLocal-based context (Spring RequestContextHolder, SLF4J MDC) doesn't cross thread boundaries\n- Every thread pool, @Async method, CompletableFuture needs explicit context propagation\n- Spring fix: implement a TaskDecorator that copies MDC and OTel context across threads\n- Reactor fix: Hooks.enableAutomaticContextPropagation() in recent versions\n\n**W3C Trace Context is the standard**\n- traceparent header format: 00-traceId-spanId-flags\n- Baggage header for user context\n- All major APMs (Datadog, New Relic, Grafana Tempo, Jaeger, Zipkin) support W3C\n- Use it for interoperability; avoid vendor-specific propagation\n\n**Common places where traces go missing**\n- Custom HTTP clients without instrumentation; wrap them or use instrumented clients\n- Kafka/SQS consumers; need manual header inject/extract at producer/consumer\n- Thread pools: context bound to ThreadLocal; switching threads loses it\n- Batch jobs: no HTTP means no auto-span; create spans explicitly\n- GraphQL resolvers: single HTTP request with dozens of resolver calls; needs special handling\n- Native image (GraalVM): reflection issues; verify OTel configures correctly\n\n**The safety net: structured logs with traceId**\n- Even if trace is sampled out, logs with traceId in MDC let you recover context\n- Search logs for the traceId; see partial request flow\n- Always include traceId in structured log lines\n\n**The preventive patterns**\n- Force-sample on error: configure in agent so errors always reach APM\n- Tail-based sampling for production debugging\n- TaskDecorator for async Spring\n- Wrap CompletableFuture.thenApplyAsync() executors with context-aware wrapper\n- Synthetic monitors with 100% sampling on critical paths\n- OpenTelemetry instrumentation as the backend-neutral bet\n\n**What I'd emphasize in the interview**\n- Missing traces is usually not an APM bug; it's an instrumentation gap\n- Systematic debug: access logs, agent health, coverage, sampling, propagation\n- Async context propagation catches everyone; TaskDecorator pattern is the fix\n- Force-sample-on-error is a setting everyone should have\n- Invest in OTel instrumentation for portability and completeness"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does W3C Trace Context propagate across services and what headers are involved?",
+        "What is a TaskDecorator in Spring and how does it solve async context propagation?",
+        "What's the difference between head-based and tail-based sampling and when to use each?",
+        "How do you instrument Kafka consumers/producers for distributed tracing?"
+      ],
+      "seo": {
+        "meta_title": "Debugging Missing Traces: Sampling, Context Propagation, Instrumentation Gaps",
+        "meta_description": "Systematic debug flow for missing distributed traces: agent health, sampling config, W3C Trace Context, async context propagation, and force-sample-on-error.",
+        "keywords": [
+          "missing traces",
+          "distributed tracing debug",
+          "trace context propagation",
+          "tail-based sampling",
+          "opentelemetry java"
+        ],
+        "metaDescription": "Missing traces mean one of: (1) the request didn't reach instrumented code, (2) instrumentation didn't capture it (sampling, async context loss, uncaught excep.",
+        "metaTitle": "Debugging Missing Traces and Instrumentation Gaps"
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P11",
+        "hook": "Users report a specific bug with timestamp and error message, but the trace isn't in our APM.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Users report a specific bug with an exact error message and timestamp. You search your APM — nothing. The trace is missing. Before assuming the APM is broken, enumerate the four common reasons: 1. Request didn't reach instrumented code — rejected at load balancer, WAF, ingress, or proxy. The code."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Deep understanding of how distributed tracing actually works and fails"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Step 1: Did the request even reach the app?",
+              "Check access logs at each layer: ``bash ALB access logs grep '2026-04-22T12:34' alb-access.log | head nginx ingress logs kubectl logs -n ingress-nginx nginx-controller | grep '2026-04-22T12:34' App access log (if enabled) kubectl logs payment-service-pod | grep 'POST /charge' ` If the app didn't see the request: WAF rule, rate limit, auth rejection at gateway.",
+              "Check those layers.",
+              "If the app saw it but there's no trace: instrumentation problem.",
+              "Step 2: Is the APM agent attached and working?",
+              "`bash Datadog APM: check /dd-health curl localhost:8126 New Relic: check agent logs tail -f /var/log/newrelic/newrelic_agent.log OpenTelemetry: check collector metrics curl localhost:8888/metrics | grep otelcol_exporter ` Look for errors: connection refused, quota exceeded, auth failed."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Four reasons for missing traces: request didn't arrive, agent not capturing, sampled out, context not propagated Debug flow: access logs → agent health → auto-instrument coverage → sampling → context propagation Sampling at 1% misses most traces — force-sample on error",
+              "use tail-based sampling for debugging value Async context loss is the #1 propagation gotcha — ThreadLocal-based context doesn't cross thread boundaries",
+              "use TaskDecorator, Reactor context, or explicit wrapping W3C Trace Context (traceparent header) is the standard",
+              "all major APMs support it Kafka, SQS, batch jobs need explicit instrumentation — no HTTP means no auto-span Log + traceId as safety net — structured logs with traceId can recover from sampling misses OpenTelemetry for backend portability — instrument once, swap APM backends"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "Head-based vs tail-based sampling. Head-based decides at request start (fast, simple, misses error/slow traces statistically). Tail-based decides after trace completes (requires buffer, keeps important traces, more expensive). For debugging rare errors, tail-based is far better. Force-sample on error. Most APMs can be configured to always keep traces with errors, regardless of sampling rate. Datadog: DD_TRACE_SAMPLING_RULES with sample_rate: 1.0, rule_filter: error. OTel: SpanKind + SpanStatus-based sampler. W3C Trace Context is the."
+          }
+        ],
+        "cap": "Did the request arrive? Agent health: is the APM agent running, connected, not rate-limited? Auto-instrumentation coverage: is this framework actually covered? Test with a known endpoint Sampling: is",
+        "familiarity_anchors": [
+          "Missing",
+          "Systematic"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does W3C Trace Context propagate across services and what headers are involved?",
+          "What is a TaskDecorator in Spring and how does it solve async context propagation?",
+          "What's the difference between head-based and tail-based sampling and when to use each?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    }
+  ]
+}

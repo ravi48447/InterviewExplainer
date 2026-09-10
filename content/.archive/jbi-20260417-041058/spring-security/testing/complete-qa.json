@@ -1,0 +1,129 @@
+{
+  "topic": "Testing",
+  "topicSlug": "testing",
+  "questions": [
+    {
+      "id": "ss-012",
+      "slug": "testing-with-withmockuser-security-mock-mvc",
+      "question": "How do you test Spring Security with @WithMockUser and SecurityMockMvcRequestPostProcessors?",
+      "title": "Testing with @WithMockUser and SecurityMockMvcRequestPostProcessors",
+      "direct_answer": "@WithMockUser populates the SecurityContext with a mock Authentication before the test method runs, simulating a logged-in user without going through the actual authentication flow. SecurityMockMvcRequestPostProcessors (like user() and jwt()) apply mock security context per-request in MockMvc calls, giving finer control when different requests in the same test need different users.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows how to write meaningful security tests without spinning up a real auth server.",
+        "common_mistake": "Using @WithMockUser without @AutoConfigureMockMvc, or testing method security without @SpringBootTest (which loads the AOP proxies).",
+        "to_stand_out": "Discuss @WithUserDetails for testing with real UserDetailsService data, custom @WithMockCustomUser meta-annotations, and testing JWT resource servers with SecurityMockMvcRequestPostProcessors.jwt()."
+      },
+      "company_tags": [
+        "Pivotal",
+        "Netflix",
+        "Amazon",
+        "Intuit"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@WithMockUser Without an Application Context Tests Nothing \u2014 Security Needs the Full Stack to Work",
+            "content": "Security testing in Spring requires an application context that loads the security filter chain and its configuration. **`@WithMockUser` is not magic** \u2014 it populates the `SecurityContextHolder` before the test method runs, but it only has an effect if there's a Spring context processing it through a `WithSecurityContextTestExecutionListener`. On a plain JUnit test with no Spring context annotation, `@WithMockUser` silently does nothing.\n\nFor controller-level security testing (testing URL-level authorization rules, 401/403 responses, CSRF behavior), use **`@WebMvcTest`** with **`@AutoConfigureMockMvc`**. `@WebMvcTest` loads the security filter chain and MVC layer without starting the full application context \u2014 faster than `@SpringBootTest` and focused on what you're testing. If your `SecurityFilterChain` depends on beans not loaded by `@WebMvcTest`, mock them with `@MockBean`.\n\nFor **method-level security** (`@PreAuthorize`, `@PostAuthorize`), use **`@SpringBootTest`**. Method security requires AOP proxies, which are only created when the full application context loads. Testing a `@PreAuthorize`-annotated service method with `@WebMvcTest` means calling the service through a mock \u2014 the proxy doesn't exist, the annotation has no effect, and the test provides false confidence that security is working.\n\nThe two testing approaches serve different purposes: **`@WithMockUser`** (and related annotations) set up the security context declaratively for the entire test method, simulating a specific user for all requests in that method. **`SecurityMockMvcRequestPostProcessors`** set up the security context imperatively per request, enabling different users for different requests within the same test. Understanding when to use each prevents both false negatives (tests that pass when security is broken) and false positives (tests that fail when security is correct)."
+          },
+          {
+            "type": "step",
+            "title": "@WithMockUser vs @WithUserDetails \u2014 When Synthetic Users Are Enough and When They're Not",
+            "content": "**`@WithMockUser(roles = \"ADMIN\")`** creates a synthetic `UsernamePasswordAuthenticationToken` with the specified username, password, and roles. The user doesn't need to exist in any `UserDetailsService` \u2014 it's created in memory by the test framework. Use it for testing authorization rules: verify that ADMIN can access `/admin/users`, USER cannot, and anonymous gets a 401.\n\n```java\n@Test\n@WithMockUser(roles = \"ADMIN\")\nvoid adminCanAccessUserList() throws Exception {\n    mockMvc.perform(get(\"/admin/users\"))\n        .andExpect(status().isOk());\n}\n\n@Test\n@WithMockUser(roles = \"USER\")\nvoid userCannotAccessAdminEndpoint() throws Exception {\n    mockMvc.perform(get(\"/admin/users\"))\n        .andExpect(status().isForbidden());\n}\n```\n\n**`@WithUserDetails(\"admin@test.com\")`** calls your real `UserDetailsService` to load the specified user. This tests the full authentication data path: the custom `GrantedAuthority` mapping, account status flags (`isEnabled`, `isAccountNonLocked`), and any custom `UserDetails` properties that authorization logic depends on. If your `@PreAuthorize` expressions use custom principal properties (organization ID, subscription tier), `@WithUserDetails` loads the real object rather than a synthetic one that might not have those properties.\n\nThe limitation: `@WithUserDetails` requires the user to exist in the database (or a mock repository). For tests that need precise control over the authentication state without database dependency, `@WithMockUser` or custom annotations are cleaner.\n\n**Key difference**: `@WithMockUser` creates a `UsernamePasswordAuthenticationToken`; `@WithUserDetails` calls `loadUserByUsername()` and creates the token from the returned `UserDetails`. If your authorization code checks `instanceof` on the principal type, the difference matters."
+          },
+          {
+            "type": "step",
+            "title": "SecurityMockMvcRequestPostProcessors.jwt() \u2014 Testing JWT Resource Server Endpoints",
+            "content": "`@WithMockUser` creates `UsernamePasswordAuthenticationToken`. JWT Resource Server endpoints use `JwtAuthenticationToken`. These are different types, and authorization code that checks `instanceof JwtAuthenticationToken` or accesses `((JwtAuthenticationToken) auth).getToken()` fails with a `ClassCastException` when the test uses `@WithMockUser`.\n\n**`SecurityMockMvcRequestPostProcessors.jwt()`** creates a mock `JwtAuthenticationToken` for the specific request:\n\n```java\nimport static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;\n\n@Test\nvoid adminJwtCanAccessProtectedEndpoint() throws Exception {\n    mockMvc.perform(get(\"/api/admin/report\")\n        .with(jwt()\n            .authorities(new SimpleGrantedAuthority(\"ROLE_ADMIN\"))\n            .jwt(jwtBuilder -> jwtBuilder\n                .subject(\"user123\")\n                .claim(\"roles\", List.of(\"ADMIN\"))\n                .claim(\"org_id\", \"org-456\"))))\n        .andExpect(status().isOk());\n}\n\n@Test\nvoid missingAuthReturns401() throws Exception {\n    mockMvc.perform(get(\"/api/admin/report\"))\n        .andExpect(status().isUnauthorized());\n}\n```\n\nThe `jwt()` post-processor lets you set the JWT's claims precisely and control the resulting `GrantedAuthority` list independently. This is the correct way to test `JwtAuthenticationConverter` behavior: set the raw claim (`roles: [\"ADMIN\"]`) and verify the correct authority (`ROLE_ADMIN`) is produced by the converter configuration.\n\nFor the unauthenticated case, simply don't call `.with(jwt())` \u2014 no security context is set, and the request is treated as anonymous. Verify that protected endpoints return 401, not 403 (which would indicate the request was authenticated but lacked the required authority)."
+          },
+          {
+            "type": "step",
+            "title": "Custom Security Test Annotations \u2014 Eliminating Boilerplate Across Large Test Suites",
+            "content": "A test suite with 50 controller tests often repeats the same `@WithMockUser(roles = \"ADMIN\")` annotation dozens of times. When the admin role requirements change \u2014 admins now also need `ROLE_SUPER` \u2014 you update one line and miss 49 others.\n\n**Custom security meta-annotations** solve this. A meta-annotation combines `@WithSecurityContext` (or another security annotation) with your project-specific defaults:\n\n```java\n@Target(ElementType.METHOD)\n@Retention(RetentionPolicy.RUNTIME)\n@WithMockUser(username = \"admin@test.com\", roles = {\"ADMIN\", \"USER\"})\npublic @interface WithMockAdmin {\n}\n\n@Target(ElementType.METHOD)\n@Retention(RetentionPolicy.RUNTIME)\n@WithMockUser(username = \"user@test.com\", roles = {\"USER\"})\npublic @interface WithMockRegularUser {\n}\n```\n\nUsage is cleaner and immediately legible:\n\n```java\n@Test\n@WithMockAdmin\nvoid adminCanDeleteUser() throws Exception { ... }\n\n@Test\n@WithMockRegularUser\nvoid regularUserCannotDeleteUser() throws Exception { ... }\n```\n\nWhen admin role requirements change, update the `@WithMockAdmin` definition once \u2014 all 50 tests inherit the change. **For JWT-based applications**, create a custom annotation with `@WithSecurityContext(factory = MockJwtSecurityContextFactory.class)` that builds a `JwtAuthenticationToken` with your standard claims. This gives you the correct authentication type (`JwtAuthenticationToken`) with the precision of `@WithMockUser`.\n\nTest coverage goal: for every `requestMatchers` rule and every `@PreAuthorize` annotation, have at least two tests \u2014 one that succeeds with the required role and one that fails without it. Untested authorization rules are security gaps waiting to be discovered in production."
+          },
+          {
+            "type": "step",
+            "title": "Testing Method Security, Custom Security Expressions, and What @WithMockUser Can't Test",
+            "content": "Testing method-level security requires a Spring context that loads the security configuration. `@WithMockUser` works with `@SpringBootTest` or `@WebMvcTest` \u2014 not in plain `@ExtendWith(SpringExtension.class)` tests without a security configuration. **Without `@EnableMethodSecurity` in the loaded context, `@PreAuthorize` annotations are ignored and method security tests always pass** \u2014 the most insidious false positive in security testing.\n\nFor method security (not controller-layer security), use a minimal Spring test configuration:\n```java\n@SpringBootTest(classes = {OrderService.class, MethodSecurityConfig.class})\n@WithMockUser(roles = \"USER\")\nclass OrderServiceSecurityTest {\n    @Autowired OrderService orderService;\n    \n    @Test\n    void adminOnlyMethod_userRole_shouldThrowAccessDenied() {\n        assertThrows(AccessDeniedException.class, () -> orderService.deleteAll());\n    }\n}\n```\n\n**`@WithUserDetails(\"alice\")`** loads a real user from `UserDetailsService` using the specified username. Use this when the authorization logic depends on the user's actual authorities from the database \u2014 not just a mock role. Combine with a test-configured `UserDetailsService` that returns predictable user data.\n\n**Custom `@WithSecurityContext` annotations** enable reusable security test configurations: `@WithAdmin`, `@WithStandardUser`, `@WithReadOnlyUser`. Each annotation is meta-annotated with `@WithSecurityContext(factory = YourFactory.class)` where the factory creates a specific `SecurityContext`. This is cleaner than repeating `@WithMockUser(roles = \"ADMIN\", username = \"admin@example.com\")` across 50 tests.\n\n`SecurityMockMvcResultMatchers.authenticated()` and `.unauthenticated()` assert authentication state in `MockMvc` tests. `SecurityMockMvcResultMatchers.withAuthorities(\"ROLE_ADMIN\")` asserts specific authorities. These matchers confirm the security context, not just the HTTP response \u2014 useful when a 200 response could come from either authenticated access or a misconfigured `permitAll()`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@WithMockUser` sets a `SecurityContext` without loading `UserDetailsService`** \u2014 creates a fake `Authentication` with the specified username, roles, and authorities; no database is called.\n- **`@AutoConfigureMockMvc` or `@WebMvcTest` is required for `MockMvc` to apply security** \u2014 without it, the security filter chain does not apply to `MockMvc` requests.\n- **`@WithUserDetails(\"alice\")` loads a real user from `UserDetailsService`** \u2014 calls `loadUserByUsername(\"alice\")`; tests the full authentication path including account flags.\n- **Test `@PreAuthorize` on service methods with `@WithMockUser` + `@SpringBootTest`** \u2014 `@WebMvcTest` only tests the web layer; method security on services requires the full context.\n- **Custom `@WithMockCustomUser` annotation using `@WithSecurityContext`** \u2014 create a custom annotation that populates a `CustomUserDetails` with the exact fields your application uses; reusable across tests."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Security testing in Spring Boot requires telling the test what user is making the request \u2014 either by faking an authentication object or by loading a real one. The right approach depends on what you are testing.\n\n**`@WithMockUser` \u2014 the fast path**\n- `@WithMockUser(username = \"alice\", roles = {\"USER\"})` \u2014 creates a `UsernamePasswordAuthenticationToken` in the `SecurityContext`; no `UserDetailsService` call\n- Perfect for testing authorization behavior: 'does ROLE_USER get 403 on this endpoint?'\n- Does not test the authentication flow itself\n\n**`@WithUserDetails` \u2014 the full path**\n- `@WithUserDetails(\"alice\")` \u2014 calls `loadUserByUsername(\"alice\")` on your `UserDetailsService`\n- Tests the real user loading including account enabled/locked flags\n- Requires 'alice' to exist in the test database\n\n**MockMvc security setup**\n- `@WebMvcTest` \u2014 automatically configures `MockMvc` with the security filter chain\n- `@SpringBootTest + @AutoConfigureMockMvc` \u2014 full context; use for testing method security on services\n\n**Custom `@WithMockCustomUser`**\n- When `@WithMockUser` does not set all fields your `CustomUserDetails` has (tenant ID, feature flags)\n- Implement `WithSecurityContextFactory`, annotate with `@WithSecurityContext(factory = CustomSecurityContextFactory.class)`\n- Reuse the annotation across every test class that needs the custom user context"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test that an unauthenticated request is correctly redirected to the login page?",
+        "What is the difference between @WebMvcTest and @SpringBootTest for security testing, and when does it matter?",
+        "How would you test a method annotated with @PreAuthorize that checks a method argument against the current user's id?"
+      ],
+      "seo": {
+        "metaTitle": "@WithMockUser and SecurityMockMvcRequestPostProcessors \u2014 Spring Security Testing Java Guide",
+        "metaDescription": "Learn how to test Spring Security with @WithMockUser, @WithUserDetails, and SecurityMockMvcRequestPostProcessors including JWT testing, custom meta-annotations, and WebMvcTest vs SpringBootTest."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Security testing in Spring Boot requires telling the test what user is making the request \u2014 either by faking an authentication object or by loading a real one.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Security testing in Spring requires an application context that loads the security filter chain and its configuration. @WithMockUser is not magic \u2014 it populates the SecurityContextHolder before the test method runs, but it only has an effect if there's a Spring context processing it through a WithSecurityContextTestExecutionListener. On a plain JUnit test with no Spring context annotation, @WithMockUser silently does nothing. For controller-level security testing (testing URL-level authorization rules, 401/403 responses, CSRF behavior), use @WebMvcTest with @AutoConfigureMockMvc. @WebMvcTest loads the security filter chain and MVC layer without starting the full."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "@WithMockUser(roles = \"ADMIN\") creates a synthetic UsernamePasswordAuthenticationToken with the specified username, password, and roles.",
+              "The user doesn't need to exist in any UserDetailsService \u2014 it's created in memory by the test framework.",
+              "Use it for testing authorization rules: verify that ADMIN can access /admin/users, USER cannot, and anonymous gets a 401.",
+              "``java @Test @WithMockUser(roles = \"ADMIN\") void adminCanAccessUserList() throws Exception { mockMvc.perform(get(\"/admin/users\")) .andExpect(status().isOk()); } @Test @WithMockUser(roles = \"USER\") void userCannotAccessAdminEndpoint() throws Exception { mockMvc.perform(get(\"/admin/users\")) .andExpect(status().isForbidden()); } ` @WithUserDetails(\"admin@test.com\") calls your real UserDetailsService to load the specified user.",
+              "This tests the full authentication data path: the custom GrantedAuthority mapping, account status flags (isEnabled, isAccountNonLocked), and any custom UserDetails properties that authorization logic depends on.",
+              "If your @PreAuthorize expressions use custom principal properties (organization ID, subscription tier), @WithUserDetails loads the real object rather than a synthetic one that might not have those."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@WithMockUser sets a SecurityContext without loading UserDetailsService \u2014 creates a fake Authentication with the specified username, roles, and authorities; no database is called",
+              "@AutoConfigureMockMvc or @WebMvcTest is required for MockMvc to apply security \u2014 without it, the security filter chain does not apply to MockMvc requests",
+              "@WithUserDetails(\"alice\") loads a real user from UserDetailsService \u2014 calls loadUserByUsername(\"alice\"); tests the full authentication path including account flags",
+              "Test @PreAuthorize on service methods with @WithMockUser + @SpringBootTest \u2014 @WebMvcTest only tests the web layer; method security on services requires the full context",
+              "Custom @WithMockCustomUser annotation using @WithSecurityContext \u2014 create a custom annotation that populates a CustomUserDetails with the exact fields your application uses; reusable across tests"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using @WithMockUser without @AutoConfigureMockMvc, or testing method security without @SpringBootTest (which loads the AOP proxies)."
+          }
+        ],
+        "cap": "@WithMockUser \u2014 the fast path @WithMockUser(username = \"alice\", roles = {\"USER\"}) \u2014 creates a UsernamePasswordAuthenticationToken in the SecurityContext; no UserDetailsService call Perfect for testing",
+        "familiarity_anchors": [
+          "WithMockUser",
+          "SecurityContext",
+          "Authentication"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test that an unauthenticated request is correctly redirected to the login page?",
+          "What is the difference between @WebMvcTest and @SpringBootTest for security testing, and when does it matter?",
+          "How would you test a method annotated with @PreAuthorize that checks a method argument against the current user's id?"
+        ]
+      }
+    }
+  ]
+}

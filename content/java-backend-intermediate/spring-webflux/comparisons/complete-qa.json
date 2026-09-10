@@ -1,0 +1,252 @@
+{
+  "topic": "Comparisons",
+  "topicSlug": "comparisons",
+  "questions": [
+    {
+      "id": "wf-cmp-001",
+      "slug": "spring-mvc-vs-webflux-vs-virtual-threads",
+      "question": "Spring MVC vs Spring WebFlux vs MVC with virtual threads — when do you pick each?",
+      "title": "Spring MVC vs WebFlux vs MVC + Virtual Threads — 2026 Decision Guide",
+      "direct_answer": "**Spring MVC** is the classic blocking, thread-per-request, servlet-based stack. Simple, mature, JDBC-friendly. **Spring WebFlux** is non-blocking, Netty-based, Reactor-powered — great for streaming, high-concurrency I/O with reactive downstreams, and memory-constrained environments, but every dependency must be reactive to pay off. **Spring MVC + virtual threads** (Boot 3.2+, JDK 21) runs MVC on Project Loom virtual threads: you write normal blocking code but scale to tens of thousands of concurrent connections with familiar stack traces and JDBC. **2026 default**: MVC + virtual threads for most new services; WebFlux specifically when you need streaming (SSE/WebSocket), reactive-all-the-way, or explicit backpressure semantics.",
+      "layout_type": "comparison-arena",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Modern perspective on reactive vs blocking; awareness of how Project Loom changes the answer in 2026",
+        "common_mistake": "Defaulting to 'WebFlux is always faster' without considering team experience, dependency reality, and Loom",
+        "to_stand_out": "Discuss blocking dependency pitfalls, streaming-specific use cases, virtual thread pinning, debugging cost, and observability differences"
+      },
+      "company_tags": [
+        "Spring",
+        "Oracle",
+        "Netflix",
+        "VMware",
+        "Pivotal"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Three Stacks in 2026 — and Why the Default Has Shifted",
+            "content": "Spring offers three real options for HTTP services today, and the right default has changed since 2023.\n\n**Spring MVC (classic)** is the servlet-based stack on Tomcat / Jetty / Undertow. Thread-per-request, blocking I/O, `JdbcTemplate`, `RestTemplate`. Mature, battle-tested, universal library compatibility, normal stack traces. Concurrency is bounded by the thread pool — usually around 200.\n\n**Spring WebFlux (reactive)** is the Netty-based non-blocking stack.\n- A handful of event-loop threads handle thousands of concurrent connections.\n- Endpoints return `Mono<T>` or `Flux<T>`; outbound calls use `WebClient` and reactive drivers (R2DBC, reactive Mongo, reactive Redis). Explicit backpressure is built in.\n- Native streaming — SSE, WebSocket — works with proper flow control.\n- The cost is a steep learning curve and the requirement that every downstream dependency be reactive for the model to pay off.\n\n**Spring MVC + Virtual Threads (Boot 3.2+, JDK 21)** runs the regular MVC servlet stack on Project Loom virtual threads.\n- Set `spring.threads.virtual.enabled=true` and each request runs on a virtual thread — blocking I/O parks the virtual thread without blocking its carrier.\n- Thousands of concurrent requests scale on a handful of carrier threads while your code remains plain blocking Java.\n- Stack traces stay normal, debugging stays normal, Spring Security / MDC / `@Transactional` work as before.\n\n**The shift in 2024–2026:** virtual threads let blocking code reach the concurrency levels that previously required reactive. For most services — CRUD with JDBC, calling a few HTTP services, serving REST — virtual threads deliver reactive-like concurrency with radically simpler code."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Three Stacks Side by Side",
+            "content": "```mermaid\nflowchart TB\n    subgraph mvc[\"Spring MVC (classic)\"]\n        m1[Request] --> tomcat[\"Tomcat (~200 OS threads)\"]\n        tomcat --> ctl1[\"Controller blocks on JDBC\"]\n        ctl1 --> db1[(Database)]\n    end\n    subgraph wf[\"Spring WebFlux\"]\n        w1[\"10K Requests\"] --> netty[\"Netty event loop (4 threads)\"]\n        netty --> ctl2[\"Controller returns Mono / Flux\"]\n        ctl2 --> r2[R2DBC reactive]\n        ctl2 --> wc[WebClient]\n    end\n    subgraph vt[\"MVC + Virtual Threads\"]\n        v1[\"10K Requests\"] --> vthread[\"10K virtual threads\"]\n        vthread --> ctl3[\"Controller blocks on JDBC\"]\n        vthread -.park.-> carrier[\"~8 carrier threads\"]\n        ctl3 --> db2[(Database)]\n    end\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Feature-by-Feature Comparison",
+            "content": "Each stack makes a different bet across the same set of dimensions. The rows that matter most are programming model, threads, DB driver, debugging, and library compatibility.\n\n| Dimension | Spring MVC | WebFlux | MVC + Virtual Threads |\n|---|---|---|---|\n| Programming model | Blocking, imperative | Reactive (Mono/Flux) | Blocking, imperative |\n| Server | Tomcat / Jetty / Undertow | Netty (default) | Tomcat / Jetty / Undertow |\n| Threads | ~200 per instance | 4-8 event-loop | Unlimited virtual; ~8 carrier |\n| Concurrency ceiling | Thread pool size | Very high (thousands) | Very high (thousands) |\n| DB driver | JDBC (blocking) | R2DBC (reactive) | JDBC (virtual-thread friendly) |\n| HTTP client | RestTemplate / WebClient | WebClient non-blocking | RestTemplate / WebClient |\n| Streaming (SSE/WS) | Possible but awkward | Excellent, native | OK; not best-in-class |\n| Backpressure | None in-process | Explicit | None in-process |\n| Learning curve | Low | High | Low |\n| Debugging | Normal stack traces | Hard; use checkpoint | Normal |\n| MDC / ThreadLocal | Native | Needs Context Propagation | Native (with care) |\n| `@Transactional` | Works | Needs reactive tx manager | Works |\n| Library compatibility | Universal | Reactive-only matters | Universal |\n| CPU-bound workloads | Fine | No advantage | Fine |\n| Memory per connection | High (thread stack) | Very low | Low (virtual thread stack) |\n| Observability tooling | Best | Good | Best |\n| Testing | MockMvc | WebTestClient + StepVerifier | MockMvc |\n| Production maturity | Very high | High | High (since JDK 21 GA) |\n| Best for | CRUD, REST | Streaming, reactive-all-the-way | Most modern services |"
+          },
+          {
+            "type": "step",
+            "title": "Virtual Thread Caveats — When Loom Bites",
+            "content": "Virtual threads are not magic. The defaults are great for most code, but a few patterns still cause trouble.\n\n**1. Pinning to the carrier thread**\n- A virtual thread pins (cannot unmount) when executing inside a `synchronized` block that contains blocking I/O\n- Pinning also occurs in some native / JNI code and on `Object.wait()` and a few legacy primitives\n- Fix: replace `synchronized` with `java.util.concurrent.locks.ReentrantLock` for code that blocks inside the critical section\n- JDK 24 is expected to remove most pinning cases\n\n**2. Thread-local storage cost**\n- `ThreadLocal` works but was designed for long-lived threads\n- With millions of virtual threads, aggressive `ThreadLocal` use can increase memory\n- Prefer `ScopedValue` (JDK 21 preview / 22 stable) where possible\n\n**3. Thread pool semantics unchanged**\n- `Executors.newFixedThreadPool(200)` still caps at 200, even on JDK 21\n- To benefit from Loom, use `Executors.newVirtualThreadPerTaskExecutor()` or `spring.threads.virtual.enabled=true`\n\n**4. Database connection pool becomes the bottleneck**\n- With unlimited virtual threads, a HikariCP pool of 10 is the real concurrency limit\n- Tune the pool for total expected concurrency, or you trade thread waits for connection waits\n\n**5. Observability**\n- Thread-dump tooling and profilers support virtual threads (JDK 21+), but older tools may not\n- Use JFR for detailed virtual-thread scheduling analysis\n\n**6. Pressure test before trusting**\n- 100K concurrent virtual threads exposes subtle issues: GC pauses from millions of short-lived objects, DNS resolution contention, file descriptor limits"
+          },
+          {
+            "type": "step",
+            "title": "Decision Framework — Which Stack to Pick",
+            "content": "**Default to MVC + Virtual Threads when:**\n- New service on JDK 21+ and Boot 3.2+\n- Team familiar with blocking / imperative style\n- JDBC or JPA backend\n- REST endpoints, moderate streaming needs\n- CRUD, CQRS, standard microservice\n- Existing blocking dependencies you can't replace\n\n**Pick Spring WebFlux when:**\n- **Streaming is core** — SSE, WebSocket, chunked HTTP streaming\n- **Reactive-all-the-way stack** — R2DBC for DB, reactive Kafka, reactive Redis\n- **Explicit backpressure** is a genuine requirement (telemetry ingestion, financial ticker)\n- **Memory-critical** environments (microservices in tight containers) where reactive's per-connection efficiency matters at extreme scale\n- **Team is experienced with Reactor** and willing to pay the debugging tax\n- **API-gateway-like workloads** composing many HTTP calls asynchronously\n\n**Stick with classic Spring MVC when:**\n- Older JDK (pre-21)\n- Older Boot (pre-3.2)\n- Moderate load; thread-per-request sufficient\n- Maximum library compatibility and zero experimentation risk\n\n**Avoid WebFlux if:**\n- Team lacks reactive experience (6+ months of learning curve is real)\n- Heavy blocking dependencies you can't replace (wrapping with `boundedElastic` removes the benefit)\n- Primarily CPU-bound workloads (reactive doesn't help CPU)\n- Service is already healthy on MVC with headroom\n\n**Migration paths:**\n- **MVC → MVC + virtual threads** — one line of config (`spring.threads.virtual.enabled=true`), upgrade JDK, test; low risk\n- **MVC → WebFlux** — large effort; rewrite controllers, replace JDBC with R2DBC, retrain team\n- **WebFlux → MVC + virtual threads** — common in 2024–2026 when teams realize WebFlux was premature; mostly incremental"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Honest Pros and Cons of Each Stack",
+            "content": "**Spring MVC (classic):**\n- **Pros:** simple, familiar, universal library compatibility, mature tooling, normal debugging\n- **Cons:** thread-per-request caps concurrency around the pool size; memory cost per connection at scale\n- **Sweet spot:** everything that isn't at extreme concurrency\n\n**Spring WebFlux:**\n- **Pros:** massive concurrency on few threads; native streaming; explicit backpressure; memory-efficient per connection\n- **Cons:** steep learning curve; hard debugging; requires reactive-all-the-way for full benefit; mixing blocking and reactive is the worst case; `@Transactional` complications\n- **Sweet spot:** streaming services, reactive API gateways, event-driven systems with truly reactive stacks\n\n**Spring MVC + Virtual Threads:**\n- **Pros:** blocking-code simplicity with reactive-like concurrency; normal stack traces; full library compatibility; one-line migration\n- **Cons:** pinning with `synchronized` + blocking I/O; DB pool becomes the bottleneck; tooling still catching up; extreme-scale (100K+) needs tuning\n- **Sweet spot:** most modern services in 2026\n\n**Performance reality check (benchmarks):**\n- WebFlux slightly edges MVC + virtual threads on pure I/O throughput at extreme concurrency (50K+ connections)\n- MVC + virtual threads wins on debugging, developer velocity, and library compatibility\n- The gap is usually 10-20%, not orders of magnitude\n- Unless you operate at scale where 10% matters (very few services do), simpler wins\n\n**The 2026 recommendation flowchart:** 1.\n- Need SSE / WebSocket streaming with backpressure? → WebFlux\n2.\n- Truly reactive-all-the-way stack (R2DBC, reactive Kafka, Redis)? → WebFlux\n3.\n- Team is already expert in Reactor? → WebFlux\n4.\n- Everything else on JDK 21+ / Boot 3.2+? → **MVC + virtual threads**\n5.\n- Older JDK / Boot, moderate scale? → Classic MVC\n\n**Anti-patterns to avoid:**\n- Choosing WebFlux 'for performance' without measuring\n- Mixing WebFlux and blocking JDBC without `boundedElastic` (stalls event loop)\n- Staying on WebFlux when team velocity is suffering — migrating back is valid\n- Not upgrading to virtual threads when the migration is trivial and the wins are real\n- Premature optimization: picking the hardest stack for a CRUD service\n\n**Industry trend in 2026:** the reactive narrative has shifted. Reactive is no longer the default answer to 'we need scale.' Virtual threads cover the common case. Reactive earns its place for specific problems — streaming, backpressure, truly async composition — not universally."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Three stacks** — Spring MVC (blocking), WebFlux (reactive), MVC + Virtual Threads (Loom)\n- **MVC + Virtual Threads** is the 2026 default for most new services\n- **WebFlux** for streaming (SSE/WS), reactive-all-the-way, explicit backpressure\n- **Classic MVC** still fine for older JDK or moderate scale\n- **Virtual thread caveats** — pinning with `synchronized`, DB pool bottleneck, thread-local cost\n- **WebFlux caveats** — steep learning curve, debugging hard, needs all-reactive dependencies\n- **Don't mix blocking JDBC with WebFlux** without `boundedElastic`\n- **Performance gap WebFlux vs MVC+VT** is roughly 10-20% — usually not worth the complexity\n- **Migration MVC → MVC+VT** is one line of config — low risk\n- **Streaming, reactive downstream, true async composition = WebFlux; everything else = MVC+VT**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The 2026 answer has shifted with virtual threads. There are three real options for Spring HTTP services.\n\n**Spring MVC classic:**\n- Servlet-based on Tomcat / Jetty / Undertow\n- Thread-per-request blocking; `@RestController` returning `Object` / `ResponseEntity`\n- `JdbcTemplate`, `spring-data-jpa`, `RestTemplate`\n- Mature, battle-tested, universal library compatibility\n\n**Spring WebFlux reactive:**\n- Netty-based non-blocking NIO; few event-loop threads handle thousands of connections\n- Returns `Mono<T>` / `Flux<T>`; Reactor operators compose\n- `WebClient`, R2DBC, reactive Mongo / Redis\n- Explicit backpressure; native streaming (SSE, WebSocket)\n\n**Spring MVC + Virtual Threads (Boot 3.2+, JDK 21):**\n- Regular MVC servlet stack with `spring.threads.virtual.enabled=true`\n- Each request runs on a virtual thread; blocking I/O parks without blocking the carrier\n- Code stays plain blocking Java; `jdbcTemplate.query` just works; stack traces normal\n\n**The 2024-2026 shift:** virtual threads let you scale blocking code to reactive-like levels. For most services — CRUD with JDBC, a few HTTP calls, REST — virtual threads deliver with radically simpler code.\n\n**Virtual thread caveats:**\n- Pinning when `synchronized` blocks contain blocking I/O — replace with `ReentrantLock`\n- DB connection pool becomes the new bottleneck — tune accordingly\n- ThreadLocal works but `ScopedValue` is preferred at scale\n\n**Decision framework:**\n- Streaming or reactive-all-the-way → WebFlux\n- Everything else on JDK 21+ → MVC + virtual threads\n- Older JDK or moderate scale → classic MVC\n\n**Strategic takeaway:** the reactive narrative has shifted.\n- Reactive is no longer the default answer to 'we need scale.\n- Virtual threads cover the common case.\n- Reactive earns its place for streaming, explicit backpressure, and truly async composition — not universally. Choose deliberately, not by trend."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is virtual thread pinning and how do you detect and fix it?",
+        "Walk through migrating a blocking MVC service to virtual threads",
+        "When is WebFlux genuinely better than MVC + virtual threads?",
+        "How do you decide DB connection pool size with virtual threads?"
+      ],
+      "seo": {
+        "metaTitle": "Spring MVC vs WebFlux vs Virtual Threads — 2026 Decision Guide",
+        "metaDescription": "Compare Spring MVC, WebFlux, and MVC + virtual threads. When each wins, migration paths, virtual thread pinning, debugging cost, and 2026 industry trends."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "The 2026 answer has shifted with virtual threads.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Spring offers three real options for HTTP services today, and the right default has changed since 2023. Spring MVC (classic) is the servlet-based stack on Tomcat / Jetty / Undertow. Thread-per-request, blocking I/O, JdbcTemplate, RestTemplate. Mature, battle-tested, universal library compatibility, normal stack traces. Concurrency is bounded by the thread pool — usually around 200. Spring WebFlux (reactive) is the Netty-based non-blocking stack. A handful of event-loop threads handle thousands of."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Each stack makes a different bet across the same set of dimensions",
+              "The rows that matter most are programming model, threads, DB driver, debugging, and library compatibility",
+              "| Dimension | Spring MVC | WebFlux | MVC + Virtual Threads | |---|---|---|---| | Programming model | Blocking, imperative | Reactive (Mono/Flux) | Blocking, imperative | | Server | Tomcat / Jetty / Undertow | Netty (default) | Tomcat / Jetty / Undertow | | Threads | ~200 per instance | 4-8 event-loop | Unlimited virtual; ~8 carrier | | Concurrency ceiling | Thread pool size | Very high (thousands) | Very high (thousands) | | DB driver | JDBC (blocking) | R2DBC (reactive) | JDBC (virtual-thread friendly) | | HTTP client | RestTemplate / WebClient | WebClient non-blocking | RestTemplate / WebClient | | Streaming (SSE/WS) | Possible but awkward | Excellent, native | OK; not best-in-class | | Backpressure | None in-process | Explicit | None in-process | | Learning curve | Low | High | Low | | Debugging | Normal stack traces | Hard; use checkpoint | Normal | | MDC / ThreadLocal | Native | Needs Context Propagation | Native (with care) | | @Transactional | Works | Needs reactive tx manager | Works | | Library compatibility | Universal | Reactive-only matters | Universal | | CPU-bound workloads | Fine | No advantage | Fine | | Memory per connection | High (thread stack) | Very low | Low (virtual thread stack) | | Observability tooling | Best | Good | Best | | Testing | MockMvc | WebTestClient + StepVerifier | MockMvc | | Production maturity | Very high | High | High (since JDK 21 GA) | | Best for | CRUD, REST | Streaming, reactive-all-the-way | Most modern services |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Spring MVC (classic): Pros: simple, familiar, universal library compatibility, mature tooling, normal debugging Cons: thread-per-request caps concurrency around the pool size; memory cost per connection at scale Sweet spot: everything that isn't at extreme concurrency Spring WebFlux: Pros: massive concurrency on few threads; native streaming; explicit backpressure; memory-efficient per connection Cons: steep learning curve; hard debugging; requires reactive-all-the-way for full benefit; mixing blocking and reactive is the worst case; @Transactional complications Sweet spot: streaming services, reactive API gateways, event-driven systems with truly reactive stacks Spring MVC + Virtual Threads: Pros."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Spring offers three real options for HTTP services today, and the right default has changed since 2023. Spring MVC (classic) is the servlet-based stack on Tomcat / Jetty / Undertow. Thread-per-request, blocking I/O, JdbcTemplate, RestTemplate. Mature, battle-tested, universal library compatibility, normal stack traces. Concurrency is bounded by the thread pool — usually around 200. Spring WebFlux (reactive) is the Netty-based."
+          }
+        ],
+        "cap": "Choose deliberately, not by trend.",
+        "familiarity_anchors": [
+          "Spring",
+          "Simple",
+          "WebFlux"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is virtual thread pinning and how do you detect and fix it?",
+          "Walk through migrating a blocking MVC service to virtual threads",
+          "When is WebFlux genuinely better than MVC + virtual threads?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring WebFlux reactive API with Reactor"
+      }
+    },
+    {
+      "id": "wf-cmp-002",
+      "slug": "webclient-vs-resttemplate-comparison",
+      "question": "WebClient vs RestTemplate — when to use each in 2026?",
+      "title": "WebClient vs RestTemplate — Reactive vs Blocking HTTP Clients",
+      "direct_answer": "**`RestTemplate`** is Spring's classic blocking HTTP client — synchronous, thread-per-call, simple to use. It is officially in **maintenance mode** since Spring 5; Spring recommends `WebClient` for new code. **`WebClient`** is the reactive, non-blocking client built on Reactor and Netty — returns `Mono` / `Flux`, supports streaming bodies, integrates explicit backpressure and `Retry.backoff` operators, and works correctly on both WebFlux and MVC stacks. In 2026 the choice is simple: use `WebClient` for any new code (it can be used in blocking style with `.block()` if needed); only keep `RestTemplate` in legacy MVC services where the cost of migration outweighs the benefit. **`RestClient`** (Spring 6.1+) is the modern blocking alternative if you want fluent API without reactive types.",
+      "layout_type": "comparison-arena",
+      "difficulty": "easy",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know the official deprecation status, the WebFlux/MVC compatibility story, and when RestClient is the right answer instead of WebClient",
+        "common_mistake": "Using RestTemplate in WebFlux (it blocks the event loop), or assuming WebClient is only for reactive applications",
+        "to_stand_out": "Mention RestClient as the modern fluent blocking client, discuss connection pool tuning per upstream, and explain why one WebClient instance per upstream is the right pattern"
+      },
+      "company_tags": [
+        "Spring",
+        "VMware",
+        "Pivotal",
+        "Stripe",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three HTTP Clients, One Recommendation",
+            "content": "Spring ships three HTTP client APIs today, and the right answer depends mostly on your stack and how much fluent ergonomics you want.\n\n**`RestTemplate`** is the original Spring HTTP client introduced in Spring 3.\n- Synchronous, thread-blocks-per-call, simple `getForObject` / `postForEntity` API.\n- It works correctly in classic Spring MVC where each request already owns a thread.\n- Since Spring 5 it has been in **maintenance mode** — no new features, only critical bug fixes — and the official guidance is to use `WebClient` for new development.\n\n**`WebClient`** is the reactive, non-blocking client built on Reactor and Reactor Netty.\n- It returns `Mono<T>` and `Flux<T>`, supports streaming request and response bodies, integrates with Reactor's `Retry.backoff` and `timeout` operators, and propagates backpressure end-to-end through HTTP/2 frames.\n- Critically, `WebClient` works correctly on both stacks: in WebFlux it composes naturally; in classic MVC you can use `.block()` to wait synchronously.\n\n**`RestClient`** (Spring 6.1 / Boot 3.2+) is the newest entrant.\n- It offers the fluent builder API of `WebClient` but returns plain values instead of `Mono` / `Flux`.\n- It is the right choice when you want modern ergonomics without reactive types — for example, a classic MVC service or a virtual-thread service that just wants clean blocking calls.\n\nThe **2026 recommendation** is straightforward: use `WebClient` (or `RestClient` for blocking style) for any new code. Keep `RestTemplate` only in legacy code where the migration cost outweighs the benefit."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Side-by-Side Comparison",
+            "content": "All three clients can call the same HTTP endpoints. The differences are in API style, threading model, and feature set.\n\n| Dimension | RestTemplate | WebClient | RestClient |\n|---|---|---|---|\n| Status | Maintenance mode | Recommended | Recommended (modern blocking) |\n| Programming model | Blocking, synchronous | Reactive (Mono/Flux) | Blocking, synchronous |\n| API style | Method-per-verb | Fluent builder | Fluent builder (like WebClient) |\n| Underlying transport | Apache HttpClient or HttpURLConnection | Reactor Netty (default) | Apache HttpClient / JDK HttpClient |\n| Streaming bodies | No | Yes (`Flux<DataBuffer>`) | No |\n| Backpressure | No | Yes (HTTP/2) | No |\n| Retry / timeout | Manual | `retryWhen`, `timeout` operators | Manual |\n| Use in WebFlux | **No** (blocks event loop) | Native | No (would block event loop) |\n| Use in MVC | Native | Yes (`.block()` to wait) | Native |\n| Use with virtual threads | Yes | Yes | Yes |\n| Spring version | Spring 3+ | Spring 5+ | Spring 6.1+ |"
+          },
+          {
+            "type": "step",
+            "title": "Code Comparison — Same Call Three Ways",
+            "content": "The same simple request through each client.\n\n**`RestTemplate` (legacy):**\n\n```java\nRestTemplate rt = new RestTemplate();\nUserDto user = rt.getForObject(\"https://api.example.com/users/{id}\",\n    UserDto.class, 42);\n```\n\n**`WebClient` (reactive):**\n\n```java\nWebClient client = WebClient.create(\"https://api.example.com\");\n\nMono<UserDto> userMono = client.get()\n    .uri(\"/users/{id}\", 42)\n    .retrieve()\n    .bodyToMono(UserDto.class)\n    .timeout(Duration.ofSeconds(3))\n    .retryWhen(Retry.backoff(3, Duration.ofMillis(200))\n        .filter(this::isRetryable));\n```\n\n**`WebClient` blocking (in MVC):**\n\n```java\nUserDto user = client.get()\n    .uri(\"/users/{id}\", 42)\n    .retrieve()\n    .bodyToMono(UserDto.class)\n    .block();\n```\n\n**`RestClient` (modern blocking):**\n\n```java\nRestClient client = RestClient.create(\"https://api.example.com\");\n\nUserDto user = client.get()\n    .uri(\"/users/{id}\", 42)\n    .retrieve()\n    .body(UserDto.class);\n```\n\n**Key observations:**\n- `WebClient` and `RestClient` share the same fluent builder shape — same `.uri().retrieve().body()` pattern\n- `WebClient` returns `Mono` / `Flux`; `RestClient` returns plain values\n- `RestTemplate` is method-per-verb (`getForObject`, `postForEntity`, ...); harder to compose"
+          },
+          {
+            "type": "step",
+            "title": "Production Configuration — One WebClient Per Upstream",
+            "content": "Whichever client you pick, the production essentials are the same: pool tuning, timeouts, retries, and logging filters.\n\n**The right pattern: one `WebClient` bean per upstream service** with its own connection pool, timeouts, and base URL. Sharing one client across many upstreams forces a single pool to absorb every load shape, which causes head-of-line blocking when one upstream slows.\n\n```java\n@Bean(\"paymentsClient\")\npublic WebClient paymentsClient(WebClient.Builder builder) {\n    HttpClient http = HttpClient.create(ConnectionProvider.builder(\"pay\")\n            .maxConnections(200)\n            .pendingAcquireTimeout(Duration.ofSeconds(5))\n            .build())\n        .responseTimeout(Duration.ofSeconds(3))\n        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000);\n\n    return builder\n        .baseUrl(\"https://payments.internal\")\n        .clientConnector(new ReactorClientHttpConnector(http))\n        .defaultHeader(HttpHeaders.USER_AGENT, \"orders/1.0\")\n        .build();\n}\n```\n\n**Production essentials per client:**\n- **Connection pool tuned** — `maxConnections`, `pendingAcquireTimeout` matched to expected concurrency\n- **Response timeout** plus `ReadTimeoutHandler` and `WriteTimeoutHandler`\n- **Connect timeout** so DNS / TCP failures fail fast\n- **`onStatus` handlers** for 4xx and 5xx with explicit exception mapping\n- **Retry with backoff and jitter** filtered to retryable exceptions\n- **Circuit breaker** via Resilience4j\n- **Logging / metrics filters**\n- **mTLS / TLS** via `SslContextBuilder` if needed"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Decision Matrix and Common Pitfalls",
+            "content": "**When to use each:**\n\n| Situation | Best choice |\n|---|---|\n| New WebFlux service | `WebClient` (reactive) |\n| New MVC service, want fluent API | `RestClient` |\n| New MVC service, plan to migrate to WebFlux later | `WebClient` with `.block()` |\n| Legacy MVC service with many `RestTemplate` calls | `RestTemplate` (don't migrate aggressively) |\n| Need streaming bodies | `WebClient` only |\n| Need backpressure | `WebClient` only |\n| Calling from a virtual-thread service | `RestClient` or `WebClient` |\n\n**Pitfalls to avoid:**\n- **`RestTemplate` in WebFlux** — blocks the Netty event loop and stalls every concurrent request\n- **One shared `WebClient` for all upstreams** — head-of-line blocking when one upstream slows; create a bean per upstream\n- **No timeouts** — defaults are usually too long or absent; every outbound call needs explicit `timeout()`\n- **Retries without filtering** — retrying 4xx responses is pointless; retrying non-idempotent writes risks duplicates without an idempotency key\n- **`WebClient.create()` in handler code** — creates a new connector each time, ignoring pool benefits; always inject a pre-configured bean\n- **Mixing `WebClient` and `RestTemplate`** in the same service — pick one, otherwise you maintain two configurations of pools, retries, and metrics\n\n**Migration tactics:**\n- Wrap `RestTemplate` calls behind a service interface and migrate one method at a time\n- For an MVC service, you can introduce `WebClient` alongside `RestTemplate` — they coexist\n- For a service moving to virtual threads, prefer `RestClient` for the cleanest blocking ergonomics\n- For a service moving to WebFlux, `WebClient` is mandatory — `RestTemplate` can't go\n\n**Observability:**\n- All three clients integrate with Micrometer when configured; expose `http.client.requests` metrics with URI, method, and status tags\n- Use OpenTelemetry instrumentation for distributed tracing"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`RestTemplate`** is in maintenance mode; no new code should use it\n- **`WebClient`** is the recommended reactive client; works on both WebFlux and MVC (with `.block()`)\n- **`RestClient`** (Spring 6.1+) is the fluent blocking alternative — clean ergonomics without reactive types\n- **`RestTemplate` in WebFlux blocks the event loop** — this is the most dangerous mistake\n- **One `WebClient` per upstream** — separate connection pools prevent head-of-line blocking\n- **Always set timeouts** — `responseTimeout`, connect timeout, read/write timeout\n- **Retries should be filtered** — only retryable status codes / exceptions; respect idempotency\n- **Streaming bodies and backpressure** require `WebClient`; `RestTemplate` and `RestClient` can't stream\n- **Migration is incremental** — wrap behind a service interface and replace one call at a time"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring has three HTTP clients today, and the choice is simple in 2026.\n\n**`RestTemplate`:**\n- Original blocking client; in maintenance mode since Spring 5\n- No new features; only critical bug fixes\n- Avoid for new code\n- Never use it in WebFlux — it blocks the event loop\n\n**`WebClient`:**\n- Reactive, non-blocking, built on Reactor Netty\n- Returns `Mono` / `Flux`; supports streaming bodies and backpressure\n- Recommended for any new code\n- Works on both WebFlux (native) and MVC (with `.block()`)\n\n**`RestClient` (Spring 6.1+):**\n- Modern fluent blocking API — same builder shape as `WebClient` but returns plain values\n- Right choice for MVC services or virtual-thread services that want clean blocking ergonomics\n\n**Decision rule:**\n- WebFlux → `WebClient`\n- MVC, fluent API desired → `RestClient`\n- MVC, planning to migrate → `WebClient` with `.block()`\n- Legacy MVC with many `RestTemplate` calls → don't migrate aggressively; cost-benefit\n\n**Production essentials regardless of client:**\n- One client bean per upstream; separate connection pools\n- Explicit timeouts on every call\n- Retry with backoff and filtering for idempotent operations\n- Circuit breaker (Resilience4j) around external calls\n- Micrometer / OpenTelemetry instrumentation\n\n**The strategic answer:** pick `WebClient` for new code unless you specifically want blocking ergonomics, in which case `RestClient` is the modern choice. Never use `RestTemplate` in WebFlux.\n- Configure one client per upstream with proper timeouts and retries — the client choice matters less than the production hygiene around it."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is RestClient and how does it differ from WebClient?",
+        "Why is using RestTemplate in a WebFlux service a bug?",
+        "How do you configure connection pool size for WebClient per upstream?",
+        "How does Resilience4j integrate with WebClient for circuit breaking?"
+      ],
+      "seo": {
+        "metaTitle": "WebClient vs RestTemplate vs RestClient — Spring HTTP Clients in 2026",
+        "metaDescription": "Compare WebClient, RestTemplate, and RestClient. Why RestTemplate is in maintenance mode, when to use WebClient vs RestClient, and per-upstream pool configuration."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring has three HTTP clients today, and the choice is simple in 2026.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Spring ships three HTTP client APIs today, and the right answer depends mostly on your stack and how much fluent ergonomics you want. RestTemplate is the original Spring HTTP client introduced in Spring 3. Synchronous, thread-blocks-per-call, simple getForObject / postForEntity API. It works correctly in classic Spring MVC where each request already owns a thread. Since Spring 5 it has been in maintenance mode — no new features, only critical."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "All three clients can call the same HTTP endpoints",
+              "The differences are in API style, threading model, and feature set",
+              "| Dimension | RestTemplate | WebClient | RestClient | |---|---|---|---| | Status | Maintenance mode | Recommended | Recommended (modern blocking) | | Programming model | Blocking, synchronous | Reactive (Mono/Flux) | Blocking, synchronous | | API style | Method-per-verb | Fluent builder | Fluent builder (like WebClient) | | Underlying transport | Apache HttpClient or HttpURLConnection | Reactor Netty (default) | Apache HttpClient / JDK HttpClient | | Streaming bodies | No | Yes (Flux<DataBuffer>) | No | | Backpressure | No | Yes (HTTP/2) | No | | Retry / timeout | Manual | retryWhen, timeout operators | Manual | | Use in WebFlux | No (blocks event loop) | Native | No (would block event loop) | | Use in MVC | Native | Yes (",
+              "block() to wait) | Native | | Use with virtual threads | Yes | Yes | Yes | | Spring version | Spring 3+ | Spring 5+ | Spring 6"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When to use each: | Situation | Best choice | |---|---| | New WebFlux service | WebClient (reactive) | | New MVC service, want fluent API | RestClient | | New MVC service, plan to migrate to WebFlux later | WebClient with .block() | | Legacy MVC service with many RestTemplate calls | RestTemplate (don't migrate aggressively) | | Need streaming bodies | WebClient only | | Need backpressure | WebClient only | | Calling from a virtual-thread service | RestClient or WebClient | Pitfalls to avoid: RestTemplate in WebFlux."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Spring ships three HTTP client APIs today, and the right answer depends mostly on your stack and how much fluent ergonomics you want. RestTemplate is the original Spring HTTP client introduced in Spring 3. Synchronous, thread-blocks-per-call, simple getForObject / postForEntity API. It works correctly in classic Spring MVC where each request already owns a thread. Since Spring 5 it has."
+          }
+        ],
+        "cap": "Configure one client per upstream with proper timeouts and retries — the client choice matters less than the production hygiene around it.",
+        "familiarity_anchors": [
+          "RestTemplate",
+          "Spring",
+          "WebClient"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is RestClient and how does it differ from WebClient?",
+          "Why is using RestTemplate in a WebFlux service a bug?",
+          "How do you configure connection pool size for WebClient per upstream?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring WebFlux reactive API with Reactor"
+      }
+    }
+  ]
+}

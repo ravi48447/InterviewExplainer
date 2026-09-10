@@ -1,0 +1,117 @@
+{
+  "topic": "Redis Persistence",
+  "topicSlug": "redis-persistence",
+  "questions": [
+    {
+      "id": "redis-006",
+      "slug": "redis-persistence-rdb-vs-aof",
+      "question": "What is the difference between RDB and AOF persistence in Redis, and how do you choose between them?",
+      "title": "Redis Persistence: RDB vs AOF",
+      "direct_answer": "RDB (Redis Database) takes point-in-time snapshots of the dataset at configurable intervals, producing compact binary files ideal for backups and fast restarts. AOF (Append-Only File) logs every write operation sequentially, providing much finer-grained durability — down to every second or every command. RDB risks losing minutes of data on crash; AOF risks losing at most one second. Most production deployments enable both: RDB for fast restarts and AOF for durability.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Understanding of Redis durability trade-offs and how they affect data loss risk and restart performance.",
+        "common_mistake": "Assuming Redis is purely in-memory with no persistence, or not knowing that enabling both RDB and AOF is a common and valid production configuration.",
+        "to_stand_out": "Mention AOF rewrite (BGREWRITEAOF) to compact the AOF file, the appendfsync options (always/everysec/no), and Redis 7's RDB-AOF hybrid format."
+      },
+      "company_tags": [
+        "Twitter",
+        "GitHub",
+        "Shopify",
+        "Stripe",
+        "Cloudflare"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Fork behavior, restart ordering, and tuning",
+            "content": "RDB snapshots rely on `fork()` and copy-on-write: the child writes the snapshot while the parent keeps serving traffic, but a write-heavy dataset can cause COW churn and memory pressure spikes—something to watch when tuning `save` lines. Very large instances sometimes schedule RDB during low-traffic windows or rely on replicas to perform backups so primaries avoid the fork cost.\n\nOn restart, when both RDB and AOF exist, Redis prefers loading AOF because it represents the more complete timeline unless you configure otherwise—know this for \"what happens after a crash\" interview follow-ups. `appendfsync always` minimizes loss but can bottleneck write-heavy apps; `everysec` is the pragmatic default that still bounds loss for most business domains.\n\nHybrid persistence in Redis 7 combines an RDB preamble with an AOF tail so you get faster restarts than replaying a giant AOF while keeping fine-grained tail durability. Regardless of mode, validate backup restores quarterly: an untested RDB file is just wishful thinking. For pure cache deployments, many teams disable persistence entirely and rely on warm reload from the database, explicitly accepting empty Redis after maintenance—state that choice instead of leaving persistence ambiguous.\n\nOne important nuance is the `maxmemory` interaction: if you run both RDB and AOF, the `BGSAVE` fork for snapshots and the `BGREWRITEAOF` fork for compaction can temporarily double memory usage due to copy-on-write pages. Monitor `used_memory_rss` after forks and schedule rewrites during low-traffic windows. Also note that on restart, Redis prefers loading the AOF if it exists because it represents a more complete timeline — which means a corrupted AOF blocks startup unless you run `redis-check-aof --fix`."
+          },
+          {
+            "type": "comparison_table",
+            "title": "RDB vs AOF Trade-off Matrix",
+            "content": "| Aspect | RDB (Snapshots) | AOF (Append-Only File) |\n|---|---|---|\n| **Mechanism** | Periodic point-in-time binary snapshot via `BGSAVE` (fork + COW) | Logs every write command as it arrives |\n| **Data loss window** | Minutes (since last snapshot) | Seconds (`everysec`) or zero (`always`) |\n| **File size** | Compact binary — smaller than AOF | Larger (grows until rewrite); hybrid format in Redis 7 |\n| **Restart speed** | Fast — binary load, no replay | Slower — must replay command log (hybrid format mitigates) |\n| **CPU impact** | Spike during `fork()`; COW memory pressure on write-heavy instances | Continuous but small; `BGREWRITEAOF` causes periodic fork |\n| **Disk I/O** | Burst write during snapshot | Continuous append; `fsync` policy controls throughput |\n| **Backup friendliness** | Excellent — single portable file, easy to copy off-host | Possible but file is actively written; prefer RDB for backups |\n| **`appendfsync` options** | N/A | `always` (every write), `everysec` (default), `no` (OS decides) |\n| **Best for** | Backups, disaster recovery, cold standby bootstrapping | Durability-critical data, minimizing data loss on crash |\n| **Production recommendation** | Enable alongside AOF for fast restarts | Enable with `everysec` as the default durability baseline |"
+          },
+          {
+            "type": "code_example",
+            "title": "Redis Configuration for Both Persistence Modes",
+            "content": "Redis configuration for enabling both persistence modes:\n\n```bash\n# redis.conf — RDB configuration\nsave 900 1        # Snapshot if ≥1 key changed in 900 seconds\nsave 300 10       # Snapshot if ≥10 keys changed in 300 seconds\nsave 60 10000     # Snapshot if ≥10,000 keys changed in 60 seconds\nrdbcompression yes\nrdbchecksum yes\ndbfilename dump.rdb\ndir /var/lib/redis\n\n# AOF configuration\nappendonly yes\nappendfilename \"appendonly.aof\"\nappendfsync everysec               # Best balance of safety and performance\nauto-aof-rewrite-percentage 100    # Rewrite when AOF is 2× last rewrite size\nauto-aof-rewrite-min-size 64mb     # Don't rewrite tiny AOFs\naof-use-rdb-preamble yes           # Redis 7 hybrid format — fast load + AOF tail\n\n# Memory safety during forks\nmaxmemory 6gb\nmaxmemory-policy allkeys-lru\nlazyfree-lazy-eviction yes\n```\n\nSpring Boot `application.yml` does not configure Redis server persistence directly — these settings live in `redis.conf` on the server. However, you can verify persistence status programmatically:\n\n```java\n@Component\npublic class RedisHealthCheck {\n\n    @Autowired\n    private StringRedisTemplate redis;\n\n    public Map<String, String> getPersistenceInfo() {\n        Properties info = redis.getConnectionFactory()\n            .getConnection().serverCommands().info(\"persistence\");\n        return Map.of(\n            \"rdb_last_save_time\", info.getProperty(\"rdb_last_save_time\"),\n            \"aof_enabled\", info.getProperty(\"aof_enabled\"),\n            \"aof_last_rewrite_status\", info.getProperty(\"aof_last_rewrite_status\")\n        );\n    }\n}\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **RDB: compact binary snapshot, fast restart, up to interval data loss** — snapshot at intervals; crash between snapshots loses all writes since the last save; best for caches where some data loss is acceptable\n- **AOF: every write logged, up to 1s data loss with `everysec` fsync** — replays commands on restart; up to 1s of data loss; larger files and slower restart than RDB\n- **`fsync: everysec` is the recommended AOF setting** — 1-second flush window; balances durability and write performance; `fsync: always` is zero-loss but adds latency to every write\n- **AOF rewrite compacts the log** — `BGREWRITEAOF` rewrites the file from current state, not full command history; prevents unbounded file growth; configure auto-rewrite thresholds\n- **For pure caching: disable persistence** — if the cache can be rebuilt from the database on restart, persistence adds write overhead and complexity without benefit; use `save \"\"` in redis.conf"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Redis is an in-memory store but supports two persistence mechanisms that determine how much data you'd lose on a crash: RDB snapshots and AOF (Append Only File) logging.\n\n**RDB — point-in-time snapshots**\n- RDB forks a child process to write the current dataset to a binary snapshot file at configured intervals — `save 900 1` means: save if at least 1 key changed in the last 900 seconds\n- Because it's a background fork, RDB snapshots don't block the main Redis process (the fork is fast; the actual write happens in the child)\n- The downside is staleness: if Redis crashes between snapshots, all writes since the last snapshot are lost — with a 15-minute interval, you can lose up to 15 minutes of data\n\n**AOF — append-only log of every write command**\n- AOF logs every write command to a file in the order it was received — `SET user:1 name Alice`, `EXPIRE user:1 3600` are appended as text; on restart, Redis replays the log to reconstruct the dataset\n- AOF with `fsync: everysec` flushes the log to disk every second — at most 1 second of data loss on crash, at the cost of slightly higher write latency\n- AOF with `fsync: always` flushes on every write — zero data loss, but much slower; only appropriate for applications with very strict durability requirements\n\n**Combining both**\n- The recommended production configuration uses both: AOF for durability (minimal data loss) and RDB for faster restarts — loading a binary snapshot is much faster than replaying millions of AOF commands\n- AOF files grow without bound; Redis's AOF rewrite compacts them by rewriting the current state rather than the full command history: `BGREWRITEAOF` or automatic rewrite when the file exceeds a configured size\n\nFor caching use cases where the cache can be rebuilt from the database on restart: disable persistence entirely and accept the cache cold-start penalty — it simplifies operations significantly."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the BGREWRITEAOF command and when should you trigger it?",
+        "How does Redis 7's hybrid persistence format work?",
+        "If Redis restarts and both RDB and AOF files exist, which one does Redis use?"
+      ],
+      "seo": {
+        "metaTitle": "Redis RDB vs AOF Persistence Explained | Java Interview Guide",
+        "metaDescription": "Compare Redis RDB snapshots vs AOF persistence with trade-off tables, configuration examples, and production recommendations for Java developers."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "Redis is an in-memory store but supports two persistence mechanisms that determine how much data you'd lose on a crash: RDB snapshots and AOF (Append Only File) logging.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "RDB snapshots rely on fork() and copy-on-write: the child writes the snapshot while the parent keeps serving traffic, but a write-heavy dataset can cause COW churn and memory pressure spikes—something to watch when tuning save lines. Very large instances sometimes schedule RDB during low-traffic windows or rely on replicas to perform backups so primaries avoid the fork cost. On restart, when both RDB and AOF exist, Redis prefers loading AOF."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Aspect | RDB (Snapshots) | AOF (Append-Only File) | |---|---|---| | Mechanism | Periodic point-in-time binary snapshot via BGSAVE (fork + COW) | Logs every write command as it arrives | | Data loss window | Minutes (since last snapshot) | Seconds (everysec) or zero (always) | | File size | Compact binary — smaller than AOF | Larger (grows until rewrite)",
+              "hybrid format in Redis 7 | | Restart speed | Fast — binary load, no replay | Slower — must replay command log (hybrid format mitigates) | | CPU impact | Spike during fork()",
+              "COW memory pressure on write-heavy instances | Continuous but small",
+              "BGREWRITEAOF causes periodic fork | | Disk I/O | Burst write during snapshot | Continuous append",
+              "fsync policy controls throughput | | Backup friendliness | Excellent — single portable file, easy to copy off-host | Possible but file is actively written",
+              "prefer RDB for backups | | appendfsync options | N/A | always (every write), everysec (default), no (OS decides) | | Best for | Backups, disaster recovery, cold standby bootstrapping | Durability-critical data, minimizing data loss on crash | | Production recommendation | Enable alongside AOF for fast restarts | Enable with everysec as the default durability baseline |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "RDB snapshots rely on fork() and copy-on-write: the child writes the snapshot while the parent keeps serving traffic, but a write-heavy dataset can cause COW churn and memory pressure spikes—something to watch when tuning save lines. Very large instances sometimes schedule RDB during low-traffic windows or rely on replicas to perform backups so primaries avoid the fork cost. On restart, when both RDB and AOF exist, Redis prefers loading AOF because it represents the more complete timeline unless you configure otherwise—know this for \"what happens after a crash\" interview follow-ups."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Redis configuration for enabling both persistence modes: ``bash redis.conf — RDB configuration save 900 1 # Snapshot if ≥1 key changed in 900 seconds save 300 10 # Snapshot if ≥10 keys changed in 300 seconds save 60 10000 # Snapshot if ≥10,000 keys changed in 60 seconds rdbcompression yes rdbchecksum yes dbfilename dump.rdb dir /var/lib/redis AOF configuration appendonly yes."
+          }
+        ],
+        "cap": "RDB — point-in-time snapshots RDB forks a child process to write the current dataset to a binary snapshot file at configured intervals — save 900 1 means: save if at least 1 key changed in.",
+        "familiarity_anchors": [
+          "Redis",
+          "Database",
+          "Append"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the BGREWRITEAOF command and when should you trigger it?",
+          "How does Redis 7's hybrid persistence format work?",
+          "If Redis restarts and both RDB and AOF files exist, which one does Redis use?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app using Redis for session and cache"
+      }
+    }
+  ]
+}

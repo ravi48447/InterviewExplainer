@@ -1,0 +1,73 @@
+{
+  "topic": "Memory Analysis",
+  "topicSlug": "memory-analysis",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "jvm-performance",
+  "questions": [
+    {
+      "id": "memory-leak-diagnosis",
+      "title": "Diagnosing Memory Leaks in Java",
+      "slug": "memory-leak-diagnosis",
+      "question": "How do you identify and fix memory leaks in a Java application?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Memory leak: objects not reachable via live references but preventing GC**\n- **Symptoms: growing heap over time, increasing Full GC frequency, eventual OOM**\n- **Heap dump: snapshot of all objects \u2014 analyze with Eclipse MAT or VisualVM**\n- **Common causes: static collections, listeners not removed, ThreadLocal not cleared**\n- **jcmd / jmap: trigger heap dumps from running JVM**\n- **Actuator /actuator/heapdump: Spring Boot endpoint for heap dumps**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "A memory leak in Java is when objects can't be garbage collected because some live reference (intentionally or accidentally) still points to them. The symptoms are characteristic: heap usage grows steadily over time, GC frequency increases, Old Gen fills up progressively, and eventually you get an OutOfMemoryError after hours or days of running.\n\nTo diagnose, I first confirm it's a leak by looking at heap usage trend over time in monitoring (Grafana/Prometheus). If heap grows without bound after GC cycles, it's a leak. Then I take a heap dump \u2014 either via `jcmd <pid> GC.heap_dump` or via Spring Boot Actuator's `/actuator/heapdump` endpoint. I analyze it in Eclipse Memory Analyzer (MAT) which can automatically identify the 'leak suspects' \u2014 objects taking the most retained heap.\n\nCommon causes: static collections that grow without bound (a cache without size limit), event listeners added but never removed, ThreadLocal values not cleaned up, and inner class references holding onto outer class instances."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Diagnosing Memory Leak \u2014 Step by Step\n\n```bash\n# STEP 1: Confirm it's a leak (not just working set)\n# Monitor heap with JVM metrics over 24 hours:\n# jvm_memory_used_bytes{area=\"heap\"} should plateau after GC\n# If it grows continuously \u2192 leak\n\n# STEP 2: Enable heap OOM dump automatically:\njava -XX:+HeapDumpOnOutOfMemoryError \\\n     -XX:HeapDumpPath=/var/log/app/heap.hprof \\\n     -jar myapp.jar\n# Automatically captures heap dump when OOM occurs\n\n# STEP 3: Trigger heap dump on running app:\njcmd <pid> GC.heap_dump /tmp/heap-$(date +%s).hprof\n# OR:\njmap -dump:format=b,file=/tmp/heap.hprof <pid>\n# OR via Spring Boot Actuator:\ncurl -o heap.hprof http://localhost:8080/actuator/heapdump\n\n# STEP 4: Analyze with Eclipse MAT\n# MAT > File > Open Heap Dump > heap.hprof\n# Run: Leak Suspects Report\n# Shows: \"Problem 1: 850 instances of com.example.OrderCache,\n#         total retained: 2.4GB (87% of heap)\"\n```\n\n## Common Memory Leak Patterns\n\n```java\n// LEAK 1: Static collection growing without bound\npublic class MetricsCollector {\n    // WRONG: Static map grows forever (never cleaned)\n    private static Map<String, List<Long>> metrics = new HashMap<>();\n\n    public void record(String metricName, long value) {\n        metrics.computeIfAbsent(metricName, k -> new ArrayList<>()).add(value);\n        // 1 million requests \u00d7 avg 1KB per metric = 1GB over time\n    }\n\n    // FIX: Use bounded cache\n    private static final Map<String, Long> metrics =\n        Caffeine.newBuilder()\n            .maximumSize(1000)\n            .expireAfterWrite(Duration.ofMinutes(5))\n            .build()\n            .asMap();\n}\n\n// LEAK 2: Event listeners never removed\npublic class OrderProcessor implements ApplicationListener<OrderEvent> {\n    // WRONG: Spring adds this as a singleton listener \u2014 fine\n    // But if you manually add listeners:\n    public void setup() {\n        eventBus.addListener(event -> process(event));  // Lambda holds reference\n        // Lambda is held by eventBus \u2192 OrderProcessor can't be GC'd\n        // If OrderProcessor is created many times (e.g., per-request) \u2192 leak\n    }\n\n    // FIX: Remove listener when done\n    public void teardown() {\n        eventBus.removeListener(this);  // Or store listener reference and remove\n    }\n}\n\n// LEAK 3: ThreadLocal not cleaned up\npublic class SecurityContextFilter implements Filter {\n    private static final ThreadLocal<User> currentUser = new ThreadLocal<>();\n\n    // WRONG:\n    @Override\n    public void doFilter(ServletRequest req, ServletResponse resp, FilterChain chain) {\n        currentUser.set(extractUser(req));  // Set ThreadLocal\n        chain.doFilter(req, resp);\n        // If exception occurs or forgot: currentUser never cleared!\n        // Thread goes back to pool WITH stale user reference\n    }\n\n    // FIX: Always clean up ThreadLocal:\n    @Override\n    public void doFilter(ServletRequest req, ServletResponse resp, FilterChain chain) {\n        try {\n            currentUser.set(extractUser(req));\n            chain.doFilter(req, resp);\n        } finally {\n            currentUser.remove();  // ALWAYS clean up\n        }\n    }\n}\n\n// LEAK 4: Inner class capturing outer class reference\npublic class OrderService {\n    private final List<Order> pendingOrders = new ArrayList<>();\n\n    public Runnable createWorker() {\n        // Anonymous class captures implicit reference to OrderService.this:\n        return new Runnable() {\n            @Override\n            public void run() {\n                // Uses pendingOrders (implicit OrderService.this.pendingOrders)\n                pendingOrders.stream()...process...;\n            }\n        };\n    }\n    // If this Runnable is submitted to an executor and stays queued long:\n    // \u2192 ExecutorService holds Runnable \u2192 Runnable holds OrderService\n    // \u2192 OrderService can't be GC'd\n\n    // FIX: Use static nested class or pass only what you need:\n    public Runnable createWorker() {\n        List<Order> ordersCopy = new ArrayList<>(pendingOrders);\n        return () -> ordersCopy.stream()...process...;\n        // Lambda captures ordersCopy, not the entire OrderService\n    }\n}\n```\n\n## Monitoring Memory in Production\n\n```yaml\n# Prometheus + Micrometer: track these metrics\n\njvm_memory_used_bytes{area=\"heap\"}\n  \u2192 Should plateau after GC cycles\n  \u2192 Alert if trending up over 6 hours\n\njvm_memory_max_bytes{area=\"heap\"}\n  \u2192 Your -Xmx setting\n\njvm_gc_pause_seconds_sum / jvm_gc_pause_seconds_count\n  \u2192 Average GC pause duration\n  \u2192 Alert if > 200ms average\n\njvm_gc_memory_promoted_bytes_total\n  \u2192 Rate of promotion from Young \u2192 Old Gen\n  \u2192 High rate = objects living too long = potential leak or cache issue\n\njvm_gc_live_data_size_bytes\n  \u2192 Size of Old Gen after GC\n  \u2192 Should be relatively stable\n  \u2192 If it grows over days \u2192 leak\n```\n\n## Production Reality\n\nThe `Caffeine` cache library solves 80% of memory leak issues from unbounded caches \u2014 always prefer `Caffeine.newBuilder().maximumSize(N).expireAfterWrite(Duration)` over `new HashMap()` for any long-lived cache. For ThreadLocal, the `try/finally` cleanup pattern is non-negotiable in thread pool environments (Tomcat, virtual threads). Heap dumps can be large (multiple GB) \u2014 take them during low-traffic windows and have enough disk space. Eclipse MAT's \"Leak Suspects\" report is remarkably accurate and usually identifies the problem in minutes."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A memory leak in Java is when objects can't be garbage collected because some live reference (intentionally or accidentally) still points to them.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Common causes: static collections that grow without bound (a cache without size limit), event listeners added but never removed, ThreadLocal values not cleaned up, and inner class references holding o",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

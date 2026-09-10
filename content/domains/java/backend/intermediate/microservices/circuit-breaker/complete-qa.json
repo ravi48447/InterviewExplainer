@@ -1,0 +1,73 @@
+{
+  "topic": "Circuit Breaker",
+  "topicSlug": "circuit-breaker",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "microservices",
+  "questions": [
+    {
+      "id": "circuit-breaker-pattern",
+      "title": "Circuit Breaker Pattern",
+      "slug": "circuit-breaker-pattern",
+      "question": "What is the Circuit Breaker pattern and how do you implement it with Resilience4j in Spring Boot?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Three states: CLOSED (normal), OPEN (fail fast), HALF_OPEN (testing recovery)**\n- **Prevents cascade failures: stop hammering a failing downstream service**\n- **Resilience4j: `@CircuitBreaker` annotation + `fallbackMethod`**\n- **Config: `slidingWindowSize`, `failureRateThreshold`, `waitDurationInOpenState`**\n- **Fallback: return default/cached response \u2014 don't return error to end user if avoidable**\n- **Combine with Retry (with backoff) and Timeout for full resilience**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "A Circuit Breaker protects your service from cascading failures when a downstream dependency is struggling. It works like a real circuit breaker: in CLOSED state it passes requests through normally; when failures exceed a threshold, it trips to OPEN and fails fast without calling the downstream service; after a wait period, it moves to HALF_OPEN and lets a few test requests through to see if the service has recovered.\n\nWith Resilience4j in Spring Boot, you annotate the method with `@CircuitBreaker` and specify a `fallbackMethod`. The fallback receives the exception and returns a default or cached response, keeping the user experience degraded-but-functional instead of completely broken.\n\nThe key metric to configure is `failureRateThreshold` \u2014 at what percentage of failures should the circuit open? Combined with `slidingWindowSize` (how many recent calls to evaluate), you tune sensitivity to failure."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Circuit Breaker States\n\n```\n     CLOSED (normal)\n     All requests pass through\n     Track failure rate over sliding window\n           \u2193 (failure rate > threshold)\n     OPEN (fail fast)\n     All requests immediately return fallback\n     No calls to downstream service\n           \u2193 (after waitDurationInOpenState)\n     HALF_OPEN (testing)\n     Let permittedNumberOfCallsInHalfOpenState through\n     If success rate > threshold \u2192 CLOSED\n     If failure rate > threshold \u2192 OPEN again\n```\n\n## Resilience4j Setup\n\n```xml\n<!-- pom.xml -->\n<dependency>\n    <groupId>io.github.resilience4j</groupId>\n    <artifactId>resilience4j-spring-boot3</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-aop</artifactId>\n</dependency>\n```\n\n```yaml\n# application.yml\nresilience4j:\n  circuitbreaker:\n    configs:\n      default:\n        slidingWindowSize: 10              # Evaluate last 10 calls\n        minimumNumberOfCalls: 5            # Min calls before circuit can open\n        failureRateThreshold: 50           # Open if >50% fail\n        waitDurationInOpenState: 10s       # Stay open for 10s before half-open\n        permittedNumberOfCallsInHalfOpenState: 3  # 3 test calls in half-open\n        recordExceptions:                  # Which exceptions count as failures\n          - java.io.IOException\n          - java.util.concurrent.TimeoutException\n          - feign.FeignException.ServiceUnavailable\n        ignoreExceptions:                  # Don't count as failures\n          - com.example.NotFoundException  # 404 is not a circuit issue\n    instances:\n      paymentService:\n        baseConfig: default\n        waitDurationInOpenState: 30s       # Payments need longer recovery time\n      inventoryService:\n        baseConfig: default\n        failureRateThreshold: 30           # Open sooner for critical inventory\n\n  retry:\n    instances:\n      paymentService:\n        maxAttempts: 3\n        waitDuration: 500ms\n        enableExponentialBackoff: true\n        exponentialBackoffMultiplier: 2    # 500ms, 1s, 2s\n\n  timelimiter:\n    instances:\n      paymentService:\n        timeoutDuration: 3s                # Timeout after 3 seconds\n```\n\n## Service with Circuit Breaker\n\n```java\n@Service\n@Slf4j\npublic class OrderService {\n\n    private final PaymentServiceClient paymentClient;\n    private final InventoryServiceClient inventoryClient;\n    private final CachedInventoryRepository cachedInventory;\n\n    // Circuit breaker + retry + timeout stacked:\n    @CircuitBreaker(name = \"paymentService\", fallbackMethod = \"processPaymentFallback\")\n    @Retry(name = \"paymentService\")\n    @TimeLimiter(name = \"paymentService\")\n    public CompletableFuture<PaymentResult> processPayment(PaymentRequest request) {\n        return CompletableFuture.supplyAsync(() ->\n            paymentClient.charge(request)\n        );\n    }\n\n    // Fallback \u2014 must have same return type, plus Throwable param:\n    private CompletableFuture<PaymentResult> processPaymentFallback(\n            PaymentRequest request, Throwable ex) {\n        log.warn(\"Payment service unavailable: {}. Queuing payment.\", ex.getMessage());\n\n        // Option 1: Queue for async retry\n        paymentQueue.add(request);\n        return CompletableFuture.completedFuture(\n            PaymentResult.pending(\"Payment queued for processing\")\n        );\n\n        // Option 2: Return error to user (worse UX)\n        // return CompletableFuture.completedFuture(PaymentResult.failed(\"Service unavailable\"));\n    }\n\n    // Circuit breaker for read operations (cache fallback):\n    @CircuitBreaker(name = \"inventoryService\", fallbackMethod = \"getInventoryFallback\")\n    public InventoryStatus getInventory(String productId) {\n        return inventoryClient.getStatus(productId);\n    }\n\n    private InventoryStatus getInventoryFallback(String productId, Throwable ex) {\n        log.warn(\"Inventory service down, using cache for {}\", productId);\n        return cachedInventory.getLastKnownStatus(productId)  // Stale data better than error\n            .orElse(InventoryStatus.unknown(productId));\n    }\n}\n```\n\n## Observing Circuit Breaker State\n\n```java\n@RestController\n@RequestMapping(\"/admin/circuit-breakers\")\npublic class CircuitBreakerController {\n\n    private final CircuitBreakerRegistry registry;\n\n    @GetMapping\n    public Map<String, CircuitBreakerInfo> getAll() {\n        return registry.getAllCircuitBreakers().stream()\n            .collect(Collectors.toMap(\n                CircuitBreaker::getName,\n                cb -> CircuitBreakerInfo.builder()\n                    .state(cb.getState().name())\n                    .failureRate(cb.getMetrics().getFailureRate())\n                    .numberOfBufferedCalls(cb.getMetrics().getNumberOfBufferedCalls())\n                    .numberOfFailedCalls(cb.getMetrics().getNumberOfFailedCalls())\n                    .build()\n            ));\n    }\n\n    @PostMapping(\"/{name}/force-open\")\n    public void forceOpen(@PathVariable String name) {\n        registry.circuitBreaker(name).transitionToForcedOpenState();\n        // Useful for maintenance or testing fallback behavior\n    }\n}\n```\n\n## Production Reality\n\nFew developers think about circuit breaker configuration tuning. In production, `slidingWindowSize=10` with `minimumNumberOfCalls=5` means it needs 5+ calls to even evaluate. If your service handles 1 req/sec, the circuit won't respond to failures fast enough. Tune based on actual traffic. Also: always implement the fallback method \u2014 an open circuit without a fallback just throws a `CallNotPermittedException` which is as bad as the original failure for your users."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A Circuit Breaker protects your service from cascading failures when a downstream dependency is struggling.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "The key metric to configure is failureRateThreshold \u2014 at what percentage of failures should the circuit open? Combined with slidingWindowSize (how many recent calls to evaluate), you tune sensitivity",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

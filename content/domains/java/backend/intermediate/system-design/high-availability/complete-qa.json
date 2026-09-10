@@ -1,0 +1,73 @@
+{
+  "topic": "High Availability",
+  "topicSlug": "high-availability",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "system-design",
+  "questions": [
+    {
+      "id": "high-availability-patterns",
+      "title": "High Availability Patterns",
+      "slug": "high-availability-patterns",
+      "question": "How do you design a system for high availability?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **HA = no single point of failure, automatic recovery**\n- **Nines of availability: 99.9% (9hr/yr), 99.99% (1hr/yr), 99.999% (5min/yr)**\n- **Redundancy: active-passive (failover) vs active-active (load balanced)**\n- **Health checks + automatic restart (Kubernetes liveness probes)**\n- **Graceful degradation: serve partial functionality when dependencies fail**\n- **Multi-AZ (Availability Zone) deployment for cloud HA**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "High availability means the system continues to function even when individual components fail. The core principle is eliminating single points of failure: every component that a failure would bring down the entire system needs redundancy.\n\nFor the application tier, you run multiple instances. If one dies, the load balancer stops routing to it and the others absorb the traffic. For the database, you use primary-replica with automatic failover \u2014 if the primary fails, a replica is promoted. For the message queue, you use clustering.\n\nThe availability target drives how you design. 99.9% availability allows 8.7 hours of downtime per year \u2014 achievable with a single region, multiple AZs, and automatic restart. 99.99% (52 minutes/year) needs more: multiple regions with active-active or active-passive failover, faster detection, and runbooks for every failure scenario.\n\nBeyond redundancy, graceful degradation matters: when payment service is down, can you still take orders and process payments asynchronously? When the recommendation engine is down, can you show non-personalized results instead of an error?"
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Availability Nines \u2014 What They Mean in Practice\n\n```\nAvailability | Downtime/Year | Downtime/Month | Downtime/Week\n-------------|---------------|----------------|---------------\n99%          | 3.65 days     | 7.3 hours      | 1.7 hours\n99.9%        | 8.7 hours     | 43.8 minutes   | 10.1 minutes\n99.95%       | 4.4 hours     | 21.9 minutes   | 5 minutes\n99.99%       | 52.6 minutes  | 4.4 minutes    | 1 minute\n99.999%      | 5.25 minutes  | 26 seconds     | 6 seconds\n\nRequirements:\n  Internal tools: 99% is fine (people go home at night)\n  Customer-facing CRUD: 99.9% (SLAs with customers)\n  E-commerce checkout: 99.99% (every minute of downtime = lost revenue)\n  Banking/payments: 99.999% (regulatory requirements)\n\nCost increases non-linearly:\n  99% \u2192 99.9%: moderate (multi-instance, monitoring)\n  99.9% \u2192 99.99%: significant (multi-AZ, chaos testing)\n  99.99% \u2192 99.999%: very expensive (multi-region, massive ops team)\n```\n\n## Kubernetes Health Checks\n\n```yaml\napiVersion: apps/v1\nkind: Deployment\nspec:\n  replicas: 3  # Always run 3 instances\n  template:\n    spec:\n      containers:\n      - name: order-service\n        image: order-service:latest\n\n        # Liveness probe: is the container alive? If not, restart it.\n        livenessProbe:\n          httpGet:\n            path: /actuator/health/liveness\n            port: 8080\n          initialDelaySeconds: 60  # Wait for JVM startup\n          periodSeconds: 10        # Check every 10 seconds\n          failureThreshold: 3      # Restart after 3 consecutive failures\n\n        # Readiness probe: is it ready to receive traffic?\n        # Failed readiness \u2192 removed from load balancer (not restarted)\n        readinessProbe:\n          httpGet:\n            path: /actuator/health/readiness\n            port: 8080\n          initialDelaySeconds: 30\n          periodSeconds: 5\n          failureThreshold: 2      # Remove from LB after 2 failures\n\n        # Startup probe: allow slow startup without triggering liveness\n        startupProbe:\n          httpGet:\n            path: /actuator/health/liveness\n            port: 8080\n          initialDelaySeconds: 10\n          periodSeconds: 10\n          failureThreshold: 30    # 30 \u00d7 10s = 5min startup budget\n```\n\n```java\n// Spring Boot Actuator health endpoints:\n@Component\npublic class DatabaseHealthIndicator implements HealthIndicator {\n\n    private final DataSource dataSource;\n\n    @Override\n    public Health health() {\n        try (Connection conn = dataSource.getConnection()) {\n            conn.prepareStatement(\"SELECT 1\").execute();\n            return Health.up()\n                .withDetail(\"database\", \"PostgreSQL\")\n                .withDetail(\"status\", \"Accepting connections\")\n                .build();\n        } catch (Exception e) {\n            return Health.down()\n                .withException(e)\n                .withDetail(\"error\", \"Cannot connect to database\")\n                .build();\n        }\n    }\n}\n// If DB check fails \u2192 readiness probe fails \u2192 pod removed from LB\n// Pod NOT restarted (liveness still OK) \u2014 it's a downstream issue\n```\n\n## Active-Active vs Active-Passive\n\n```\nACTIVE-PASSIVE (Failover):\n  Region A (primary, handling traffic)\n  Region B (standby, replicating data, not serving traffic)\n\n  If Region A fails:\n    \u2192 DNS failover to Region B (can take 1-5 minutes)\n    \u2192 Region B starts serving traffic\n    \u2192 During failover: downtime (from seconds to minutes depending on setup)\n\n  Good for: simpler to implement and reason about\n  Downtime during failover: yes (RPO/RTO consideration)\n\nACTIVE-ACTIVE:\n  Region A handles US traffic (50%)\n  Region B handles EU traffic (50%)\n\n  If Region A fails:\n    \u2192 DNS routes all traffic to Region B immediately\n    \u2192 No downtime (already serving traffic)\n    \u2192 Region B must handle double load (provision for this)\n\n  Harder: data replication must be bidirectional and conflict-free\n  Read-only active-active: easy (replicas in each region, writes to single primary)\n  Read-write active-active: hard (need CRDTs or careful conflict resolution)\n\nFOR MOST TEAMS: Active-passive across AZs (within same region) is sufficient.\n  - All within same AWS region (us-east-1)\n  - Services spread across 3 AZs (availability zones)\n  - If AZ goes down: other 2 continue serving, K8s restarts pods elsewhere\n  - This gives ~99.99% availability with manageable complexity\n```\n\n## Graceful Degradation\n\n```java\n@Service\npublic class ProductPageService {\n\n    private final ProductRepository productRepo;\n    private final RecommendationService recommendationService;\n    private final ReviewService reviewService;\n\n    // Recommendations are non-critical \u2014 degrade gracefully if they fail:\n    public ProductPageData getProductPage(Long productId) {\n        Product product = productRepo.findById(productId).orElseThrow();\n\n        // Fetch recommendations with circuit breaker fallback:\n        List<Product> recommendations;\n        try {\n            recommendations = recommendationService.getRelated(productId);\n        } catch (Exception e) {\n            log.warn(\"Recommendations unavailable for product {}, using fallback\", productId);\n            recommendations = productRepo.findTopSellers(10);  // Generic fallback\n        }\n\n        // Fetch reviews with timeout fallback:\n        Optional<ReviewSummary> reviews;\n        try {\n            reviews = reviewService.getSummary(productId);\n        } catch (Exception e) {\n            log.warn(\"Reviews unavailable for product {}\", productId);\n            reviews = Optional.empty();  // Page renders without reviews\n        }\n\n        return ProductPageData.builder()\n            .product(product)\n            .recommendations(recommendations)  // Generic OR personalized\n            .reviews(reviews.orElse(null))     // Null \u2192 UI shows 'Reviews loading...'\n            .build();\n    }\n}\n```\n\n## Production Reality\n\nFor an intermediate developer, knowing the Kubernetes liveness/readiness probe distinction is high-value: liveness failure restarts the pod (fixes crashes), readiness failure removes it from the load balancer (handles temporary overload or dependency failure). Getting this wrong causes cascading restart loops in production. Also: graceful shutdown is part of HA \u2014 configure `terminationGracePeriodSeconds` and handle `SIGTERM` in your application to allow in-flight requests to complete before the pod stops."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "High availability means the system continues to function even when individual components fail.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Beyond redundancy, graceful degradation matters: when payment service is down, can you still take orders and process payments asynchronously? When the recommendation engine is down, can you show non-p",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

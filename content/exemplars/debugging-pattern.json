@@ -1,0 +1,47 @@
+{
+  "archetype": "debugging-pattern",
+  "exemplars": [
+    {
+      "name": "PostgreSQL Locking",
+      "complexity": 3,
+      "question": "How does PostgreSQL locking work? How do you prevent and detect deadlocks?",
+      "slug": "postgresql-locking-deadlocks",
+      "difficulty": "intermediate",
+      "interviewer_intent": {
+        "testing": "Understanding of explicit locking for optimistic/pessimistic concurrency control",
+        "common_mistake": "Not knowing that SELECT FOR UPDATE holds locks until transaction end — can cause significant contention",
+        "to_stand_out": "Explain advisory locks for application-level distributed locking and the SKIP LOCKED pattern for work queues"
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "key_points",
+            "content": "- **MVCC = readers never block writers** — `SELECT` never waits for `UPDATE` and vice versa. Locking only matters for write-write conflicts. `UPDATE t SET x=1 WHERE id=5` implicitly acquires a row-level exclusive lock on row 5\n- **Deadlock = circular wait** — Tx1 locks row A then needs B; Tx2 locks B then needs A. PostgreSQL detects the cycle after `deadlock_timeout` (default 1s) and aborts the cheaper transaction\n- **Prevention: consistent ordering** — `SELECT ... WHERE id IN (1,2,3) ORDER BY id FOR UPDATE` ensures all transactions lock rows in the same order, making cycles impossible\n- **SKIP LOCKED for work queues** — `SELECT * FROM jobs WHERE status='PENDING' LIMIT 1 FOR UPDATE SKIP LOCKED` lets multiple workers grab the next available job without blocking each other\n- **Advisory locks** — `SELECT pg_try_advisory_xact_lock(42)` returns true/false, auto-releases at transaction end. Use for: cron deduplication, distributed mutex, preventing concurrent batch runs"
+          },
+          {
+            "type": "problem_statement",
+            "content": "Consider a real-world scenario: an e-commerce application has intermittent `ERROR: deadlock detected` errors in production. Two concurrent checkout processes both need to update inventory for the same products, but they process them in different orders based on the cart contents. Transaction 1 updates product A then B; Transaction 2 updates B then A. When both run simultaneously, each holds one lock and waits for the other — a classic **circular wait** deadlock."
+          },
+          {
+            "type": "before_code",
+            "language": "java",
+            "content": "Here's exactly how the deadlock happens — notice how each transaction locks rows in a different order:\n\n```sql\n-- Transaction 1: checkout for order with products [A, B]\nBEGIN;\nUPDATE inventory SET quantity = quantity - 1 WHERE product_id = 'A';\n-- ↑ Acquires exclusive row lock on product A\n-- ↓ Now needs lock on B, but Tx2 already holds it → BLOCKS\nUPDATE inventory SET quantity = quantity - 1 WHERE product_id = 'B';\nCOMMIT;\n\n-- Transaction 2 (concurrent): checkout for products [B, A]\nBEGIN;\nUPDATE inventory SET quantity = quantity - 1 WHERE product_id = 'B';\n-- ↑ Acquires exclusive row lock on product B\n-- ↓ Now needs lock on A, but Tx1 already holds it → BLOCKS\nUPDATE inventory SET quantity = quantity - 1 WHERE product_id = 'A';\nCOMMIT;\n\n-- RESULT: Circular wait detected after deadlock_timeout (1s)\n-- PostgreSQL picks the cheaper transaction and aborts it:\n-- ERROR: deadlock detected\n-- DETAIL: Process 12345 waits for ShareLock on transaction 67890;\n--         blocked by process 67891.\n-- Your application MUST catch this and retry the transaction.\n```"
+          },
+          {
+            "type": "diagnosis",
+            "content": "**Detect lock waits in production:**\n```sql\n-- Show current lock waits:\nSELECT\n    blocking.pid AS blocking_pid,\n    blocked.pid AS blocked_pid,\n    blocking_activity.query AS blocking_query,\n    blocked_activity.query AS blocked_query\nFROM pg_stat_activity blocked\nJOIN pg_stat_activity blocking_activity\n    ON blocking_activity.pid = blocked.wait_event\nWHERE blocked.wait_event IS NOT NULL;\n\n-- See lock details:\nSELECT * FROM pg_locks WHERE NOT granted;\n\n-- Log deadlocks automatically:\n-- postgresql.conf: deadlock_timeout = 1s  (check for deadlock after 1s)\n-- log_lock_waits = on  (log waits > deadlock_timeout)\n```"
+          },
+          {
+            "type": "after_code",
+            "language": "java",
+            "content": "The fix is to ensure all transactions lock rows in the **same deterministic order**. Here are three approaches, from simplest to most powerful:\n\n**Fix 1: Sort IDs before locking** — the application sorts the product IDs so every transaction acquires locks in alphabetical/numerical order:\n\n```sql\n-- Both Tx1 and Tx2 now lock in the SAME order: A first, then B\n-- This makes circular waits structurally impossible\nBEGIN;\nSELECT id FROM inventory\n  WHERE product_id IN ('A', 'B')\n  ORDER BY product_id   -- ← consistent ordering = no deadlocks\n  FOR UPDATE;           -- ← locks acquired in sorted order\nUPDATE inventory SET quantity = quantity - 1\n  WHERE product_id IN ('A', 'B');\nCOMMIT;\n```\n\n**Fix 2: In Spring Data JPA**, sort the IDs in Java before passing them to the query:\n\n```java\n// Sort product IDs in the service layer before the repository call\nCollections.sort(productIds);\ninventoryRepository.decrementAll(productIds);\n\n// Repository — ORDER BY ensures lock acquisition order matches\n@Modifying\n@Query(\"UPDATE Inventory i SET i.quantity = i.quantity - 1 \"\n     + \"WHERE i.productId IN :ids ORDER BY i.productId\")\nvoid decrementAll(@Param(\"ids\") List<String> sortedIds);\n```\n\n**Bonus: SKIP LOCKED** — PostgreSQL's built-in work queue pattern, perfect for background job processing without an external message broker:\n\n```sql\n-- Each worker grabs the next UNLOCKED pending job\n-- If another worker already locked a row, SKIP LOCKED skips it silently\nSELECT * FROM job_queue\n  WHERE status = 'PENDING'\n  ORDER BY created_at     -- oldest job first\n  LIMIT 1\n  FOR UPDATE SKIP LOCKED; -- skip rows locked by other workers\n-- No blocking, no deadlocks, no RabbitMQ needed for simple cases\n```\n\n**Advisory locks** — lightweight application-level locks for cross-instance coordination:\n\n```sql\n-- Returns true if lock acquired, false if another session holds it\n-- Lock ID is any bigint — use a hash of your job name\nSELECT pg_try_advisory_xact_lock(hashtext('nightly-report'));\n-- Lock auto-releases when transaction ends\n-- Use case: ensure only one app instance runs the nightly report\n```"
+          },
+          {
+            "type": "speakable_answer",
+            "content": "The first thing to understand about PostgreSQL locking is that thanks to **MVCC**, readers never block writers and writers never block readers. A SELECT never waits for an UPDATE to finish, and an UPDATE never blocks a concurrent SELECT. Locking only becomes relevant for **write-write conflicts** — two transactions trying to update the same row.\n\nWhen two transactions do hit the same row, PostgreSQL uses **row-level locks**. The second transaction blocks and waits for the first to commit or rollback. This is usually fine, but the problem comes with **deadlocks** — Transaction A locks row 1 then tries to lock row 2, while Transaction B locks row 2 then tries to lock row 1. Both are stuck waiting for each other. PostgreSQL detects deadlocks after `deadlock_timeout` (default 1 second) and kills the younger transaction.\n\nThe prevention strategy is simple: **always lock rows in a consistent order**. If you need to update multiple accounts in a transfer, `SELECT ... FROM accounts WHERE id IN (1, 2) ORDER BY id FOR UPDATE` locks them in deterministic order. Every transaction uses the same ordering, so circular waits are impossible.\n\nTwo powerful patterns I use frequently: **SKIP LOCKED** turns PostgreSQL into a work queue — `SELECT * FROM jobs WHERE status = 'pending' LIMIT 1 FOR UPDATE SKIP LOCKED` grabs the next unlocked job without blocking behind other workers. And **advisory locks** — `pg_try_advisory_xact_lock(42)` — are lightweight application-defined locks useful for cron deduplication: only one process grabs the lock, the others skip the run. Advisory locks auto-release at transaction end."
+          }
+        ]
+      }
+    }
+  ]
+}

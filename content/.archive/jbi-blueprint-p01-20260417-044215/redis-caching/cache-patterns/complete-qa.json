@@ -1,0 +1,130 @@
+{
+  "topic": "Cache Patterns",
+  "topicSlug": "cache-patterns",
+  "questions": [
+    {
+      "id": "redis-009",
+      "slug": "cache-stampede-thundering-herd",
+      "question": "What is the cache stampede (thundering herd) problem and how do you prevent it in a Spring Boot application?",
+      "title": "Cache Stampede (Thundering Herd) Problem and Solutions",
+      "direct_answer": "A cache stampede occurs when a popular cache entry expires and many concurrent requests all miss simultaneously, each triggering an expensive database or downstream service call at the same time, potentially overwhelming the backend. Solutions include probabilistic early expiration (PER), distributed locking to ensure only one request refreshes the cache while others wait or serve stale data, and background refresh patterns where the cache is populated asynchronously before expiry.",
+      "layout_type": "problem-detective",
+      "interviewer_intent": {
+        "testing": "Awareness of cache failure modes under load and practical mitigation strategies, not just knowing what the problem is called.",
+        "common_mistake": "Proposing 'just set a longer TTL' as the solution \u2014 this reduces frequency but does not eliminate the stampede when the TTL eventually expires.",
+        "to_stand_out": "Explain the probabilistic early expiration algorithm's formula and discuss serving stale-while-revalidate as an HTTP-inspired pattern applicable to Redis."
+      },
+      "company_tags": [
+        "Facebook",
+        "Twitter",
+        "Netflix",
+        "Amazon",
+        "Pinterest"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How it works under the hood",
+            "content": "The cache stampede is a cascading failure pattern that emerges under high concurrency when a popular cache entry expires simultaneously for many requesters. Unlike a simple cache miss \u2014 which adds one database round-trip \u2014 a stampede multiplies the miss by the concurrency level, sending hundreds or thousands of identical queries to a database that was never provisioned for that load.\n\nThe root cause is a lack of coordination: every thread independently detects the miss and independently decides to refresh. The mutex (single-flight) pattern fixes this by acquiring a distributed lock before querying the database. The first thread to acquire the lock performs the refresh; all others either block waiting for the lock (and then re-check the cache) or return a stale value if one is available. The double-check after acquiring the lock is essential \u2014 by the time the second thread wins the lock, the first may have already repopulated the cache.\n\nProbabilistic early expiration (PER) takes a statistical approach. Each request evaluates a formula based on the remaining TTL and a random draw: as the TTL approaches zero, the probability of triggering an early refresh increases. This spreads the refresh workload across time and across different request threads, so no single expiry cliff exists. The algorithm is tuned by a beta parameter that controls how aggressively refreshes are pulled forward.\n\nThe stale-while-revalidate pattern, borrowed from HTTP cache semantics, returns the expired value immediately to keep latency low and kicks off an asynchronous background task to refresh the cache. This is particularly effective for read-heavy services where a few seconds of staleness is acceptable and user-perceived latency is the primary concern. In Spring, setting `@Cacheable(sync = true)` provides a built-in mutex that synchronizes cache population per key, offering basic stampede protection without custom locking code."
+          },
+          {
+            "type": "problem_statement",
+            "title": "The Problem",
+            "content": "At T=0, a cache entry for a hot product page (served 10,000 req/s) expires. All 10,000 in-flight requests miss the cache simultaneously. Each request independently queries the database, which is sized for a handful of concurrent queries, not 10,000. The database buckles under load, requests time out, the cache is never repopulated, and the system enters a failure cascade."
+          },
+          {
+            "type": "before_code",
+            "title": "Vulnerable Implementation",
+            "content": "```java\n@Service\npublic class ProductService {\n\n    @Autowired\n    private RedisTemplate<String, Product> redisTemplate;\n    @Autowired\n    private ProductRepository productRepo;\n\n    // VULNERABLE: No stampede protection\n    public Product getProduct(Long id) {\n        String key = \"product:\" + id;\n        Product cached = redisTemplate.opsForValue().get(key);\n        if (cached != null) {\n            return cached;\n        }\n        // 10,000 concurrent requests ALL reach here simultaneously\n        // when the cache entry expires\n        Product product = productRepo.findById(id).orElseThrow();\n        redisTemplate.opsForValue().set(key, product, Duration.ofMinutes(10));\n        return product;\n    }\n}\n```\n\nThis code works perfectly under normal load. The problem only manifests when a hot key expires under high concurrency \u2014 every thread independently detects the miss and hits the database."
+          },
+          {
+            "type": "diagnosis",
+            "title": "Root Cause Analysis",
+            "content": "**Why does the stampede happen?**\n\n1. **Simultaneous expiry:** All 10,000 concurrent requests were being served from a single cache entry. When it expires, all 10,000 threads discover the miss within milliseconds of each other.\n\n2. **No coordination:** Each thread independently decides to refresh the cache. There is no \"someone else is already handling this\" signal.\n\n3. **Amplification:** The database receives 10,000 identical queries instead of 1. If the query takes 50ms, the database suddenly has 10,000 \u00d7 50ms = 500 seconds of work queued.\n\n4. **Cascade failure:** Database connection pool exhausts \u2192 requests queue \u2192 timeouts \u2192 the cache is never repopulated \u2192 more requests hit the database \u2192 system spirals.\n\n**The fundamental issue is a lack of mutual exclusion on cache population.** The cache expiry creates a critical section (load from DB \u2192 write to cache) that must be executed by exactly one thread."
+          },
+          {
+            "type": "after_code",
+            "title": "Solution 1 \u2014 Distributed Lock (Mutex Refresh)",
+            "content": "```java\n@Service\npublic class StampedeProtectedProductService {\n\n    private final RedisTemplate<String, Product> redis;\n    private final RedissonClient redisson;\n    private final ProductRepository repo;\n\n    public Product getProduct(Long id) {\n        String cacheKey = \"product:\" + id;\n        Product cached = redis.opsForValue().get(cacheKey);\n        if (cached != null) {\n            return cached;\n        }\n\n        // Mutex: only ONE thread refreshes the cache\n        RLock lock = redisson.getLock(\"lock:refresh:\" + cacheKey);\n        try {\n            if (lock.tryLock(3, 10, TimeUnit.SECONDS)) {\n                try {\n                    // Double-check: another thread may have refreshed\n                    cached = redis.opsForValue().get(cacheKey);\n                    if (cached != null) {\n                        return cached;\n                    }\n                    Product product = repo.findById(id).orElseThrow();\n                    redis.opsForValue().set(\n                        cacheKey, product, Duration.ofMinutes(10));\n                    return product;\n                } finally {\n                    if (lock.isHeldByCurrentThread()) lock.unlock();\n                }\n            }\n            // Lock contention \u2014 wait briefly and retry from cache\n            Thread.sleep(100);\n            return redis.opsForValue().get(cacheKey);\n        } catch (InterruptedException e) {\n            Thread.currentThread().interrupt();\n            return repo.findById(id).orElseThrow();\n        }\n    }\n}\n```\n\nThe double-check after acquiring the lock is essential \u2014 by the time thread #2 acquires the lock, thread #1 has already repopulated the cache."
+          },
+          {
+            "type": "code_example",
+            "title": "Solution 2 \u2014 Probabilistic Early Expiration (PER)",
+            "content": "```java\n@Service\npublic class PERCacheService {\n\n    private final RedisTemplate<String, String> redis;\n    private final ProductRepository repo;\n    private static final double BETA = 1.0; // Aggressiveness of early refresh\n\n    public Product getProduct(Long id) {\n        String key = \"product:\" + id;\n        String raw = redis.opsForValue().get(key);\n        if (raw == null) {\n            return refreshAndCache(id, key);\n        }\n\n        CachedEntry entry = deserialize(raw);\n\n        // PER formula: should we proactively refresh?\n        long ttl = redis.getExpire(key, TimeUnit.MILLISECONDS);\n        long delta = entry.getComputeTimeMs(); // How long DB query took\n        double random = -delta * BETA * Math.log(Math.random());\n        if (random >= ttl) {\n            // Probabilistically trigger early refresh\n            return refreshAndCache(id, key);\n        }\n        return entry.getProduct();\n    }\n\n    private Product refreshAndCache(Long id, String key) {\n        long start = System.currentTimeMillis();\n        Product product = repo.findById(id).orElseThrow();\n        long computeTime = System.currentTimeMillis() - start;\n        CachedEntry entry = new CachedEntry(product, computeTime);\n        redis.opsForValue().set(key, serialize(entry), Duration.ofMinutes(10));\n        return product;\n    }\n}\n```\n\n**How PER works:** As TTL approaches zero, the probability of triggering an early refresh increases exponentially. With high concurrency, one request statistically refreshes early \u2014 before the actual expiry \u2014 so the key never truly expires. The `BETA` parameter controls aggressiveness: higher values cause earlier refreshes. This approach requires no locking and no coordination between threads."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Stampede occurs when a popular entry expires under high concurrency** \u2014 all concurrent requests miss simultaneously, all hit the database, all write the same key; the database receives the full request rate at once\n- **Mutex lock (Redis `SET NX`) gates database access to one caller** \u2014 first caller fills the cache; others wait; prevents N simultaneous database queries for the same key; lock TTL must exceed the database query time\n- **Probabilistic early expiry prevents synchronized expiry** \u2014 requests proactively refresh with increasing probability as TTL decreases; the cache is refreshed before expiry, so no synchronized miss occurs\n- **Background refresh keeps the cache perpetually warm** \u2014 a scheduled job refreshes TTL before expiry; user requests never see a cache miss for hot keys; the database is queried once per TTL period\n- **Jitter on TTLs reduces synchronized expiry across keys** \u2014 if many keys expire at the same time (e.g., all set at application startup with the same TTL), they all stampede together; add random jitter to the TTL on cache set"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "A cache stampede happens when a popular cache entry expires and many concurrent requests all miss simultaneously, all hit the database, and all try to write the same key back to the cache. At scale, this can take a database from healthy to overloaded in seconds.\n\n**Why it happens**\n- Under normal load, the cache handles thousands of requests per second for a popular entry; when that entry expires, all those requests reach the database at the same moment \u2014 which means the database receives the full request rate for that entry directly, rather than a trickle of cache misses\n- The database query may be expensive (joining three tables, aggregating millions of rows), so every concurrent thread runs it simultaneously; the database can't handle that load, latency spikes, and the storm persists until the cache is repopulated\n\n**Mutex locking \u2014 one filler, others wait**\n- Use Redis's `SET key NX EX 10` as a distributed mutex \u2014 only the first caller to acquire it queries the database and fills the cache; all other concurrent callers wait briefly and then read from the populated cache\n- The downside: callers that fail to acquire the lock must wait; if the database query is slow, they wait for the full query duration; implementation must handle the case where the lock holder fails before filling the cache\n\n**Probabilistic early expiry**\n- Rather than expiring all at once, each request has a small probability of re-fetching early based on the remaining TTL \u2014 requests start proactively refreshing the cache before it expires, so expiry never causes a synchronized miss\n- The algorithm: as TTL decreases, the probability of early refresh increases; by the time the cache actually expires, the value has already been refreshed by a lucky early request\n\n**Background refresh \u2014 never expose expiry to requests**\n- A background thread monitors cache TTLs and proactively refreshes entries before they expire \u2014 user-facing requests always hit a warm cache because expiry happens in the background, not in the request path\n- This is the cleanest solution for high-traffic hot keys: the cache is always warm, and the database query runs once per TTL period regardless of traffic volume"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does the stale-while-revalidate pattern differ from the mutex-based approach?",
+        "What is jitter in TTL and how does it help prevent stampedes on application startup?",
+        "Can @Cacheable in Spring Boot be made stampede-proof without manual locking?"
+      ],
+      "seo": {
+        "metaTitle": "Cache Stampede (Thundering Herd) Prevention in Redis | Java Interview Guide",
+        "metaDescription": "Learn what the cache stampede problem is and how to prevent it in Spring Boot using distributed locks, probabilistic early expiration, and stale-while-revalidate patterns."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A cache stampede happens when a popular cache entry expires and many concurrent requests all miss simultaneously, all hit the database, and all try to write the same key back to the cache.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The cache stampede is a cascading failure pattern that emerges under high concurrency when a popular cache entry expires simultaneously for many requesters. Unlike a simple cache miss \u2014 which adds one database round-trip \u2014 a stampede multiplies the miss by the concurrency level, sending hundreds or thousands of identical queries to a database that was never provisioned for that load. The root cause is a lack of coordination: every thread independently detects the miss and independently decides to refresh. The mutex (single-flight) pattern fixes this by acquiring a distributed."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The cache stampede is a cascading failure pattern that emerges under high concurrency when a popular cache entry expires simultaneously for many requesters.",
+              "Unlike a simple cache miss \u2014 which adds one database round-trip \u2014 a stampede multiplies the miss by the concurrency level, sending hundreds or thousands of identical queries to a database that was never provisioned for that load.",
+              "The root cause is a lack of coordination: every thread independently detects the miss and independently decides to refresh.",
+              "The mutex (single-flight) pattern fixes this by acquiring a distributed lock before querying the database.",
+              "The first thread to acquire the lock performs the refresh; all others either block waiting for the lock (and then re-check the cache) or return a stale value if one is available.",
+              "The double-check after acquiring the lock is essential \u2014 by the time the."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Stampede occurs when a popular entry expires under high concurrency \u2014 all concurrent requests miss simultaneously, all hit the database, all write the same key; the database receives the full request rate at once Mutex lock (Redis SET NX) gates database access to one caller \u2014 first caller fills the cache; others wait; prevents N simultaneous database queries for the same key; lock TTL must exceed the database query time Probabilistic early expiry prevents synchronized expiry \u2014 requests proactively refresh with increasing probability as TTL decreases; the cache is refreshed before expiry, so no synchronized miss occurs Background refresh keeps the cache perpetually warm \u2014 a scheduled job refreshes TTL before expiry; user requests never see a cache miss for hot keys; the database is queried once per TTL period Jitter on TTLs reduces synchronized expiry across keys \u2014 if many keys expire at the same time (e",
+              ", all set at application startup with the same TTL), they all stampede together; add random jitter to the TTL on cache set"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Proposing 'just set a longer TTL' as the solution \u2014 this reduces frequency but does not eliminate the stampede when the TTL eventually expires."
+          }
+        ],
+        "cap": "Why it happens Under normal load, the cache handles thousands of requests per second for a popular entry; when that entry expires, all those requests reach the database at the same moment \u2014 which mean",
+        "familiarity_anchors": [
+          "Solutions"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does the stale-while-revalidate pattern differ from the mutex-based approach?",
+          "What is jitter in TTL and how does it help prevent stampedes on application startup?",
+          "Can @Cacheable in Spring Boot be made stampede-proof without manual locking?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,389 @@
+{
+  "topic": "Kafka Patterns and Best Practices",
+  "topicSlug": "kafka-patterns",
+  "questions": [
+    {
+      "id": "kafka-consumer-group",
+      "title": "Kafka Consumer Groups and Partitions",
+      "slug": "kafka-consumer-group",
+      "question": "How do Kafka consumer groups work and how do partitions enable parallel processing?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Consumer group: a group of consumers that jointly consume a topic \u2014 each partition assigned to one consumer\n- Max parallelism: limited by partition count \u2014 adding consumers beyond partition count wastes resources\n- Rebalancing: when consumer joins/leaves group, partitions are reassigned \u2014 brief pause in consumption\n- Offset management: each consumer group tracks its position (offset) per partition independently\n- __consumer_offsets: internal Kafka topic storing committed offsets\n- Multiple groups: each consumer group reads the topic independently \u2014 decoupled subscriptions\n- Sticky assignment: preferred partition assignment strategy to minimize rebalances\n- Static group membership: reduces rebalances when consumers restart temporarily"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "A consumer group lets multiple consumers divide the work of processing a topic. Kafka assigns each partition to exactly one consumer in the group. If you have 6 partitions and 3 consumers, each consumer handles 2 partitions concurrently. This is how Kafka achieves horizontal scalability \u2014 you increase partitions and consumers together to increase throughput.\n\nThe partition count is the ceiling on parallelism. If you have 6 partitions and 8 consumers in the same group, 2 consumers sit idle because there are no partitions to assign them. Conversely, if you need more throughput from an existing topic, you can increase the partition count \u2014 but partitions can only be added, never removed, so plan capacity in advance.\n\nMultiple consumer groups are a powerful pattern. A topic can be consumed by many completely independent groups, each maintaining its own offset. Your order-service can consume the payments topic to update order status, while analytics-service consumes the same topic to update dashboards, and audit-service consumes it for compliance logging. Each group progresses at its own pace without affecting the others."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Consumer Group Partition Assignment\n\n```\nTopic: orders (6 partitions)\n\nConsumer Group A (order-service):\n\u251c\u2500\u2500 Consumer 1 \u2192 partitions [0, 1]\n\u251c\u2500\u2500 Consumer 2 \u2192 partitions [2, 3]\n\u2514\u2500\u2500 Consumer 3 \u2192 partitions [4, 5]\nOffset stored per partition: group-A reads from its own committed offsets\n\nConsumer Group B (analytics-service):\n\u251c\u2500\u2500 Consumer 1 \u2192 partitions [0, 1, 2]\n\u2514\u2500\u2500 Consumer 2 \u2192 partitions [3, 4, 5]\nOffset stored per partition: group-B reads independently from group-A\n```\n\n## Spring Kafka Consumer Group Configuration\n\n```java\n@Configuration\npublic class KafkaConsumerConfig {\n\n    @Bean\n    public ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory(\n            ConsumerFactory<String, OrderEvent> consumerFactory) {\n        var factory = new ConcurrentKafkaListenerContainerFactory<String, OrderEvent>();\n        factory.setConsumerFactory(consumerFactory);\n        factory.setConcurrency(3);  // 3 consumer threads \u2014 one per 2 partitions (6 total)\n        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);\n        return factory;\n    }\n}\n\n// Consumer with manual offset commit for at-least-once processing\n@Component\npublic class OrderEventConsumer {\n\n    @KafkaListener(\n        topics = \"orders\",\n        groupId = \"order-service\",\n        concurrency = \"3\"  // alternative to factory.setConcurrency\n    )\n    public void consume(OrderEvent event, Acknowledgment ack) {\n        try {\n            processOrder(event);\n            ack.acknowledge();  // commit offset only after successful processing\n        } catch (Exception e) {\n            // Don't acknowledge \u2014 message will be redelivered\n            log.error(\"Failed to process order: {}\", event.getOrderId(), e);\n        }\n    }\n}\n```\n\n## Offset Management\n\n```yaml\n# application.yml\nspring:\n  kafka:\n    consumer:\n      group-id: order-service\n      auto-offset-reset: earliest  # or: latest\n      # earliest: start from beginning of topic (good for new consumers on existing topics)\n      # latest: start from new messages only (good for consumers that don't care about history)\n      enable-auto-commit: false  # ALWAYS false when using Spring @KafkaListener\n      # Manual commits with Acknowledgment give you control over at-least-once delivery\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A consumer group lets multiple consumers divide the work of processing a topic.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Each group progresses at its own pace without affecting the others.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-error-handling",
+      "title": "Kafka Error Handling and Dead Letter Topics",
+      "slug": "kafka-error-handling",
+      "question": "How do you handle processing failures and implement dead letter queues in Spring Kafka?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Retry: DefaultErrorHandler with BackOff \u2014 retry before sending to DLT\n- Dead Letter Topic (DLT): failed messages after retries go to {topic}.DLT \u2014 inspect, replay, discard\n- DeadLetterPublishingRecoverer: publishes failed messages to DLT with original headers\n- Non-retryable exceptions: configure to skip retries for certain exceptions (e.g., deserialization errors)\n- Backoff: ExponentialBackOff or FixedBackOff \u2014 avoid thundering herd on retry\n- Poison pill: message that always fails \u2014 must not block the partition; DLT solves this\n- @RetryableTopic: annotation-based retry with separate retry topics\n- Observability: log correlation IDs from event headers for tracing"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "The most dangerous failure pattern in Kafka is the poison pill \u2014 a message that always causes an exception. Without proper error handling, a consumer that crashes on a poison pill will restart, read the same message, crash again, forever. The partition is effectively blocked.\n\nThe solution is a dead letter topic combined with a retry policy. Spring Kafka's DefaultErrorHandler retries the message a configurable number of times with backoff. If it still fails after all retries, the DeadLetterPublishingRecoverer publishes the original message to a dead letter topic, typically named with a .DLT suffix, with headers containing the original topic, partition, offset, and the exception. The consumer then commits the offset and moves on \u2014 the partition is unblocked.\n\nThe DLT messages can be inspected and triaged manually. If they failed due to a bug in the consumer, you fix the bug, then replay the DLT messages after the fix is deployed. If they were truly invalid data, you discard them after investigation. This separation keeps the main consumer running while giving you full visibility into failures."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## DefaultErrorHandler + Dead Letter Topic\n\n```java\n@Configuration\npublic class KafkaErrorConfig {\n\n    @Bean\n    public DefaultErrorHandler errorHandler(\n            KafkaOperations<String, Object> kafkaTemplate) {\n\n        // Retry up to 3 times with exponential backoff\n        var backOff = new ExponentialBackOff(1_000L, 1.5);\n        backOff.setMaxAttempts(3);  // 1s, 1.5s, 2.25s delays\n\n        // After 3 retries, send to dead letter topic\n        var recoverer = new DeadLetterPublishingRecoverer(\n            kafkaTemplate,\n            // Route to: {originalTopic}.DLT on partition 0\n            (record, ex) -> new TopicPartition(record.topic() + \".DLT\", 0)\n        );\n\n        var errorHandler = new DefaultErrorHandler(recoverer, backOff);\n\n        // Don't retry deserialization errors \u2014 message is corrupt, retrying won't help\n        errorHandler.addNotRetryableExceptions(\n            JsonParseException.class,\n            DeserializationException.class\n        );\n\n        return errorHandler;\n    }\n}\n\n// Consumer\n@KafkaListener(topics = \"orders\", groupId = \"order-service\")\npublic void consume(OrderEvent event) {\n    // If this throws, DefaultErrorHandler retries, then sends to orders.DLT\n    orderService.process(event);\n}\n\n// Dead letter consumer \u2014 for inspection and replay\n@KafkaListener(topics = \"orders.DLT\", groupId = \"order-service-dlt\")\npublic void consumeDlt(\n        @Payload OrderEvent event,\n        @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,\n        @Header(KafkaHeaders.OFFSET) long offset,\n        @Header(\"kafka_dlt-exception-message\") String exceptionMessage) {\n    log.error(\"Dead letter message: topic={}, offset={}, error={}, payload={}\",\n        topic, offset, exceptionMessage, event);\n    // Alert ops team, store for manual review, etc.\n    alertingService.notifyDltMessage(topic, offset, exceptionMessage);\n}\n```\n\n## @RetryableTopic \u2014 Annotation-Based Retry\n\n```java\n// Alternative: retry topics instead of blocking main topic\n@Component\npublic class OrderConsumer {\n\n    @RetryableTopic(\n        attempts = \"4\",   // 1 main + 3 retry topics\n        backoff = @Backoff(delay = 1000, multiplier = 2),\n        // Creates: orders, orders-retry-0, orders-retry-1, orders-retry-2, orders-DLT\n        exclude = {DeserializationException.class}  // no retry for these\n    )\n    @KafkaListener(topics = \"orders\", groupId = \"order-service\")\n    public void consume(OrderEvent event) {\n        orderService.process(event);\n    }\n\n    @DltHandler\n    public void handleDlt(OrderEvent event) {\n        log.error(\"Exhausted retries for order: {}\", event.getOrderId());\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "The most dangerous failure pattern in Kafka is the poison pill \u2014 a message that always causes an exception.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "This separation keeps the main consumer running while giving you full visibility into failures.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-ordering-guarantees",
+      "title": "Kafka Message Ordering and Exactly-Once",
+      "slug": "kafka-ordering-guarantees",
+      "question": "How does Kafka guarantee message ordering and what are the idempotent producer and exactly-once semantics?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Ordering: guaranteed within a partition, not across partitions\n- Partition key: same key \u2192 same partition \u2192 ordered delivery (e.g., orderId as key)\n- Idempotent producer: enable.idempotence=true \u2014 broker deduplicates retried messages by producer ID + sequence number\n- Exactly-once semantics (EOS): idempotent producer + transactional producer + read_committed isolation\n- Transaction: atomically write to multiple partitions and commit consumer offset\n- At-least-once (default): possible duplicates \u2014 consumer must deduplicate (idempotent consumer)\n- At-most-once: acks=0 \u2014 possible message loss, no retry\n- Delivery guarantees involve trade-offs: throughput vs. safety"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Kafka guarantees ordering within a single partition, not across the whole topic. When you write messages with the same partition key, Kafka always routes them to the same partition, preserving their relative order. For an order processing system, using the order ID as the partition key ensures all events for a given order \u2014 created, payment confirmed, shipped \u2014 arrive in the correct sequence.\n\nBy default Kafka provides at-least-once delivery. If a producer retries after a network failure, the broker might receive the message twice. Enabling enable.idempotence=true on the producer fixes this \u2014 the broker tracks a sequence number per producer and silently discards duplicate sends. This gives you exactly-once at the producer-broker boundary.\n\nFull end-to-end exactly-once semantics \u2014 covering producer, broker, and consumer \u2014 requires Kafka transactions. You configure a transactionalId on the producer, and the consumer sets isolation.level=read_committed. The producer can then atomically write messages to multiple topics and commit consumer offsets in a single transaction. Either everything commits or nothing does. The trade-off is lower throughput and higher latency, so use it only when duplicate processing genuinely can't be tolerated."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Ordering with Partition Keys\n\n```java\n// Ensure all events for one order go to the same partition \u2192 ordered\n@Service\npublic class OrderEventProducer {\n\n    private final KafkaTemplate<String, OrderEvent> kafkaTemplate;\n\n    public void publishOrderEvent(OrderEvent event) {\n        kafkaTemplate.send(\n            \"orders\",\n            event.getOrderId().toString(),  // KEY \u2192 same key = same partition = ordered\n            event\n        );\n    }\n}\n```\n\n## Idempotent Producer Configuration\n\n```yaml\n# application.yml\nspring:\n  kafka:\n    producer:\n      acks: all          # wait for all replicas to acknowledge\n      retries: 10        # retry on transient failures\n      properties:\n        enable.idempotence: true   # broker deduplicates retried messages\n        max.in.flight.requests.per.connection: 5  # required for idempotence\n```\n\n## Exactly-Once with Transactions\n\n```java\n@Configuration\npublic class KafkaTransactionConfig {\n\n    @Bean\n    public KafkaTransactionManager<String, Object> kafkaTransactionManager(\n            ProducerFactory<String, Object> producerFactory) {\n        return new KafkaTransactionManager<>(producerFactory);\n    }\n}\n\n@Service\npublic class PaymentProcessor {\n\n    private final KafkaTemplate<String, Object> kafkaTemplate;\n\n    // Atomically: process payment + publish event + commit Kafka consumer offset\n    @Transactional  // uses KafkaTransactionManager\n    public void processPayment(PaymentEvent payment) {\n        // These all happen atomically in one Kafka transaction:\n        PaymentResult result = chargeCard(payment);\n\n        kafkaTemplate.send(\"payment-results\", payment.getOrderId(), result);\n        kafkaTemplate.send(\"order-updates\",  payment.getOrderId(),\n            new OrderStatusEvent(payment.getOrderId(), \"PAID\"));\n\n        // If any send fails or an exception is thrown:\n        // \u2192 transaction rolls back \u2192 consumer offset not committed \u2192 messages reprocessed\n    }\n}\n```\n\n## Consumer Idempotency (Practical Approach)\n\n```java\n// Often simpler than full EOS transactions:\n// Make the consumer operation idempotent \u2014 safe to process twice\n@Service\npublic class OrderProcessor {\n\n    public void process(OrderEvent event) {\n        // Check if already processed using the event ID\n        if (processedEventRepository.existsByEventId(event.getEventId())) {\n            log.info(\"Skipping duplicate event: {}\", event.getEventId());\n            return;\n        }\n\n        // Process...\n        orderRepository.updateStatus(event.getOrderId(), OrderStatus.CONFIRMED);\n\n        // Mark as processed\n        processedEventRepository.save(new ProcessedEvent(event.getEventId()));\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Kafka guarantees ordering within a single partition, not across the whole topic.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "The trade-off is lower throughput and higher latency, so use it only when duplicate processing genuinely can't be tolerated.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-custom-partitioner",
+      "title": "Kafka Custom Partitioners and Routing",
+      "slug": "kafka-custom-partitioner",
+      "question": "When and how do you use custom Kafka partitioners to control message routing?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Default: round-robin for null keys; hash(key) % numPartitions for keyed messages\n- Custom partitioner: implements Partitioner interface \u2014 determine partition for each record\n- Use cases: geographic routing, priority lanes, tenant isolation, sticky routing\n- Key-based: default hash works for simple key\u2192partition mapping\n- Sticky partitioner (default since Kafka 2.4): batch records to same partition until full \u2014 better throughput\n- UniformStickyPartitioner: improved batching for null-key messages\n- Hot partition: common problem when one key dominates \u2014 custom partitioner can distribute"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Kafka's default partitioner routes keyed messages by hash of the key modulo partition count. This guarantees that all messages with the same key go to the same partition, ensuring ordering for that key. For most use cases, this is exactly what you want \u2014 all events for the same order ID go to the same partition, processed in order.\n\nCustom partitioners become necessary when you have specific routing requirements the default doesn't handle. For example, if you need VIP tenant messages to go to dedicated partitions for priority processing, or if you want geographic routing where European user events go to partitions consumed by European processors.\n\nHot partitions are the main problem to watch for. If one key generates far more messages than others \u2014 like a very active user or a high-volume tenant \u2014 all their messages pile up in one partition while others are underutilized. A custom partitioner can detect hot keys and spread their messages across multiple partitions, though you lose the ordering guarantee for that key."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Custom Partitioner\n\n```java\npublic class PriorityPartitioner implements Partitioner {\n\n    @Override\n    public int partition(String topic, Object key, byte[] keyBytes,\n                         Object value, byte[] valueBytes, Cluster cluster) {\n        int numPartitions = cluster.partitionCountForTopic(topic);\n\n        // First 2 partitions reserved for VIP messages\n        // Remaining for regular messages\n        int vipPartitions = Math.max(2, numPartitions / 4);\n        int regularPartitions = numPartitions - vipPartitions;\n\n        if (value instanceof OrderEvent event && event.isVip()) {\n            // Hash into VIP partition range [0, vipPartitions)\n            return Math.abs(key.hashCode()) % vipPartitions;\n        } else {\n            // Hash into regular partition range [vipPartitions, numPartitions)\n            return vipPartitions + (Math.abs(key.hashCode()) % regularPartitions);\n        }\n    }\n\n    @Override\n    public void configure(Map<String, ?> configs) {}\n\n    @Override\n    public void close() {}\n}\n```\n\n## Register Custom Partitioner\n\n```yaml\nspring:\n  kafka:\n    producer:\n      properties:\n        partitioner.class: com.myapp.kafka.PriorityPartitioner\n```\n\n## Hot Partition Problem\n\n```\nProblem: key=\"user:popular\" generates 10,000 msg/s \u2192 partition 3 overwhelmed\n         other partitions: ~100 msg/s each\n\nSolution A: Compound key \u2014 \"user:popular:suffix\" where suffix = random(0,5)\n  \u2192 distributes hot key across 5 partitions\n  \u2192 trade-off: loses strict ordering for this user\n\nSolution B: Custom partitioner detects hot key, distributes with suffix\n  \u2192 same trade-off but automatic\n\nSolution C: Separate topic for hot producers with more partitions\n  \u2192 preserves ordering on their dedicated topic\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Kafka's default partitioner routes keyed messages by hash of the key modulo partition count.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "A custom partitioner can detect hot keys and spread their messages across multiple partitions, though you lose the ordering guarantee for that key.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-connect-cdc",
+      "title": "Kafka Connect and Change Data Capture",
+      "slug": "kafka-connect-cdc",
+      "question": "What is Kafka Connect and how do you use Change Data Capture with Debezium?",
+      "difficulty": "hard",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Kafka Connect: framework for streaming data between Kafka and other systems\n- Source connector: reads from external system \u2192 writes to Kafka (DB, S3, APIs)\n- Sink connector: reads from Kafka \u2192 writes to external system (Elasticsearch, S3, BigQuery)\n- Debezium: CDC source connector \u2014 reads PostgreSQL/MySQL WAL \u2192 streams all row changes to Kafka\n- CDC events: INSERT/UPDATE/DELETE with before/after row state\n- Use cases: sync to search index, event sourcing, audit log, cache invalidation, replication\n- At-least-once: exactly-once delivery with sink idempotent writes\n- Avro + Schema Registry: strongly typed events with schema evolution"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Kafka Connect is a framework for moving data reliably between Kafka and other systems without writing custom producer/consumer code. Source connectors pull data from a system into Kafka, sink connectors push data from Kafka into a system. There are hundreds of community connectors for databases, cloud storage, search engines, and more.\n\nDebezium is the most important source connector for Java backend teams. It reads the PostgreSQL write-ahead log and publishes every row change \u2014 insert, update, delete \u2014 as a structured Kafka event containing the before and after state of the row. This enables Change Data Capture: any change to your database automatically becomes a Kafka event, without modifying the application code that made the change.\n\nThe primary use cases for CDC are keeping downstream systems synchronized \u2014 like updating an Elasticsearch search index when products change in PostgreSQL \u2014 and the transactional outbox pattern where Debezium publishes database events that other services consume. CDC is more reliable than polling because it captures every change atomically with the original transaction."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Debezium PostgreSQL Connector\n\n```json\n// POST http://kafka-connect:8083/connectors\n{\n  \"name\": \"postgres-order-source\",\n  \"config\": {\n    \"connector.class\": \"io.debezium.connector.postgresql.PostgresConnector\",\n    \"database.hostname\": \"postgres\",\n    \"database.port\": \"5432\",\n    \"database.user\": \"debezium\",\n    \"database.password\": \"${DB_PASSWORD}\",\n    \"database.dbname\": \"appdb\",\n    \"database.server.name\": \"appdb\",\n    \"table.include.list\": \"public.orders,public.payments\",\n    \"plugin.name\": \"pgoutput\",\n    \"publication.name\": \"debezium_pub\",\n    \"slot.name\": \"debezium_slot\",\n    \"transforms\": \"route\",\n    \"transforms.route.type\": \"org.apache.kafka.connect.transforms.ReplaceField$Value\"\n  }\n}\n// Creates Kafka topics: appdb.public.orders, appdb.public.payments\n```\n\n## CDC Event Structure (Debezium)\n\n```json\n// When an order row changes, Debezium publishes:\n{\n  \"before\": {\n    \"id\": 42,\n    \"status\": \"PENDING\",\n    \"total\": 99.99\n  },\n  \"after\": {\n    \"id\": 42,\n    \"status\": \"CONFIRMED\",\n    \"total\": 99.99\n  },\n  \"op\": \"u\",  // u=update, c=create, d=delete, r=read/snapshot\n  \"ts_ms\": 1700000000000,\n  \"source\": {\n    \"table\": \"orders\",\n    \"txId\": 12345,\n    \"lsn\": 987654321\n  }\n}\n```\n\n## Consuming CDC Events in Spring\n\n```java\n@Component\npublic class OrderChangeCDCConsumer {\n\n    @KafkaListener(topics = \"appdb.public.orders\", groupId = \"search-indexer\")\n    public void handleOrderChange(@Payload Map<String, Object> event) {\n        String operation = (String) event.get(\"op\");\n        Map<String, Object> after = (Map<String, Object>) event.get(\"after\");\n        Map<String, Object> before = (Map<String, Object>) event.get(\"before\");\n\n        switch (operation) {\n            case \"c\", \"u\" -> {\n                // Insert or Update: index the latest state\n                Long orderId = ((Number) after.get(\"id\")).longValue();\n                searchIndexService.indexOrder(orderId, after);\n            }\n            case \"d\" -> {\n                // Delete: remove from index\n                Long orderId = ((Number) before.get(\"id\")).longValue();\n                searchIndexService.removeOrder(orderId);\n            }\n        }\n    }\n}\n```\n\n## Sink Connector: Kafka \u2192 Elasticsearch\n\n```json\n{\n  \"name\": \"orders-elasticsearch-sink\",\n  \"config\": {\n    \"connector.class\": \"io.confluent.connect.elasticsearch.ElasticsearchSinkConnector\",\n    \"tasks.max\": \"2\",\n    \"topics\": \"appdb.public.orders\",\n    \"connection.url\": \"http://elasticsearch:9200\",\n    \"type.name\": \"_doc\",\n    \"key.ignore\": \"false\",\n    \"schema.ignore\": \"true\"\n  }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Kafka Connect is a framework for moving data reliably between Kafka and other systems without writing custom producer/consumer code.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "CDC is more reliable than polling because it captures every change atomically with the original transaction.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-schema-registry",
+      "title": "Kafka Schema Registry and Avro Serialization",
+      "slug": "kafka-schema-registry",
+      "question": "What is the Kafka Schema Registry and why should you use Avro instead of plain JSON?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Schema Registry: centralized schema store for Kafka topics \u2014 prevents incompatible schema changes\n- Avro: binary format with schema \u2014 compact, fast, supports schema evolution\n- JSON: human-readable but no schema enforcement \u2014 silent breakage when fields change\n- Compatibility modes: BACKWARD (new schema can read old data), FORWARD (old schema reads new data), FULL\n- Spring Kafka + Confluent Avro: KafkaAvroSerializer/Deserializer auto-registers schemas\n- Schema evolution: add optional fields safely (BACKWARD compatible)\n- Breaking change: removing required fields or changing types \u2014 blocked by Schema Registry"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "JSON is convenient for prototyping but fragile in production. If a producer removes a field that consumers depend on, there's no compile-time error \u2014 consumers silently start getting null values and may fail in unexpected ways. Schema Registry with Avro solves this by enforcing schema compatibility at publish time.\n\nAvro stores data in a compact binary format with the schema referenced by an ID. Messages are smaller than JSON \u2014 typically 50-70% smaller \u2014 and faster to serialize and deserialize. The schema is stored in the Schema Registry, not in every message, so consumers always know the exact structure.\n\nThe compatibility mode is the key governance feature. BACKWARD compatibility means new consumer code can still read old messages \u2014 you can add new optional fields. FORWARD compatibility means old consumer code can still read new messages. FULL means both. The Schema Registry rejects a schema update that would break the configured compatibility, preventing silent breaking changes between microservices."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Avro Schema\n\n```json\n// src/main/avro/OrderCreatedEvent.avsc\n{\n  \"type\": \"record\",\n  \"name\": \"OrderCreatedEvent\",\n  \"namespace\": \"com.myapp.events\",\n  \"fields\": [\n    {\"name\": \"orderId\",   \"type\": \"string\"},\n    {\"name\": \"userId\",    \"type\": \"string\"},\n    {\"name\": \"totalAmount\", \"type\": \"double\"},\n    {\"name\": \"currency\",  \"type\": \"string\", \"default\": \"USD\"},\n    {\"name\": \"items\",     \"type\": {\"type\": \"array\", \"items\": {\n      \"type\": \"record\",\n      \"name\": \"OrderItem\",\n      \"fields\": [\n        {\"name\": \"productId\", \"type\": \"string\"},\n        {\"name\": \"quantity\",  \"type\": \"int\"},\n        {\"name\": \"price\",     \"type\": \"double\"}\n      ]\n    }}},\n    // Safe schema evolution: add new optional field with default\n    {\"name\": \"couponCode\", \"type\": [\"null\", \"string\"], \"default\": null}\n  ]\n}\n```\n\n## Spring Kafka + Avro Configuration\n\n```yaml\nspring:\n  kafka:\n    bootstrap-servers: kafka:9092\n    producer:\n      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer\n      properties:\n        schema.registry.url: http://schema-registry:8081\n    consumer:\n      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer\n      properties:\n        schema.registry.url: http://schema-registry:8081\n        specific.avro.reader: true  # use generated Java classes, not GenericRecord\n```\n\n## Producer (Generated Avro Class)\n\n```java\n// Maven/Gradle avro plugin generates Java class from .avsc\n@Service\npublic class OrderProducer {\n    private final KafkaTemplate<String, OrderCreatedEvent> kafkaTemplate;\n\n    public void publishOrderCreated(Order order) {\n        // Generated Avro class \u2014 type-safe, validated against schema\n        OrderCreatedEvent event = OrderCreatedEvent.newBuilder()\n            .setOrderId(order.getId().toString())\n            .setUserId(order.getUserId().toString())\n            .setTotalAmount(order.getTotal().doubleValue())\n            .setCurrency(\"USD\")\n            .setItems(order.getItems().stream()\n                .map(i -> OrderItem.newBuilder()\n                    .setProductId(i.getProductId().toString())\n                    .setQuantity(i.getQuantity())\n                    .setPrice(i.getPrice().doubleValue())\n                    .build())\n                .toList())\n            .build();\n\n        kafkaTemplate.send(\"orders.created\", order.getId().toString(), event);\n        // Avro serializer: registers schema, encodes as binary with schema ID prefix\n    }\n}\n```\n\n## Schema Compatibility\n\n```\nBACKWARD (recommended default):\n  - New schema can read messages written with old schema\n  - Safe changes: add field with default, remove optional field\n  - Breaking: remove required field, change type\n\nFORWARD:\n  - Old schema can read messages written with new schema\n  - Useful when some consumers haven't been updated yet\n\nFULL = BACKWARD + FORWARD\n  - Most restrictive \u2014 only add/remove optional fields\n\nSchema Registry rejects incompatible schema changes at registration time\n\u2192 CI/CD pipeline catches breaking changes before they reach production\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "JSON is convenient for prototyping but fragile in production.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          }
+        ],
+        "cap": "The Schema Registry rejects a schema update that would break the configured compatibility, preventing silent breaking changes between microservices.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

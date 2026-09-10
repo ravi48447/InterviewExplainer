@@ -1,0 +1,388 @@
+{
+  "topic": "Message Guarantees",
+  "topicSlug": "message-guarantees",
+  "questions": [
+    {
+      "id": "eda-006",
+      "slug": "exactly-once-vs-at-least-once-delivery",
+      "question": "What is the difference between exactly-once, at-least-once, and at-most-once delivery semantics?",
+      "title": "Delivery Semantics: Exactly-Once vs At-Least-Once vs At-Most-Once",
+      "direct_answer": "**at-most-once**: may lose messages, never duplicates (fire-and-forget). **at-least-once**: no message loss, may duplicate (most systems default). **exactly-once**: no loss, no duplicates — achievable in **Kafka** via **idempotent** producers + transactional consumers, but adds latency and complexity. Most production systems use at-least-once with idempotent consumers.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Understanding of distributed messaging guarantees and the real cost of exactly-once semantics",
+        "common_mistake": "Thinking exactly-once is free or easy — it requires idempotent producers, transactional consumers, and cross-system coordination",
+        "to_stand_out": "Explain idempotent producers in Kafka (enable.idempotence=true), transactional producers, and how consumer-side deduplication achieves effective exactly-once without full Kafka transactions"
+      },
+      "company_tags": [
+        "kafka",
+        "amazon",
+        "netflix",
+        "linkedin",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why \"Exactly-Once\" Is the Most Expensive Promise in Distributed Systems",
+            "content": "Most developers assume exactly-once delivery is the obvious default — why would you accept message loss or duplicates? The answer is cost. True exactly-once requires coordination between the producer, broker, and consumer that adds latency, reduces throughput, and introduces operational complexity most systems don't need.\n\nThe three semantics describe what happens when something goes wrong — a producer crashes after sending, a broker fails after receiving, a consumer crashes after processing.\n- **At-most-once** acknowledges before processing: fast, but the message is gone if the consumer crashes.\n- **At-least-once** acknowledges after processing: safe, but the producer may retry and the consumer sees duplicates.\n- **Exactly-once** coordinates producer, broker, and consumer state atomically: no loss, no duplicates, but 2-3× the latency and significant operational overhead.\n\nThe pragmatic insight: **at-least-once with idempotent consumers** gives you effectively the same outcome as exactly-once for a fraction of the complexity.\n- If processing the same event twice produces the same result — because you check a deduplication table, use upserts, or rely on naturally idempotent operations — then duplicates are harmless.\n- You get the safety of no message loss without the cost of full transactional semantics.\n- This is the default choice for the vast majority of production event-driven systems."
+          },
+          {
+            "type": "comparison_table",
+            "title": "What Each Guarantee Actually Costs You",
+            "content": "| Dimension | At-Most-Once | At-Least-Once | Exactly-Once |\n|---|---|---|---|\n| Message loss | Possible — ack before processing | Never — ack after processing | Never |\n| Duplicates | Never | Possible — producer retries, consumer reprocessing | Never |\n| Producer config | `acks=0` or `acks=1`, fire-and-forget | `acks=all`, retries enabled | `enable.idempotence=true` + transactional producer |\n| Consumer config | Auto-commit offsets eagerly | Manual commit after processing | `isolation.level=read_committed` |\n| Latency overhead | Lowest | Low | 2-3× higher — broker coordination per batch |\n| Complexity | Trivial | Simple | Requires transactional producer/consumer coordination |\n| Use case | Metrics, click tracking, non-critical logs | Most business events (with idempotent consumers) | Financial transactions, billing, ledger entries |"
+          },
+          {
+            "type": "step",
+            "title": "How Duplicates Actually Happen — And Why Idempotent Consumers Are the Real Fix",
+            "content": "Understanding where duplicates come from makes the solution obvious. In an at-least-once system, duplicates happen at two points: **producer retries** and **consumer reprocessing**.\n\nProducer retries: the producer sends a message, the broker persists it and sends an acknowledgment, but the ack is lost due to a network blip. The producer assumes the message was lost and retries — now the broker has two copies. Kafka's idempotent producer (`enable.idempotence=true`, default since Kafka 3.0) solves this by assigning each producer a unique ID and sequence number. The broker deduplicates by checking if it's already seen that producer ID + sequence combination.\n\nConsumer reprocessing: the consumer reads a message, processes it (charges a credit card), then crashes before committing the offset. On restart, Kafka redelivers from the last committed offset — the consumer processes the charge again. No broker-level feature can prevent this because the side effect (the credit card charge) happened outside Kafka's transaction boundary.\n\nThe fix is making the consumer idempotent. The simplest pattern uses a deduplication table within the same database transaction as the business operation.\n\n```java\n@KafkaListener(topics = \"payments\")\n@Transactional\npublic void handlePayment(PaymentEvent event) {\n    if (processedEvents.existsByEventId(event.id())) {\n        return; // already processed — idempotent no-op\n    }\n    paymentService.charge(event);\n    processedEvents.save(new ProcessedEvent(event.id(), Instant.now()));\n}\n```\n\nThe check and the business operation share one transaction. If the consumer crashes after charging but before committing, the `processed_events` insert also rolls back — so the next delivery correctly reprocesses. If both succeed, the duplicate check prevents reprocessing. This achieves **effectively exactly-once** without Kafka transactions."
+          },
+          {
+            "type": "step",
+            "title": "When True Exactly-Once Is Worth the Cost — Kafka Transactions End-to-End",
+            "content": "For systems where even application-level deduplication isn't sufficient — financial ledgers where every entry must appear exactly once, billing systems where a duplicate line item means a compliance violation — Kafka provides true transactional exactly-once.\n\nThe mechanism coordinates three things atomically: consuming from input topics, producing to output topics, and committing consumer offsets. All three succeed or all three roll back.\n\n```java\n@Configuration\npublic class KafkaTransactionalConfig {\n    @Bean\n    public ProducerFactory<String, String> producerFactory() {\n        Map<String, Object> config = new HashMap<>();\n        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, \"kafka:9092\");\n        config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);\n        config.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, \"payment-processor\");\n        return new DefaultKafkaProducerFactory<>(config);\n    }\n}\n```\n\nSetting `transactional.id` enables the transactional producer. Consumers must set `isolation.level=read_committed` to only read messages from committed transactions — otherwise they see messages that might be rolled back.\n\nThe cost is real: transactional producers add a coordination round trip per batch, roughly doubling produce latency. Consumers in `read_committed` mode see higher end-to-end latency because they must wait for transaction commit markers before delivering messages. In throughput-sensitive pipelines, this overhead is significant.\n\nThe boundary of Kafka's exactly-once guarantee is Kafka itself. The moment your consumer writes to PostgreSQL or calls a payment API, you're outside the transaction boundary and back to at-least-once with application-level idempotency. True end-to-end exactly-once across Kafka and external systems requires the consumer-side deduplication pattern regardless."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Idempotent producer is default since Kafka 3.0** — `enable.idempotence=true` deduplicates producer retries at the broker using producer ID + sequence.\n- **Consumer reprocessing is the harder duplicate source** — consumer crashes after processing but before committing offset.\n- **Deduplication table in the same transaction** — checking event ID existence and writing the business result atomically closes the crash window.\n- **Kafka transactions add 2–3× latency** — the coordination round trip per batch is measurable.\n- **Kafka exactly-once boundary stops at Kafka** — writing to PostgreSQL or calling a payment API is outside the transaction."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "These three delivery semantics describe what happens when failures occur in the messaging pipeline.\n- At-most-once acknowledges before processing — fast, but if the consumer crashes, the message is gone.\n- At-least-once acknowledges after processing — no message loss, but the producer might retry or the consumer might reprocess after a crash, creating duplicates.\n\n**Exactly-once — the expensive guarantee:**\n- Requires coordination between producer, broker, and consumer that adds roughly 2–3× latency per batch\n- Kafka achieves it with idempotent producers — which deduplicate retries using a sequence number, enabled by default since Kafka 3.0 — plus transactional producers that atomically commit consumed offsets and produced messages\n- The important boundary: Kafka's exactly-once guarantee stops at Kafka; writing to PostgreSQL or calling a payment API is outside the transaction, so external effects still need application-level idempotency\n\n**The practical alternative — at-least-once with idempotent consumers:**\n- Most systems don't need true exactly-once; at-least-once with idempotent consumers gives effectively the same outcome at lower cost\n- If your consumer checks a processed-events table before doing work, or uses database upserts, or relies on naturally idempotent operations like setting a status field, then duplicates are harmless\n- You end up writing deduplication logic anyway even with Kafka transactions, since external effects are outside the transaction boundary\n\n**When to use each:**\n- At-least-once with idempotent consumers for the vast majority of event processing\n- Reserve Kafka transactions for financial ledgers and billing where a duplicate line item is a compliance violation\n\nI recommend at-least-once with idempotent consumers as the default — it gives you safety without the Kafka transaction latency overhead, and you control the deduplication logic explicitly."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Kafka's idempotent producer differ from transactional producers?",
+        "What is the read_committed isolation level in Kafka consumers?",
+        "How would you implement idempotency in a consumer that writes to PostgreSQL?"
+      ],
+      "seo": {
+        "metaTitle": "Exactly-Once At-Least-Once Delivery Semantics Kafka | InterviewExplainer",
+        "metaDescription": "Compare exactly-once, at-least-once, and at-most-once delivery semantics in Kafka. When to use each, idempotent producers, and practical implementation."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "These three delivery semantics describe what happens when failures occur in the messaging pipeline.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most developers assume exactly-once delivery is the obvious default — why would you accept message loss or duplicates? The answer is cost. True exactly-once requires coordination between the producer, broker, and consumer that adds latency, reduces throughput, and introduces operational complexity most systems don't need. The three semantics describe what happens when something goes wrong — a producer crashes after sending, a broker fails after receiving, a consumer crashes after processing. At-most-once acknowledges before processing: fast, but the message is."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of distributed messaging guarantees and the real cost of exactly-once semantics"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Idempotent producer is default since Kafka 3",
+              "idempotence=true deduplicates producer retries at the broker using producer ID + sequence",
+              "Consumer reprocessing is the harder duplicate source — consumer crashes after processing but before committing offset",
+              "Deduplication table in the same transaction — checking event ID existence and writing the business result atomically closes the crash window",
+              "Kafka transactions add 2–3× latency — the coordination round trip per batch is measurable"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most developers assume exactly-once delivery is the obvious default — why would you accept message loss or duplicates? The answer is cost. True exactly-once requires coordination between the producer, broker, and consumer that adds latency, reduces throughput, and introduces operational complexity most systems don't need. The three semantics describe what happens when something goes wrong — a producer crashes after sending, a broker fails after receiving, a consumer crashes after processing. At-most-once acknowledges before processing: fast, but the message is gone if the consumer crashes. At-least-once acknowledges after processing: safe, but the producer may retry and the consumer sees duplicates. Exactly-once coordinates producer, broker, and consumer state atomically: no loss, no duplicates, but 2-3× the latency and significant operational overhead."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking exactly-once is free or easy",
+              "it requires idempotent producers, transactional consumers, and cross-system coordination"
+            ]
+          }
+        ],
+        "cap": "Exactly-once — the expensive guarantee: Requires coordination between producer, broker, and consumer that adds roughly 2–3× latency per batch Kafka achieves it with idempotent producers — which dedupl",
+        "familiarity_anchors": [
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Kafka's idempotent producer differ from transactional producers?",
+          "What is the read_committed isolation level in Kafka consumers?",
+          "How would you implement idempotency in a consumer that writes to PostgreSQL?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "eda-012",
+      "slug": "idempotent-consumers-event-deduplication",
+      "question": "How do you implement idempotent event consumers in Java to handle duplicate events?",
+      "title": "Idempotent Consumers: Safe Duplicate Event Processing",
+      "direct_answer": "An **idempotent consumer** produces the same result regardless of how many times the same event is processed. Implement **idempotency** by storing processed event IDs and checking before processing. For database operations, use INSERT ON CONFLICT DO NOTHING or upsert patterns. For external calls, use idempotency keys in API requests.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you handle duplicate message delivery (guaranteed in at-least-once systems) without causing double-charges, double-inventory-decrements, or other data corruption",
+        "common_mistake": "Building non-idempotent consumers and relying on 'exactly-once delivery' which is either unavailable or expensive — at-least-once is the practical default",
+        "to_stand_out": "Discuss the deduplication window (how long to retain processed event IDs), show the check-then-act pattern within a transaction, and mention natural idempotency (SET status = 'SHIPPED' is naturally idempotent)"
+      },
+      "company_tags": [
+        "stripe",
+        "amazon",
+        "square",
+        "paypal",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why At-Least-Once Delivery Guarantees You Will See Duplicates",
+            "content": "Most developers treat duplicate events as an edge case that rarely happens.\n- In any at-least-once system — which is what Kafka and RabbitMQ provide by default — duplicates are a **guaranteed operational reality**.\n- They happen during consumer restarts, partition rebalances, network timeouts, and outbox replays.\n- The question isn't whether your consumers will see duplicates, but whether they handle them safely.\n\nConsider the payment consumer.\n- It reads a `PaymentRequested` event, charges the credit card, and then the JVM crashes before committing the Kafka offset.\n- On restart, Kafka redelivers from the last committed offset — the consumer processes the same event again and charges the card a second time.\n- The customer is double-charged.\n- The payment gateway sees two distinct charge requests because they have different request IDs.\n\nAn **idempotent consumer** produces the same result regardless of how many times it processes the same event.\n- Processing a `PaymentRequested` event twice should result in exactly one charge.\n- Processing a `SetStatusShipped` event twice should leave the order in the same state.\n- Some operations are **naturally idempotent** — setting a status field to the same value, upserting a row with the same primary key.\n- Others need explicit deduplication — incrementing a counter, charging a credit card, sending a notification.\n- The strategy depends on the operation."
+          },
+          {
+            "type": "step",
+            "title": "Transactional Deduplication — The Universal Safety Net",
+            "content": "The most explicit approach uses a **processed-events table**. Before processing any event, check if its ID exists in the table. If it does, skip. If it doesn't, process the event and record the ID — all within the same database transaction.\n\n```java\n@KafkaListener(topics = \"payment-events\")\n@Transactional\npublic void handlePayment(PaymentEvent event) {\n    if (processedEvents.existsByEventId(event.id())) {\n        log.debug(\"Duplicate skipped: {}\", event.id());\n        return;\n    }\n\n    paymentService.charge(event);\n    processedEvents.save(new ProcessedEvent(event.id(), Instant.now()));\n}\n```\n\nThe `@Transactional` boundary is critical. The check and the business operation share one transaction. If the consumer crashes after charging but before the transaction commits, the `processed_events` insert also rolls back — so the next delivery correctly reprocesses. If both the charge and the insert succeed, the transaction commits atomically. A subsequent duplicate delivery finds the event ID and skips.\n\nThe processed-events table needs a **retention window**. Keeping IDs forever means unbounded table growth. The retention must exceed your maximum redelivery horizon — how long Kafka might redeliver an old message. For most systems, 7 days covers consumer restarts, rebalances, and outbox replays with margin.\n\n```sql\nCREATE TABLE processed_events (\n    event_id     UUID PRIMARY KEY,\n    processed_at TIMESTAMP NOT NULL\n);\n-- Nightly cleanup\nDELETE FROM processed_events WHERE processed_at < NOW() - INTERVAL '7 days';\n```\n\nThe UUID primary key means the existence check is an index lookup — fast even with millions of rows within the retention window."
+          },
+          {
+            "type": "step",
+            "title": "Natural Idempotency — When the Operation Itself Is Safe to Repeat",
+            "content": "Not every operation needs a deduplication table. Some operations are inherently idempotent — repeating them produces the same state as doing them once. Recognizing naturally idempotent patterns avoids the overhead of maintaining a separate deduplication store.\n\n**Upsert with version guard** is the cleanest pattern for state-setting operations. Setting an order's status to `SHIPPED` twice leaves it shipped. The version check prevents a stale event from overwriting a newer state.\n\n```java\n@Modifying\n@Query(value = \"\"\"\n    INSERT INTO orders (id, status, version)\n    VALUES (:id, :status, :version)\n    ON CONFLICT (id) DO UPDATE\n    SET status = EXCLUDED.status\n    WHERE orders.version < EXCLUDED.version\n    \"\"\", nativeQuery = true)\nvoid upsertStatus(@Param(\"id\") String id,\n                  @Param(\"status\") String status,\n                  @Param(\"version\") long version);\n```\n\nThe `WHERE orders.version < EXCLUDED.version` clause is the safety mechanism. If a `SHIPPED` event (version 5) arrives after a `DELIVERED` event (version 6) — which happens when events are redelivered out of order — the upsert is a no-op because version 5 is less than the current version 6. The order stays `DELIVERED` instead of regressing to `SHIPPED`.\n\n**Monotonic state transitions** are another form of natural idempotency. If your domain model enforces that states only move forward — `PLACED → PAID → SHIPPED → DELIVERED` — then applying the same transition twice has no effect. The `ship()` method checks that the current status is `PAID` before transitioning. A duplicate `SHIPPED` event arrives when the order is already `SHIPPED`, and the status check rejects it."
+          },
+          {
+            "type": "step",
+            "title": "External Side Effects — Idempotency Keys for APIs You Don't Control",
+            "content": "The hardest idempotency challenge is external side effects. Charging a credit card, sending an SMS, calling a partner API — these operations happen outside your database transaction. You can't roll them back, and you can't make them naturally idempotent.\n\nThe solution is **idempotency keys**: a stable identifier that the external service uses to deduplicate requests. Most payment APIs (Stripe, PayPal, Adyen) support this natively.\n\n```java\n@Service\npublic class PaymentGatewayService {\n\n    public PaymentResult charge(PaymentEvent event) {\n        return stripeClient.charge(\n            ChargeRequest.builder()\n                .amount(event.amount())\n                .currency(event.currency())\n                .idempotencyKey(event.id().toString()) // same key = same charge\n                .build()\n        );\n    }\n}\n```\n\nWhen Stripe receives two charge requests with the same idempotency key, it returns the result of the first request without executing a second charge. The event's UUID becomes the natural idempotency key — it's stable, unique, and directly tied to the business operation.\n\nFor external services that don't support idempotency keys, implement a **local outcome record**. Before calling the external API, check if you've already recorded a successful result for this event ID. If yes, return the cached result. If no, make the call and record the outcome. This adds a database round trip, but it prevents duplicate external calls.\n\nThe edge case: the external call succeeds but your service crashes before recording the outcome. On retry, you make the call again — and the external service processes it as a new request. This is where external idempotency keys are essential. Without them, you accept the risk of duplicate external side effects, which for payment processing is unacceptable."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Transactional deduplication table** — check `event_id` existence and write business result in the same `@Transactional` boundary.\n- **7-day retention window** — delete processed event IDs older than your maximum redelivery horizon.\n- **Upsert with `WHERE version < EXCLUDED.version`** — prevents stale out-of-order events from overwriting newer state.\n- **Idempotency keys for payment APIs** — Stripe-style keys deduplicate external charges.\n- **Natural idempotency saves a table lookup** — `SET status = 'SHIPPED'` is inherently repeatable."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Idempotent consumers are non-negotiable in at-least-once messaging systems. Kafka and RabbitMQ both deliver duplicates during consumer restarts, rebalances, and network issues. If your consumer charges a credit card and then crashes before committing the offset, the broker redelivers and the card gets charged twice.\n\n**The explicit deduplication approach:**\n- Before processing, check if the event ID exists in a processed-events table; if it does, skip; if not, process and record the ID — both within the same database transaction\n- If the consumer crashes after processing but before committing, the insert also rolls back so redelivery correctly reprocesses the event from scratch\n- Set a 7-day retention window for the deduplication table — this covers consumer restarts, rebalances, and outbox replays while keeping the table bounded\n\n**Natural idempotency — the cleaner path when applicable:**\n- State-setting operations like setting an order status to SHIPPED are naturally idempotent — doing it twice leaves it shipped; use upserts with a version guard so stale events arriving out of order cannot overwrite newer state\n- The `WHERE version < EXCLUDED.version` clause in a PostgreSQL upsert makes out-of-order delivery harmless without a deduplication table lookup\n\n**External side effects — the hardest case:**\n- Charging a credit card, sending an SMS, calling an external API — these require the event ID as an idempotency key in the API call\n- Stripe and most payment processors deduplicate by this key — same key produces the same result, no second charge\n\nI recommend natural idempotency (upserts and state-setting operations) wherever possible, and explicit deduplication tables only for operations that increment counters, charge cards, or trigger irreversible external side effects."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle the case where the event processing succeeds but recording the event ID fails?",
+        "What is the deduplication window, and how do you decide how long to keep processed event IDs?",
+        "How does optimistic locking with @Version relate to idempotent processing?"
+      ],
+      "seo": {
+        "metaTitle": "Idempotent Consumers Event Deduplication Java Kafka | InterviewExplainer",
+        "metaDescription": "Implement idempotent event consumers in Java for Kafka and RabbitMQ. Deduplication table, upsert patterns, idempotency keys for external APIs, and safe retry."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Idempotent consumers are non-negotiable in at-least-once messaging systems.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most developers treat duplicate events as an edge case that rarely happens. In any at-least-once system — which is what Kafka and RabbitMQ provide by default — duplicates are a guaranteed operational reality. They happen during consumer restarts, partition rebalances, network timeouts, and outbox replays. The question isn't whether your consumers will see duplicates, but whether they handle them safely. Consider the payment consumer. It reads a PaymentRequested event, charges the credit card, and then the JVM crashes before committing."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you handle duplicate message delivery (guaranteed in at-least-once systems) without causing double-charges, double-inventory-decrements, or other data corruption"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Transactional deduplication table — check event_id existence and write business result in the same @Transactional boundary",
+              "7-day retention window — delete processed event IDs older than your maximum redelivery horizon",
+              "Upsert with WHERE version < EXCLUDED",
+              "version — prevents stale out-of-order events from overwriting newer state",
+              "Idempotency keys for payment APIs — Stripe-style keys deduplicate external charges"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most developers treat duplicate events as an edge case that rarely happens. In any at-least-once system — which is what Kafka and RabbitMQ provide by default — duplicates are a guaranteed operational reality. They happen during consumer restarts, partition rebalances, network timeouts, and outbox replays. The question isn't whether your consumers will see duplicates, but whether they handle them safely. Consider the payment consumer. It reads a PaymentRequested event, charges the credit card, and then the JVM crashes before committing the Kafka offset. On restart, Kafka redelivers from the last committed offset — the consumer processes the same event again and charges the card a second time. The customer is double-charged. The payment gateway sees two distinct charge requests because."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Building non-idempotent consumers and relying on 'exactly-once delivery' which is either unavailable or expensive",
+              "at-least-once is the practical default"
+            ]
+          }
+        ],
+        "cap": "The explicit deduplication approach: Before processing, check if the event ID exists in a processed-events table; if it does, skip; if not, process and record the ID — both within the same database tr",
+        "familiarity_anchors": [
+          "Implement",
+          "INSERT",
+          "CONFLICT"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle the case where the event processing succeeds but recording the event ID fails?",
+          "What is the deduplication window, and how do you decide how long to keep processed event IDs?",
+          "How does optimistic locking with @Version relate to idempotent processing?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "rmq-005",
+      "slug": "dead-letter-exchange-retry",
+      "question": "How do you implement dead-letter exchanges and retry strategies in RabbitMQ with Spring Boot?",
+      "title": "Dead Letter Exchanges and Retry Strategies in RabbitMQ",
+      "direct_answer": "A dead-letter **exchange** (DLX) receives messages that are rejected, nacked without requeue, or expire. To implement **retry**, route failed messages to a retry **queue** with a TTL, which dead-letters them back to the original exchange after the TTL expires. For exponential backoff, use multiple retry queues with increasing TTLs or Spring Retry with a **RabbitMQ**-backed policy.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Ability to design resilient message processing pipelines that handle transient failures without losing messages.",
+        "common_mistake": "Infinite retry loops caused by always requeueing on failure, or not setting a max-retry counter, which fills the queue with poison messages.",
+        "to_stand_out": "Describe the pattern of using message headers to track retry count and route to the final DLQ after N attempts, plus mention Spring Retry integration as an alternative."
+      },
+      "company_tags": [
+        "fintech",
+        "e-commerce",
+        "saas",
+        "enterprise",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Poison Message Loop That Takes Down Your Consumer Fleet",
+            "content": "A payment service consumer receives a message, calls a third-party API that's temporarily down, and the handler throws an exception.\n- Spring's default behavior nacks with `requeue=true`, putting the message back at the head of the queue.\n- The consumer immediately picks it up again, fails again, requeues again — hundreds of times per second.\n- CPU spikes, logs flood, and the consumer is so busy retrying one poison message that it can't process anything else.\n- Meanwhile the queue backs up because the consumer is effectively blocked.\n\nThe **dead-letter exchange** pattern breaks this loop.\n- When a message is nacked with `requeue=false`, the broker doesn't discard it — it routes it to a DLX, which is just a regular exchange wired to a \"parking\" queue.\n- From there, you have options: inspect and manually reprocess, retry after a delay, or move to a permanent graveyard queue after exhausting retries.\n\nThe retry pattern builds on DLX mechanics.\n- Failed messages route to a **TTL-based parking queue** — a queue with a per-message or per-queue TTL and its own DLX pointing back to the original exchange.\n- When the TTL expires, the parking queue dead-letters the message back to the main exchange, creating a delay-and-retry loop with no external scheduler, no cron job, and no application-level timer.\n- The entire retry mechanism is broker-native.\n\nBut without a retry cap, this loop runs forever.\n- The essential addition is reading the **x-death header** — metadata RabbitMQ automatically appends to dead-lettered messages — to count how many times a message has cycled through the retry loop.\n- After N attempts, route to a permanent dead-letter queue for investigation instead of retrying indefinitely."
+          },
+          {
+            "type": "step",
+            "title": "Building the Three-Queue Topology — Main, Retry, and Graveyard",
+            "content": "The pattern requires three exchanges and three queues wired in a specific cycle. The main queue's DLX points to the retry exchange. The retry queue's DLX points back to the main exchange. A third graveyard queue catches messages that have exhausted all retries.\n\nThe wiring looks complex but each queue argument does one thing — set the dead-letter destination and the delay duration.\n\n```java\n@Configuration\npublic class DlxRetryConfig {\n\n    public static final String MAIN_EXCHANGE  = \"orders.direct\";\n    public static final String RETRY_EXCHANGE = \"orders.retry\";\n    public static final String DLQ_EXCHANGE   = \"orders.dlq\";\n    public static final String MAIN_QUEUE     = \"orders.queue\";\n    public static final String RETRY_QUEUE    = \"orders.retry.queue\";\n    public static final String DLQ_QUEUE      = \"orders.dead.queue\";\n    public static final String ROUTING_KEY    = \"order.created\";\n    public static final int    RETRY_DELAY_MS = 10_000;\n    public static final int    MAX_RETRIES    = 3;\n\n    @Bean DirectExchange mainExchange()  { return new DirectExchange(MAIN_EXCHANGE); }\n    @Bean DirectExchange retryExchange() { return new DirectExchange(RETRY_EXCHANGE); }\n    @Bean FanoutExchange dlqExchange()   { return new FanoutExchange(DLQ_EXCHANGE); }\n\n    @Bean\n    public Queue mainQueue() {\n        return QueueBuilder.durable(MAIN_QUEUE)\n            .withArgument(\"x-dead-letter-exchange\", RETRY_EXCHANGE)\n            .withArgument(\"x-dead-letter-routing-key\", ROUTING_KEY)\n            .build();\n    }\n\n    @Bean\n    public Queue retryQueue() {\n        return QueueBuilder.durable(RETRY_QUEUE)\n            .withArgument(\"x-message-ttl\", RETRY_DELAY_MS) // park for 10s\n            .withArgument(\"x-dead-letter-exchange\", MAIN_EXCHANGE)\n            .withArgument(\"x-dead-letter-routing-key\", ROUTING_KEY)\n            .build();\n    }\n\n    @Bean\n    public Queue dlqQueue() {\n        return QueueBuilder.durable(DLQ_QUEUE).build();\n    }\n\n    @Bean Binding mainBinding()  { return BindingBuilder.bind(mainQueue()).to(mainExchange()).with(ROUTING_KEY); }\n    @Bean Binding retryBinding() { return BindingBuilder.bind(retryQueue()).to(retryExchange()).with(ROUTING_KEY); }\n    @Bean Binding dlqBinding()   { return BindingBuilder.bind(dlqQueue()).to(dlqExchange()); }\n}\n```\n\nThe flow: consumer nacks with `requeue=false` → message goes to retry exchange → lands in retry queue → sits for 10 seconds (TTL) → dead-letters back to main exchange → consumer picks it up again. No scheduler, no cron — the broker's TTL expiration drives the retry timing."
+          },
+          {
+            "type": "step",
+            "title": "Capping Retries with the x-death Header — Stopping the Infinite Loop",
+            "content": "Without a retry cap, the TTL loop runs forever. RabbitMQ solves this by appending an **x-death header** to every dead-lettered message. This header contains a list of maps, each recording which queue dead-lettered the message, the reason (rejected, expired, maxlen), and a **count** of how many times it happened.\n\nRead the count in your consumer. When it exceeds your maximum, change the DLX routing: instead of nacking to the retry exchange, nack to the graveyard exchange.\n\n```java\n@RabbitListener(queues = DlxRetryConfig.MAIN_QUEUE, ackMode = \"MANUAL\")\npublic void consume(Order order, Message message, Channel channel,\n        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {\n    int retryCount = getRetryCount(message);\n    try {\n        orderService.process(order);\n        channel.basicAck(deliveryTag, false);\n    } catch (TransientException e) {\n        if (retryCount >= DlxRetryConfig.MAX_RETRIES) {\n            log.error(\"Order {} exhausted {} retries, sending to DLQ\",\n                      order.getId(), MAX_RETRIES);\n            channel.basicNack(deliveryTag, false, false);\n        } else {\n            log.warn(\"Transient error on attempt {} for order {}\",\n                     retryCount + 1, order.getId());\n            channel.basicNack(deliveryTag, false, false);\n        }\n    } catch (PermanentException e) {\n        log.error(\"Permanent error for order {}, dead-lettering\", order.getId());\n        channel.basicNack(deliveryTag, false, false);\n    }\n}\n\n@SuppressWarnings(\"unchecked\")\nprivate int getRetryCount(Message message) {\n    List<Map<String, Object>> deaths = (List<Map<String, Object>>)\n        message.getMessageProperties().getHeaders().get(\"x-death\");\n    if (deaths == null || deaths.isEmpty()) return 0;\n    Long count = (Long) deaths.get(0).get(\"count\");\n    return count == null ? 0 : count.intValue();\n}\n```\n\nThe subtlety is in the DLX wiring when retries are exhausted. After MAX_RETRIES cycles through the retry queue, the final nack still goes to the retry exchange. To route exhausted messages to the graveyard instead, add a check: when `retryCount >= MAX_RETRIES`, reconfigure the message's DLX header before nacking, or — simpler — have the retry queue's DLX still point to the main exchange but have the consumer itself publish directly to the DLQ queue. The consumer-side routing check shown above is the cleanest approach because all retry logic lives in one place."
+          },
+          {
+            "type": "step",
+            "title": "Spring Retry as an Alternative — In-Process Backoff Without Broker Queues",
+            "content": "Spring Retry handles retries inside the listener container, before the message ever reaches a DLX. It's simpler to configure than the TTL-queue approach and gives you exponential backoff within a single consumer process.\n\n```java\n@Bean\npublic SimpleRabbitListenerContainerFactory retryContainerFactory(\n        ConnectionFactory cf, Jackson2JsonMessageConverter converter) {\n    SimpleRabbitListenerContainerFactory factory =\n        new SimpleRabbitListenerContainerFactory();\n    factory.setConnectionFactory(cf);\n    factory.setMessageConverter(converter);\n    factory.setAdviceChain(\n        RetryInterceptorBuilder.stateless()\n            .maxAttempts(3)\n            .backOffOptions(1000, 2.0, 10_000) // 1s, 2s, 4s, capped at 10s\n            .recoverer(new RejectAndDontRequeueRecoverer()) // nack → DLX\n            .build()\n    );\n    return factory;\n}\n```\n\nThe `RejectAndDontRequeueRecoverer` is critical — after exhausting retries, it nacks without requeue, which hands the message to the DLX for dead-lettering. Without the recoverer, Spring's default behavior requeues the message, restarting the entire retry cycle.\n\nThe trade-off between Spring Retry and TTL-queue retry is visibility. Spring Retry happens in-process — the broker sees no retry activity, making it invisible in the management UI. TTL-queue retry creates visible queue depth in the retry queue, making it easy to monitor retry volume and detect retry storms. For mission-critical flows where you want broker-level visibility and decoupled retry timing, use TTL queues. For simpler transient-error handling on HTTP or database calls, Spring Retry is less infrastructure."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`requeue=true` creates a poison message hot-loop** — the consumer retries the same failed message hundreds of times per second.\n- **TTL parking queue = broker-native delay** — a retry queue with `x-message-ttl` and a DLX back to the main exchange creates a delay-and-retry loop.\n- **x-death header tracks retry count automatically** — RabbitMQ appends death history including a `count` field.\n- **Spring Retry vs TTL queues** — Spring Retry is in-process (simpler config); TTL-queue retry is broker-visible (monitorable depth, decoupled timing).\n- **`RejectAndDontRequeueRecoverer` is mandatory** — without it, Spring's default recoverer requeues after exhausting retries, restarting the entire cycle."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The dead-letter exchange pattern solves the poison message problem. Without it, a consumer that nacks with `requeue=true` immediately retries the same message hundreds of times per second — CPU spikes, logs flood, and the queue backs up while the application appears busy but is doing nothing useful.\n\n**The three-queue DLX topology:**\n- The main queue's DLX points to a retry exchange; that exchange routes to a TTL-based parking queue where messages sit for a configured delay — say 10 seconds\n- When the TTL expires, the parking queue dead-letters back to the main exchange, creating a retry loop with no external scheduler required\n- RabbitMQ automatically appends an `x-death` header including a count of how many times the message has been dead-lettered; read this count to cap retries and route to a permanent graveyard DLQ after exhausting attempts\n\n**Spring Retry as an alternative:**\n- `@RetryableTopic` equivalent for RabbitMQ: configure Spring Retry on the listener container factory with exponential backoff\n- Pair it with a `RejectAndDontRequeueRecoverer` so exhausted messages still route to the DLX — without this, Spring's default recoverer requeues and restarts the entire cycle\n- Spring Retry is simpler but invisible to the broker's management UI; TTL-queue retry creates visible queue depth you can monitor for retry storms\n\n**Transient vs permanent failures:**\n- Transient failures like a temporary API timeout get retried with backoff\n- Permanent failures like a malformed payload get dead-lettered immediately without wasting retry cycles — distinguish these in your nack logic\n\nI recommend the TTL-queue topology for mission-critical flows where broker-visible queue depth and monitoring matter, and Spring Retry for lower-stakes consumers where the simpler configuration is worth the trade-off."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you monitor the dead-letter queue and alert when messages accumulate?",
+        "What is the difference between message TTL and queue TTL in RabbitMQ?",
+        "How do you implement exponential backoff without multiple retry queues?"
+      ],
+      "seo": {
+        "meta_title": "RabbitMQ Dead Letter Exchange and Retry Strategies | Spring Boot",
+        "meta_description": "Learn how to implement RabbitMQ dead-letter exchanges, TTL-based retry queues, and max retry enforcement with x-death headers in Spring Boot.",
+        "keywords": [
+          "rabbitmq dead letter exchange",
+          "dlx rabbitmq",
+          "rabbitmq retry strategy",
+          "spring boot rabbitmq retry",
+          "x-death header",
+          "rabbitmq dlq"
+        ],
+        "metaDescription": "A dead-letter exchange (DLX) receives messages that are rejected, nacked without requeue, or expire.",
+        "metaTitle": "Dead Letter Exchanges and Retry Strategies in RabbitMQ"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The dead-letter exchange pattern solves the poison message problem.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A payment service consumer receives a message, calls a third-party API that's temporarily down, and the handler throws an exception. Spring's default behavior nacks with requeue=true, putting the message back at the head of the queue. The consumer immediately picks it up again, fails again, requeues again — hundreds of times per second. CPU spikes, logs flood, and the consumer is so busy retrying one poison message that it can't process anything else. Meanwhile the queue backs up because the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Ability to design resilient message processing pipelines that handle transient failures without losing messages."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "requeue=true creates a poison message hot-loop — the consumer retries the same failed message hundreds of times per second",
+              "TTL parking queue = broker-native delay — a retry queue with x-message-ttl and a DLX back to the main exchange creates a delay-and-retry loop",
+              "x-death header tracks retry count automatically — RabbitMQ appends death history including a count field",
+              "Spring Retry vs TTL queues — Spring Retry is in-process (simpler config); TTL-queue retry is broker-visible (monitorable depth, decoupled timing)",
+              "RejectAndDontRequeueRecoverer is mandatory — without it, Spring's default recoverer requeues after exhausting retries, restarting the entire cycle"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A payment service consumer receives a message, calls a third-party API that's temporarily down, and the handler throws an exception. Spring's default behavior nacks with requeue=true, putting the message back at the head of the queue. The consumer immediately picks it up again, fails again, requeues again — hundreds of times per second. CPU spikes, logs flood, and the consumer is so busy retrying one poison message that it can't process anything else. Meanwhile the queue backs up because the consumer is effectively blocked. The dead-letter exchange pattern breaks this loop. When a message is nacked with requeue=false, the broker doesn't discard it — it routes it to a DLX, which is just a regular exchange wired to a \"parking\"."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Infinite retry loops caused by always requeueing on failure, or not setting a max-retry counter, which fills the queue with poison messages"
+            ]
+          }
+        ],
+        "cap": "The three-queue DLX topology: The main queue's DLX points to a retry exchange; that exchange routes to a TTL-based parking queue where messages sit for a configured delay — say 10 seconds When the TTL",
+        "familiarity_anchors": [
+          "Spring",
+          "Retry",
+          "RabbitMQ"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you monitor the dead-letter queue and alert when messages accumulate?",
+          "What is the difference between message TTL and queue TTL in RabbitMQ?",
+          "How do you implement exponential backoff without multiple retry queues?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    }
+  ]
+}

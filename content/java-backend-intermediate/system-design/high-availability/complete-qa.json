@@ -1,0 +1,181 @@
+{
+  "topic": "High Availability",
+  "topicSlug": "high-availability",
+  "questions": [
+    {
+      "id": "sdf-011",
+      "slug": "circuit-breaker-pattern",
+      "question": "What is the circuit breaker pattern and how does it prevent cascade failures in distributed systems?",
+      "title": "Circuit Breaker Pattern: Preventing Cascade Failures in Distributed Systems",
+      "direct_answer": "A circuit breaker wraps a remote call and **trips open** after a configurable failure threshold; while open, calls **fail fast** without hitting the dependency. After a cooling period, the breaker enters **half-open** and lets a few probe requests through; if they succeed, it closes; if they fail, it re-opens. This prevents a slow or broken downstream from **consuming all caller threads** (the classic cascade-failure pattern). Combine with **timeouts, retries with backoff, and bulkheads** for full resilience. Use **Resilience4j** (modern, lightweight, replaces Netflix Hystrix).",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Three-state machine (closed/open/half-open), failure detection thresholds, fallback strategies, and the cascade-failure problem it solves.",
+        "common_mistake": "Confusing circuit breaker with retry (they solve opposite problems), or not pairing it with timeouts (a breaker with no timeout still hangs).",
+        "to_stand_out": "Walk through the cascade scenario (slow dependency → thread pool exhaustion → caller dies), discuss bulkhead isolation, sliding-window failure rate vs count thresholds, and the half-open probe strategy."
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Uber",
+        "Stripe",
+        "Resilience4j"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Cascade Failure Problem It Solves",
+            "content": "Imagine service A calls service B. B starts responding slowly (DB issue, GC pause, downstream of B is overloaded — doesn't matter why).\n\n**Without a circuit breaker, in 30 seconds:**\n1. A's calls to B start timing out at 30s instead of returning in 50ms.\n2. A's worker threads (Tomcat, Netty) pile up waiting on B.\n3. A's thread pool fills.\n4. New incoming requests to A queue up; latency explodes.\n5. A's upstream (C) sees A as slow; C's threads pile up too.\n6. Cascade: B's local issue takes down A and C.\n\n**With a circuit breaker:**\n- After (say) 5 consecutive failures, the breaker on A trips OPEN.\n- All subsequent calls from A to B fail instantly with a fallback.\n- A's threads stay free to serve other endpoints.\n- B's recovery doesn't have to fight thousands of stuck retries.\n- After a cooldown, A probes B; if healthy, breaker closes.\n\nThe breaker's job: **stop wasting resources on a known-broken downstream.** Speed of failure beats slow degradation."
+          },
+          {
+            "type": "step",
+            "title": "The Three States",
+            "content": "```mermaid\nstateDiagram-v2\n    [*] --> CLOSED\n    CLOSED --> OPEN: failure threshold exceeded\n    OPEN --> HALF_OPEN: cooldown elapsed\n    HALF_OPEN --> CLOSED: probe succeeds\n    HALF_OPEN --> OPEN: probe fails\n    CLOSED --> CLOSED: success\n    OPEN --> OPEN: fail-fast\n```\n\n**CLOSED — normal operation.**\n- Calls pass through to the downstream.\n- Track success/failure rate (sliding window).\n- If failure threshold exceeded → trip OPEN.\n\n**OPEN — dependency considered broken.**\n- Calls fail immediately (no downstream call); return cached value, default, or exception.\n- After `waitDuration` (typically 10-60s), transition to HALF_OPEN.\n\n**HALF_OPEN — cautious probing.**\n- Allow `permittedCallsInHalfOpen` (typically 3-10) calls through.\n- If all (or threshold) succeed → CLOSED.\n- If any fails → back to OPEN, reset cooldown.\n- This avoids hammering a still-recovering downstream with full traffic."
+          },
+          {
+            "type": "step",
+            "title": "Triggering the Trip — Failure Rate vs Count",
+            "content": "**Two threshold strategies:**\n\n**Count-based:** trip after N failures in the last M calls.\n- Example: 50 failures in last 100 calls.\n- Predictable; easy to reason about.\n- Sensitive to call volume; idle service rarely has 100 recent calls.\n\n**Time-based (sliding window):** trip after X% failures in the last T seconds.\n- Example: 50% failure rate over the last 60 seconds.\n- Volume-independent; works for both busy and quiet services.\n- Default in Resilience4j and most modern libraries.\n\n**What counts as a failure:**\n- Exceptions: `TimeoutException`, `ConnectException`, `IOException`, custom \"upstream 5xx\" exceptions.\n- HTTP 5xx responses (not 4xx — client errors aren't downstream failures).\n- Slow calls (Resilience4j's `slowCallRateThreshold`): a call that takes longer than `slowCallDurationThreshold` counts as a failure even if it returns success.\n\n**Why slow-call threshold matters:** a downstream returning 200 OK in 30 seconds is still broken from the caller's perspective — it's eating thread budget. Treating slow calls as failures trips the breaker before threads exhaust."
+          },
+          {
+            "type": "step",
+            "title": "Implementation — Resilience4j Example",
+            "content": "```java\nCircuitBreakerConfig cfg = CircuitBreakerConfig.custom()\n    .failureRateThreshold(50)                      // trip if 50% fail\n    .slowCallRateThreshold(50)\n    .slowCallDurationThreshold(Duration.ofSeconds(2))\n    .waitDurationInOpenState(Duration.ofSeconds(30))\n    .permittedNumberOfCallsInHalfOpenState(5)\n    .slidingWindowType(SlidingWindowType.TIME_BASED)\n    .slidingWindowSize(60)                          // last 60 seconds\n    .minimumNumberOfCalls(20)                       // need 20 calls before tripping\n    .build();\n\nCircuitBreaker breaker = CircuitBreaker.of(\"paymentService\", cfg);\n\nSupplier<PaymentResponse> guarded = CircuitBreaker.decorateSupplier(\n    breaker,\n    () -> paymentClient.charge(req)\n);\n\nPaymentResponse resp = Try.ofSupplier(guarded)\n    .recover(throwable -> fallbackResponse(req, throwable))\n    .get();\n```\n\nKey choices:\n- `minimumNumberOfCalls=20` — don't trip on the first error in a low-traffic service.\n- `slowCallRateThreshold=50%` with 2s threshold — catches degradation before timeouts.\n- `waitDurationInOpenState=30s` — enough for downstream to recover; not so long that recovery goes unnoticed.\n- Fallback returns a sensible default or cached response — the *what* depends on the use case."
+          },
+          {
+            "type": "step",
+            "title": "Pair with Timeouts, Retries, and Bulkheads",
+            "content": "Circuit breakers alone aren't enough. The full resilience stack:\n\n**1. Timeout (always).**\n- Every remote call must have a timeout.\n- Without it, the breaker's failure detection is meaningless — the call hangs forever.\n- Set timeout < typical SLA + headroom; e.g., 95th-percentile latency * 2.\n\n**2. Retry with exponential backoff + jitter.**\n- For transient failures (network blip, brief 503).\n- 2-3 attempts typical; more = re-introduces the cascade problem.\n- Jitter prevents synchronized retries of all clients (thundering herd).\n- **Don't retry idempotent failures** through a closed breaker after it trips — the breaker's job is to stop retries.\n\n**3. Circuit breaker.**\n- Wraps the retry layer; trips after persistent failures.\n\n**4. Bulkhead (thread pool isolation).**\n- Each remote dependency gets its own bounded thread pool.\n- A slow downstream X consumes only its X-thread-pool budget; other dependencies remain responsive.\n- Resilience4j's `Bulkhead` and `ThreadPoolBulkhead`; Hystrix's defining feature.\n\n**5. Fallback.**\n- What to return when the breaker is open: cached value, default, degraded response, or rethrow with a meaningful error.\n\n**Order:** request → bulkhead → circuit breaker → retry → timeout → actual call."
+          },
+          {
+            "type": "step",
+            "title": "Choosing Fallback Strategies",
+            "content": "**Cached value (stale-but-served):**\n- For read paths where stale data is acceptable.\n- Example: product details — return last-known price + a flag 'pricing temporarily unavailable.'\n\n**Default/empty:**\n- Recommendations service down? Return an empty list (UI hides the section).\n- User preferences unavailable? Use defaults.\n\n**Degraded response:**\n- A search call fails? Return only the top results from a local cache.\n- Profile picture service down? Return a placeholder.\n\n**Rethrow with meaningful error:**\n- For critical paths (payment, order placement), don't fake success.\n- Return 503 with `Retry-After` so clients can retry later.\n\n**Asynchronous queue + 202 Accepted:**\n- For writes that can be deferred: queue the request, return 202, retry from queue when downstream recovers.\n\n**Anti-pattern:** silent failure (swallow the exception, log nothing). The user can't see what went wrong; you can't debug it later."
+          },
+          {
+            "type": "step",
+            "title": "Per-Endpoint vs Per-Service Breakers",
+            "content": "**Per-service breaker:** one breaker for all calls to service B.\n- Simple. If B is down, all calls fail fast.\n- But: if only one endpoint of B is broken (a specific buggy route), the breaker trips for the whole service — false positives.\n\n**Per-endpoint breaker:** one breaker per route (or per logical operation).\n- Finer-grained; only the broken endpoint's breaker trips.\n- More configuration; needs naming convention.\n\n**Recommendation:**\n- Per-service breaker by default.\n- Per-endpoint when one route has different SLA than others (a slow analytics endpoint vs a fast lookup) or when a single endpoint is known-fragile.\n- Group endpoints by tier (critical, important, optional) and breaker per tier.\n\n**Multi-region / multi-instance dimension:**\n- The breaker is per-process. With 50 instances of service A, each has its own breaker state.\n- Eventually all converge to OPEN if B is genuinely down; differences during the transition are normal."
+          },
+          {
+            "type": "step",
+            "title": "Operational Hazards and Common Mistakes",
+            "content": "**Mistake: no timeout.**\n- Breaker can't detect failure; calls hang; threads exhaust.\n- ALWAYS set a timeout.\n\n**Mistake: tripping on 4xx.**\n- 4xx is the caller's fault; downstream is healthy.\n- Configure `recordException` to exclude 4xx-like exceptions.\n\n**Mistake: too-low minimum calls.**\n- A 1-call sample tripping at first failure causes false positives during normal blips.\n- `minimumNumberOfCalls=20` typical.\n\n**Mistake: no slow-call threshold.**\n- Slow degradation cascades before traditional failure threshold trips.\n- Always include slow-call rate.\n\n**Mistake: no metrics.**\n- Need: state (CLOSED/OPEN/HALF_OPEN), trip count, failure rate, fallback invocation count.\n- Resilience4j integrates with Micrometer / Prometheus.\n\n**Mistake: using breaker as a load shedder.**\n- Breaker is for downstream failure, not your own overload.\n- For your own overload, use rate limiting / bulkhead / load shedding patterns.\n\n**Health-check leak:**\n- If your health-check endpoint calls downstreams through a breaker, a tripped breaker makes you appear unhealthy.\n- Decouple deep health from shallow liveness."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Circuit breaker prevents cascading failure** by failing fast when a downstream is broken.\n- **Three states:** CLOSED (normal), OPEN (failing fast), HALF_OPEN (probing recovery).\n- **Trip on failure rate over a sliding window**, not just count; include slow-call rate.\n- **Always pair with timeouts** — a breaker with no timeout is meaningless.\n- **Full resilience stack:** request → bulkhead → breaker → retry → timeout → call.\n- **Fallback strategy:** cached value, default, degraded response, or meaningful 5xx — never silent failure.\n- **Resilience4j is the modern Java pick;** Hystrix is deprecated.\n- **Don't trip on 4xx;** those are caller errors, not downstream failures.\n- **Per-service breaker by default;** per-endpoint when SLAs differ."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The cascade failure it solves**\n\nService A calls service B. B starts responding slowly. Without a breaker:\n- A's calls to B time out at 30s instead of 50ms\n- A's worker threads pile up waiting\n- A's thread pool fills\n- Incoming requests to A queue; latency explodes\n- A's upstream sees A as slow; cascade continues\n\nB's local issue takes down A and everyone above. Speed of failure beats slow degradation.\n\nWith a breaker: after N failures, the breaker on A trips OPEN. All subsequent calls fail instantly with a fallback. A's threads stay free. B can recover without fighting thousands of stuck retries.\n\n**Three states**\n\n- CLOSED: normal. Calls pass through; track success/failure on a sliding window.\n- OPEN: dependency considered broken. Calls fail immediately with a fallback. After cooldown (10-60s typical) → HALF_OPEN.\n- HALF_OPEN: cautious probing. Let 3-10 calls through. All succeed → CLOSED. Any fail → back to OPEN.\n\nHalf-open avoids hammering a recovering downstream with full traffic.\n\n**Trip thresholds — failure rate is better than count**\n\nTime-based sliding window: 50% failures in last 60 seconds. Volume-independent; works for both busy and quiet services. Modern default (Resilience4j).\n\nWhat counts as a failure: exceptions (timeout, connect, 5xx), AND slow calls. A downstream returning 200 OK in 30 seconds is still broken from the caller's perspective — it eats threads. slowCallRateThreshold catches degradation before timeouts.\n\n**Resilience4j implementation**\n\n```java\nCircuitBreakerConfig cfg = CircuitBreakerConfig.custom()\n    .failureRateThreshold(50)\n    .slowCallRateThreshold(50)\n    .slowCallDurationThreshold(Duration.ofSeconds(2))\n    .waitDurationInOpenState(Duration.ofSeconds(30))\n    .slidingWindowType(SlidingWindowType.TIME_BASED)\n    .slidingWindowSize(60)\n    .minimumNumberOfCalls(20)\n    .build();\n```\n\nminimumNumberOfCalls=20 prevents tripping on first error in low-traffic service.\n\n**Pair with the rest of the resilience stack**\n\nCircuit breaker alone isn't enough. Order: request → bulkhead → breaker → retry → timeout → call.\n\n- Timeout (always): without it, the breaker can't detect failure\n- Retry with exponential backoff + jitter: 2-3 attempts max for transient blips; jitter prevents thundering herd\n- Circuit breaker: wraps retry layer\n- Bulkhead: each dependency gets its own bounded thread pool; slow downstream X eats only X-budget, others stay responsive\n- Fallback: cached, default, degraded, or meaningful 5xx — never silent failure\n\n**Fallback choices**\n\n- Read paths: cached/stale value with a flag\n- Recommendations down: empty list, UI hides section\n- Critical writes (payment): rethrow with 503 + Retry-After; don't fake success\n- Deferrable writes: queue + 202 Accepted; replay when downstream recovers\n- Anti-pattern: silent swallow with no log\n\n**Per-service vs per-endpoint**\n\nPer-service by default. Per-endpoint when one route has different SLA or is known-fragile. Group endpoints by tier (critical/important/optional).\n\nBreaker is per-process. With 50 instances, each has its own state; they converge during a real outage.\n\n**Common mistakes**\n\n- No timeout — breaker is meaningless\n- Tripping on 4xx — those are caller errors, configure recordException to exclude\n- Too-low minimum calls — false positives on first error\n- No slow-call threshold — degradation cascades before classic failure trips\n- Using breaker as load shedder — wrong tool; use rate limit / bulkhead\n- Health check calls through breaker — tripped breaker makes you appear unhealthy; decouple deep from shallow health\n\n**Recommendation**\n\n**Use Resilience4j with time-based sliding window, 50% failure threshold OR 50% slow-call rate threshold (slow = >2s), 30s wait in OPEN, 5 probe calls in HALF_OPEN, minimum 20 calls before any trip. Pair with explicit timeouts on every remote call, retry with exponential backoff + jitter (2-3 attempts), bulkhead per dependency, and a sensible fallback. Track state and trip count via Micrometer/Prometheus. Hystrix is deprecated — Resilience4j is the modern JVM pick.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Walk through what happens to the breaker state during a brief 30-second downstream blip vs a sustained 5-minute outage.",
+        "How do you choose between per-service and per-endpoint breakers?",
+        "Compare circuit breaker with rate limiting — when do they overlap and when are they distinct?",
+        "Design fallback strategies for a payment service — what are acceptable degradations?"
+      ],
+      "seo": {
+        "metaTitle": "Circuit Breaker Pattern Explained — Cascade Failure Prevention",
+        "metaDescription": "How circuit breakers prevent cascade failures: three-state machine (closed/open/half-open), sliding-window failure rate, slow-call thresholds, Resilience4j implementation, and pairing with timeouts/retries/bulkheads."
+      },
+      "speakable_status": "priority_handcraft"
+    },
+    {
+      "id": "sdl-007",
+      "slug": "design-retry-exponential-backoff-java",
+      "question": "Design a retry mechanism with exponential backoff and jitter in Java. How do you classify retryable vs fatal errors?",
+      "title": "Design a Retry Mechanism with Exponential Backoff",
+      "direct_answer": "Compute delay as **`min(maxDelay, base * 2^attempt)`** then **add jitter** (typically full jitter: `Random.nextLong(0, computedDelay)`) to break synchronized retry storms. Cap **max attempts (~3-5)** and **total elapsed time** (so you don't retry past the user's patience). **Classify errors before retrying:** transient (timeout, connection refused, 502/503/504) → retry; fatal (400/401/403/422, business validation) → don't retry. Pair retries with **idempotency keys** for non-GET operations. **Resilience4j Retry** module handles all this; rolling your own is a one-shot exercise.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Backoff math (exponential + jitter), error classification, idempotency awareness, and budget enforcement (max attempts + max total time).",
+        "common_mistake": "Constant-delay retries (creates retry storms), retrying 4xx errors (will never succeed), or retrying non-idempotent writes without idempotency keys (duplicate side effects).",
+        "to_stand_out": "Discuss full vs equal vs decorrelated jitter, retry budgets at the system level (Google SRE pattern), and the interaction between retry and circuit breaker."
+      },
+      "company_tags": [
+        "AWS",
+        "Resilience4j",
+        "Spring Retry",
+        "Netflix Hystrix",
+        "Google SRE"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What a Production Retry Must Do",
+            "content": "Retry is one of the most-misused patterns. A naive `for (int i = 0; i < 3; i++)` retry loop has caused more outages than it has prevented. A proper retry needs:\n\n- **Bounded attempts** (cap N — typically 3-5).\n- **Bounded total time** (don't retry past the user's patience or the call's SLA).\n- **Backoff** between attempts (don't hammer the same broken endpoint).\n- **Jitter** (don't synchronize retries with every other client).\n- **Error classification** (don't retry errors that will never succeed).\n- **Idempotency awareness** (don't double-charge the customer).\n- **Observability** (count retries; alert if rate exceeds threshold).\n- **Coordination with circuit breaker** (stop retrying when the downstream is known-broken)."
+          },
+          {
+            "type": "step",
+            "title": "Backoff Math — Exponential + Jitter",
+            "content": "**Constant delay (anti-pattern):**\n- Retry every 1 second → N clients all retrying in lockstep, same time → thundering herd on a downstream that's trying to recover.\n\n**Linear backoff:**\n- 1s, 2s, 3s, 4s. Better than constant; still synchronized.\n\n**Exponential backoff:**\n- `base * 2^attempt` — 1s, 2s, 4s, 8s, 16s.\n- Cap at `maxDelay` (e.g., 60s).\n- Spreads retries over time; downstream gets breathing room.\n\n**Jitter — the critical addition:**\n\nThree common variants (AWS Architecture Blog reference):\n\n**Full jitter (recommended default):**\n```java\ndelay = random(0, base * 2^attempt)\n```\nMaximum spread; eliminates synchronization.\n\n**Equal jitter:**\n```java\ndelay = (base * 2^attempt) / 2 + random(0, (base * 2^attempt) / 2)\n```\nMinimum half the computed delay; less spread than full.\n\n**Decorrelated jitter:**\n```java\ndelay = min(maxDelay, random(base, prevDelay * 3))\n```\nNo direct dependence on attempt count; each delay derived from previous. Smoother distribution.\n\n**Without jitter** — if 1000 clients all see a 5xx at the same instant, they all schedule the next retry at exactly `now + 2s`. The downstream gets 1000 simultaneous retries again. Jitter spreads them across the full window, so the downstream sees ~ uniform load."
+          },
+          {
+            "type": "step",
+            "title": "Error Classification — What's Retryable",
+            "content": "**Retry these (transient):**\n- `IOException`, `SocketTimeoutException`, `ConnectException` — network blips.\n- HTTP `502 Bad Gateway`, `503 Service Unavailable`, `504 Gateway Timeout` — transient downstream issues.\n- HTTP `429 Too Many Requests` — retry honoring `Retry-After` header.\n- Database deadlock errors (some types).\n- `408 Request Timeout`.\n\n**Don't retry these (fatal):**\n- HTTP `4xx` other than 429/408 — your request is bad; retrying won't change that.\n- HTTP `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `422 Unprocessable Entity`.\n- Business validation errors (`InvalidInputException`, `ResourceNotFoundException`).\n- `IllegalArgumentException`, `NullPointerException` — application bugs.\n- Authentication failures (unless token-refresh logic handles it).\n\n**Maybe retry (case by case):**\n- HTTP `500 Internal Server Error` — might be transient or persistent; retry with caution.\n- Custom domain exceptions — read the docs.\n\n**Implementation:**\n```java\nRetryConfig.custom()\n    .retryOnException(t ->\n        t instanceof IOException ||\n        t instanceof TimeoutException ||\n        (t instanceof HttpServerException h && h.statusCode() >= 500))\n    .ignoreExceptions(IllegalArgumentException.class, AuthException.class)\n    .build();\n```"
+          },
+          {
+            "type": "step",
+            "title": "Idempotency — The Hidden Requirement",
+            "content": "**The danger:** retry a `POST /payment/charge` after a timeout. Did the first call go through? You don't know. You retry. Now the customer is charged twice.\n\n**Solution: idempotency keys.**\n\n```http\nPOST /payment/charge\nIdempotency-Key: 6c5a8e0a-2b9c-4f10-9c3a-...\n```\n\nServer stores the result under this key for some retention window. Subsequent requests with the same key return the cached result without re-executing.\n\n**Where to apply:**\n- Always for non-idempotent writes (POST, PATCH, DELETE-with-state-change).\n- GET, PUT, idempotent DELETE: naturally retryable; no key needed.\n- Internal service-to-service calls: same rule.\n\n**Generating keys:**\n- Client generates UUID per logical operation.\n- Same key on every retry of the *same* operation.\n- Different operations get different keys.\n\n**Server side:** see the dedicated 'API idempotency' design question for the detailed implementation."
+          },
+          {
+            "type": "step",
+            "title": "Implementation — With Resilience4j",
+            "content": "```java\nRetryConfig config = RetryConfig.custom()\n    .maxAttempts(4)                                 // up to 4 attempts (1 + 3 retries)\n    .waitDuration(Duration.ofMillis(100))           // base delay\n    .intervalFunction(IntervalFunction\n        .ofExponentialRandomBackoff(\n            Duration.ofMillis(100),                  // initial\n            2.0,                                     // multiplier\n            0.5))                                    // randomization factor (jitter)\n    .retryOnException(this::isRetryable)\n    .ignoreExceptions(\n        IllegalArgumentException.class,\n        AuthException.class)\n    .build();\n\nRetry retry = Retry.of(\"paymentService\", config);\n\nSupplier<PaymentResponse> guarded = Retry.decorateSupplier(retry,\n    () -> paymentClient.charge(req));\n\nPaymentResponse resp = guarded.get();\n```\n\nBackoff sequence with `ofExponentialRandomBackoff(100ms, 2.0, 0.5)`:\n- Attempt 1: immediate\n- Attempt 2: 50-150ms (100ms ± 50%)\n- Attempt 3: 100-300ms\n- Attempt 4: 200-600ms\n\n**Per-call total time bound:**\n- Wrap the retry in a deadline: if total elapsed > N seconds, stop retrying and fail.\n- Resilience4j's `TimeLimiter` decorator handles this."
+          },
+          {
+            "type": "step",
+            "title": "Hand-Rolled Implementation",
+            "content": "If a library isn't available, here's the minimum correct shape:\n\n```java\npublic class Retry {\n    private final int maxAttempts;\n    private final Duration baseDelay;\n    private final Duration maxDelay;\n    private final Duration totalDeadline;\n    private final Predicate<Throwable> retryable;\n    private final Random random = new Random();\n\n    public <T> T execute(Supplier<T> supplier) throws Exception {\n        long deadline = System.nanoTime() + totalDeadline.toNanos();\n        Throwable last = null;\n        for (int attempt = 0; attempt < maxAttempts; attempt++) {\n            try {\n                return supplier.get();\n            } catch (Throwable t) {\n                if (!retryable.test(t)) throw asException(t);\n                last = t;\n                if (attempt == maxAttempts - 1) break;\n                long delayMs = computeDelayMs(attempt);\n                if (System.nanoTime() + millisToNanos(delayMs) > deadline) break;\n                sleep(delayMs);\n            }\n        }\n        throw asException(last);\n    }\n\n    private long computeDelayMs(int attempt) {\n        long exp = (long) Math.min(\n            maxDelay.toMillis(),\n            baseDelay.toMillis() * (1L << attempt));   // base * 2^attempt\n        return random.nextLong(exp + 1);                // FULL JITTER\n    }\n}\n```\n\nNotes:\n- **Deadline** check before each sleep — don't sleep past the SLA.\n- **Full jitter** via `random.nextLong(exp + 1)`.\n- **Re-throw the last exception** if all attempts fail.\n- **No swallowed errors** — caller decides what to do."
+          },
+          {
+            "type": "step",
+            "title": "Retry Budget — The System-Level Concern",
+            "content": "**Per-call retry budget is necessary but not sufficient.** Imagine 10K req/sec to a service. If 50% start failing and each is retried 3 times, suddenly the service sees 25K req/sec. The retries make recovery *harder*.\n\n**Google SRE's retry budget pattern:**\n- Cap retry rate at a fraction (typically 10%) of the success rate.\n- If success rate drops, retry rate drops proportionally.\n- Token-bucket style: each successful response refills retry tokens; each retry consumes one.\n- When tokens depleted, no more retries; calls just fail through.\n\n**Implementation idea:**\n```java\nclass RetryBudget {\n    private final TokenBucket tokens;\n    boolean canRetry() { return tokens.tryConsume(1); }\n    void onSuccess() { tokens.refill(0.1); }   // 10% of successes refill\n}\n```\n\nGuards against the cascade where 'just retry' makes the storm worse.\n\n**Pair with circuit breaker:** when the breaker is OPEN, retries are pointless and harmful. Most libraries (Resilience4j) compose so that an OPEN breaker short-circuits the retry."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Common Mistakes",
+            "content": "**Mistake: retrying without jitter.**\n- 1000 clients fail at the same instant → 1000 simultaneous retries → downstream gets re-overloaded.\n- Always add jitter, full jitter is the safe default.\n\n**Mistake: retrying 4xx.**\n- 401 isn't going to magically turn into 200 on retry.\n- Classify errors; retry only on transient.\n\n**Mistake: no max total time.**\n- Exponential backoff with maxDelay=60s and 5 attempts can take ~2 minutes.\n- Caller's request budget might be 10s; retrying past it wastes their time.\n\n**Mistake: retrying non-idempotent writes without keys.**\n- Double charges, duplicate orders, repeat side effects.\n- Idempotency keys are mandatory for retried writes.\n\n**Mistake: retry inside retry inside retry.**\n- Service A retries 3x; HTTP client retries 3x; that's 9 attempts. Unintended amplification.\n- Set retries at one layer; disable at others.\n\n**Mistake: retry without observability.**\n- If retry rate is 80%, your downstream is broken — you should know.\n- Emit retry-attempted, retry-succeeded, retry-failed metrics.\n\n**Mistake: retry on a known-fast operation.**\n- An in-process function call that takes 10μs doesn't need retry; if it failed, it'll fail again immediately.\n- Retry is for I/O-bound, network-dependent calls."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Exponential backoff + full jitter** is the safe default; constant delay creates retry storms.\n- **Cap max attempts (3-5)** and **max total time** — don't retry past the user's patience.\n- **Classify errors:** retry transient (5xx, timeout, connection refused, 429); never retry 4xx (other than 408/429).\n- **Idempotency keys** are mandatory for retried writes; prevents double-charges/duplicates.\n- **Pair with circuit breaker** — don't retry against a known-broken downstream.\n- **Retry budget at the system level** caps total retry-induced load (Google SRE pattern).\n- **Observability:** retry-rate is a critical signal of downstream health.\n- **Resilience4j Retry** module handles backoff, jitter, classification, time bounds; prefer it to hand-rolled."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**What a retry must do**\n\nNaive `for (int i = 0; i < 3; i++)` has caused more outages than it's prevented. Proper retry needs: bounded attempts (3-5), bounded total time, backoff between attempts, jitter, error classification, idempotency awareness, observability, and coordination with circuit breaker.\n\n**Backoff math**\n\nConstant delay is the anti-pattern — 1000 clients all retry at the same instant, downstream gets re-hammered.\n\nExponential: base × 2^attempt, capped at maxDelay (60s typical). 100ms, 200ms, 400ms, 800ms.\n\nJitter is the critical addition. Three variants from the AWS architecture blog:\n- Full jitter: `random(0, computed)` — maximum spread, safe default\n- Equal jitter: `computed/2 + random(0, computed/2)` — less spread\n- Decorrelated: `random(base, prevDelay * 3)` — smoother distribution, no direct attempt-count dependence\n\nWithout jitter, synchronized retries are guaranteed to re-overload a recovering downstream.\n\n**Error classification — don't retry what won't succeed**\n\nRetry: IOException, SocketTimeoutException, ConnectException, HTTP 5xx (502/503/504), 429 (honor Retry-After), 408, some database deadlocks.\n\nDon't retry: 4xx (400/401/403/404/422), business validation, IllegalArgumentException, NullPointerException, auth failures (unless token-refresh handles them).\n\nCase-by-case: 500 — might be transient or persistent; retry with caution.\n\n**Idempotency — the hidden requirement**\n\nThe danger: retry a POST /charge after timeout. Did the first call succeed? You don't know. Retry causes a double charge.\n\nSolution: idempotency keys. Client generates a UUID per logical operation; same key on every retry of the same operation. Server caches result under this key; subsequent requests return cached result without re-execution.\n\nMandatory for non-idempotent writes (POST, PATCH, state-change DELETE). Naturally idempotent operations (GET, PUT, idempotent DELETE) don't need keys.\n\n**Resilience4j implementation**\n\n```java\nRetryConfig.custom()\n    .maxAttempts(4)\n    .intervalFunction(IntervalFunction.ofExponentialRandomBackoff(\n        Duration.ofMillis(100), 2.0, 0.5))\n    .retryOnException(this::isRetryable)\n    .ignoreExceptions(IllegalArgumentException.class, AuthException.class)\n    .build();\n```\n\nWith TimeLimiter for total deadline.\n\n**Hand-rolled minimum**\n\n```java\nfor (int attempt = 0; attempt < maxAttempts; attempt++) {\n    try { return supplier.get(); }\n    catch (Throwable t) {\n        if (!retryable.test(t)) throw t;\n        if (attempt == maxAttempts - 1) break;\n        long delay = computeBackoffWithJitter(attempt);\n        if (System.nanoTime() + ms2ns(delay) > deadline) break;\n        sleep(delay);\n    }\n}\nthrow lastException;\n```\n\nDeadline check before each sleep; full-jitter via `random.nextLong(exp + 1)`.\n\n**Retry budget — system-level concern**\n\nPer-call budget isn't enough. 10K req/sec, 50% failing, 3 retries each = 25K req/sec hitting the broken downstream. Retries make recovery harder.\n\nGoogle SRE pattern: cap retry rate at 10% of success rate. Token-bucket style — each successful response refills retry tokens; each retry consumes one. When tokens depleted, no more retries.\n\nPair with circuit breaker: when breaker is OPEN, retries are pointless and harmful; most libraries compose so OPEN short-circuits retry.\n\n**Common mistakes**\n\n- No jitter — thundering herd guaranteed\n- Retrying 4xx — will never succeed\n- No max total time — retries past user's patience\n- Non-idempotent writes without keys — double-charges\n- Retry inside retry inside retry — 9 attempts unintended\n- No observability — you don't know retry rate is 80%\n- Retry on known-fast operations — in-process calls don't need retry\n\n**Recommendation**\n\n**Use Resilience4j Retry module: max 3-5 attempts, exponential backoff with full jitter (initial 100-200ms, multiplier 2, max 60s), bounded by total deadline via TimeLimiter, retryOnException matching only transient categories, ignoreExceptions for business/4xx errors. Pair every retried write with an idempotency key generated client-side. Compose with the circuit breaker so a tripped breaker short-circuits retries. Track retry rate as a downstream-health signal. At system scale, layer a token-bucket retry budget so retry storms can't make a recovering service's life worse.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Walk through the retry behavior of 1000 simultaneous clients seeing a 503 — with and without full jitter.",
+        "How do you set retry parameters for a synchronous user-facing API vs an async background job?",
+        "Compare full, equal, and decorrelated jitter — when does each shine?",
+        "Design a retry budget for a service that handles 100K req/sec with a 90% baseline success rate."
+      ],
+      "seo": {
+        "metaTitle": "Design Retry with Exponential Backoff and Jitter — Java",
+        "metaDescription": "Production-grade retry mechanism: exponential backoff math, jitter variants (full/equal/decorrelated), error classification, idempotency keys, retry budget pattern, and Resilience4j implementation."
+      }
+    }
+  ]
+}

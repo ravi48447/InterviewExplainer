@@ -1,0 +1,171 @@
+{
+  "topic": "Parking Lot",
+  "topicSlug": "parking-lot",
+  "questions": [
+    {
+      "id": "lldc-001",
+      "slug": "design-parking-lot-system",
+      "question": "Design a multi-floor parking lot system (LLD).",
+      "title": "Design a Parking Lot — Low-Level Design",
+      "direct_answer": "Model a parking lot as a `ParkingLot` containing multiple `Floor`s, each containing typed `Spot`s (`COMPACT`, `LARGE`, `EV`, `HANDICAPPED`). On entry, a `SpotAllocator` picks a free spot for the vehicle's category and atomically marks it occupied; a `Ticket` is created with entry time. On exit, a `FeeStrategy` computes the bill using ticket entry/exit times and spot type. Use **interfaces for the variation points** — `SpotAllocator` (nearest, by-floor, EV-priority), `FeeStrategy` (hourly, slabbed, day-pass). Make the spot reservation atomic via `ConcurrentHashMap.compute` or per-floor locks to handle concurrent arrivals. Persist tickets via a `TicketRepository` if state must survive restarts. Keep the design swappable, thread-safe, and testable.",
+      "layout_type": "system-design-case",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 13,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Decomposition into entities + interfaces, atomic spot allocation under concurrency, separation of fee policy via Strategy, and extensibility for spot types / pricing models / reservations.",
+        "common_mistake": "Single god `ParkingLotService`; non-atomic spot reservation (two cars get same spot); deep inheritance for vehicle types; fee logic baked into the lot.",
+        "to_stand_out": "Discuss per-floor partitioning for scalability, EV / handicapped spot priority, reservation extension, and persistence vs in-memory trade-off."
+      },
+      "company_tags": [
+        "Amazon",
+        "Microsoft",
+        "Uber",
+        "Indian product companies (machine coding round)"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Problem Framing",
+            "content": "A parking lot system handles vehicles arriving and leaving:\n\n- Vehicles enter through gates, get assigned a spot, receive a ticket.\n- On exit, the spot is freed and the bill is computed from the ticket.\n- Multiple floors; spots come in different sizes; pricing varies by type and duration.\n\nThe interesting design pressure is **concurrency** (multiple gates assigning spots at once) and **extensibility** (new spot types, new fee structures, eventual reservations) — not raw scale. Treat it as a single-instance OO design unless the interviewer pushes you to distribute it."
+          },
+          {
+            "type": "step",
+            "title": "Clarifying Questions",
+            "content": "Before any design:\n\n- **Lot shape:** single lot, multiple floors? How many spots roughly?\n- **Vehicle types:** bike, car, truck, EV?\n- **Spot types:** matched 1:1 with vehicle types, or generic spots that fit anything?\n- **Reservations or walk-in only?**\n- **Pricing:** flat hourly, slabbed (first 2 hours flat then per-hour), day pass?\n- **Multiple entry/exit gates** (concurrent assignment)?\n- **Persistence:** restart-safe, or in-memory only for the interview?\n- **Payment in scope:** model the API or skip and assume out of scope?\n\nLock down scope explicitly before drawing classes."
+          },
+          {
+            "type": "step",
+            "title": "Assumptions for This Design",
+            "content": "- Single lot, multiple floors.\n- Spot types: `COMPACT`, `LARGE`, `EV`, `HANDICAPPED`.\n- Vehicle categories: `BIKE`, `CAR`, `TRUCK`, `EV` — each maps to one or more compatible spot types.\n- Walk-in only (reservations called out as an extension).\n- Pricing: hourly with per-spot-type rates (slabbed pricing called out as an extension).\n- Multiple concurrent gates; spot reservation must be atomic.\n- In-memory state with a `TicketRepository` interface so persistence can drop in.\n- Payment marked out of scope; `unpark` returns a `Receipt` with the amount due."
+          },
+          {
+            "type": "step",
+            "title": "Core Entities and Responsibilities",
+            "content": "- **`ParkingLot`** — entry point. Holds floors, allocator, fee strategy, ticket repo. `park(vehicle)`, `unpark(ticket)`.\n- **`Floor`** — owns a list of spots. Knows how to find a free spot for a given spot type (delegates to allocator).\n- **`Spot`** — one parking position. Type, occupied flag, current vehicle (or null).\n- **`Vehicle`** — license plate, category. Category determines which spot types are compatible.\n- **`Ticket`** — immutable record of (id, vehicle, spot, entry time).\n- **`Receipt`** — immutable record of (ticket, exit time, amount).\n- **`SpotAllocator`** (interface) — finds the next available spot across floors. Implementations: `NearestSpotAllocator`, `EvPriorityAllocator`.\n- **`FeeStrategy`** (interface) — computes amount for a ticket. Implementations: `HourlyFeeStrategy`, `SlabbedFeeStrategy`.\n- **`TicketRepository`** (interface) — saves/loads tickets. In-memory impl for now."
+          },
+          {
+            "type": "step",
+            "title": "Class Diagram",
+            "content": "```mermaid\nclassDiagram\n    class ParkingLot {\n        -List~Floor~ floors\n        -SpotAllocator allocator\n        -FeeStrategy feeStrategy\n        -TicketRepository tickets\n        +park(Vehicle) Ticket\n        +unpark(Ticket) Receipt\n    }\n    class Floor {\n        -int floorNumber\n        -Map~SpotType, List~Spot~~ spotsByType\n        +findFree(SpotType) Optional~Spot~\n    }\n    class Spot {\n        -SpotId id\n        -SpotType type\n        -AtomicReference~Vehicle~ occupant\n        +tryAssign(Vehicle) bool\n        +release()\n    }\n    class Vehicle {\n        -String plate\n        -VehicleCategory category\n    }\n    class Ticket {\n        -TicketId id\n        -Vehicle vehicle\n        -Spot spot\n        -Instant entryTime\n    }\n    class Receipt {\n        -Ticket ticket\n        -Instant exitTime\n        -Money amount\n    }\n    class SpotAllocator {\n        <<interface>>\n        +allocate(List~Floor~, Vehicle) Optional~Spot~\n    }\n    class FeeStrategy {\n        <<interface>>\n        +calculate(Ticket, Instant) Money\n    }\n    class TicketRepository {\n        <<interface>>\n        +save(Ticket)\n        +findById(TicketId) Optional~Ticket~\n        +remove(TicketId)\n    }\n\n    ParkingLot --> Floor\n    ParkingLot --> SpotAllocator\n    ParkingLot --> FeeStrategy\n    ParkingLot --> TicketRepository\n    Floor --> Spot\n    Spot --> Vehicle\n    Ticket --> Spot\n    Ticket --> Vehicle\n    Receipt --> Ticket\n    NearestSpotAllocator ..|> SpotAllocator\n    EvPriorityAllocator ..|> SpotAllocator\n    HourlyFeeStrategy ..|> FeeStrategy\n    SlabbedFeeStrategy ..|> FeeStrategy\n    InMemoryTicketRepository ..|> TicketRepository\n```\n\nVehicle category → compatible spot types is captured by a small lookup table in `Vehicle` or in `SpotType.compatibleWith(VehicleCategory)`."
+          },
+          {
+            "type": "step",
+            "title": "Atomic Spot Reservation",
+            "content": "Two cars arriving at two gates simultaneously must not be assigned the same spot. Three viable approaches:\n\n**1. Per-spot atomic check-and-set (recommended for in-memory):**\n```java\npublic class Spot {\n    private final SpotId id;\n    private final SpotType type;\n    private final AtomicReference<Vehicle> occupant = new AtomicReference<>();\n\n    public boolean tryAssign(Vehicle v) {\n        return occupant.compareAndSet(null, v);   // atomic\n    }\n    public void release() { occupant.set(null); }\n    public boolean isFree() { return occupant.get() == null; }\n}\n```\n\nThe allocator iterates candidate spots and the first one whose `tryAssign` returns `true` wins. No lot-wide lock; lock-free per spot.\n\n**2. Per-floor lock:** `synchronized` on each `Floor.findFree()`. Simpler but serializes all assignments on a floor.\n\n**3. Distributed (Redis):** `SET spot:id NX` for cross-instance coordination. Bring this up only if the interviewer asks about distribution.\n\nApproach 1 scales best for a single instance and is what you should pick by default."
+          },
+          {
+            "type": "step",
+            "title": "Code — Lot, Allocator, Fee Strategy",
+            "content": "```java\npublic class ParkingLot {\n    private final List<Floor> floors;\n    private final SpotAllocator allocator;\n    private final FeeStrategy feeStrategy;\n    private final TicketRepository tickets;\n    private final Clock clock;\n\n    public Ticket park(Vehicle v) {\n        Spot s = allocator.allocate(floors, v)\n            .orElseThrow(LotFullException::new);\n        Ticket t = new Ticket(TicketId.next(), v, s, clock.instant());\n        tickets.save(t);\n        return t;\n    }\n\n    public Receipt unpark(TicketId id) {\n        Ticket t = tickets.findById(id).orElseThrow(InvalidTicketException::new);\n        Instant exit = clock.instant();\n        Money amount = feeStrategy.calculate(t, exit);\n        t.spot().release();\n        tickets.remove(id);\n        return new Receipt(t, exit, amount);\n    }\n}\n\npublic class NearestSpotAllocator implements SpotAllocator {\n    @Override\n    public Optional<Spot> allocate(List<Floor> floors, Vehicle v) {\n        for (Floor f : floors) {                       // floors ordered by proximity to entry\n            for (SpotType type : SpotType.compatibleWith(v.category())) {\n                Optional<Spot> spot = f.findFree(type);\n                if (spot.isPresent() && spot.get().tryAssign(v)) {\n                    return spot;                       // wins the race\n                }\n            }\n        }\n        return Optional.empty();\n    }\n}\n\npublic class HourlyFeeStrategy implements FeeStrategy {\n    private final Map<SpotType, Money> hourlyRates;\n\n    @Override\n    public Money calculate(Ticket t, Instant exit) {\n        long minutes = Duration.between(t.entryTime(), exit).toMinutes();\n        long hours = (minutes + 59) / 60;              // round up partial hour\n        if (hours == 0) hours = 1;                     // minimum charge\n        return hourlyRates.get(t.spot().type()).times(hours);\n    }\n}\n```\n\nNotice the `Clock` injection — testable without freezing real time."
+          },
+          {
+            "type": "step",
+            "title": "End-to-End Flow",
+            "content": "```mermaid\nsequenceDiagram\n    participant V as Vehicle\n    participant G as EntryGate\n    participant L as ParkingLot\n    participant A as SpotAllocator\n    participant S as Spot\n    participant R as TicketRepository\n\n    V->>G: arrives\n    G->>L: park(vehicle)\n    L->>A: allocate(floors, vehicle)\n    A->>S: tryAssign(vehicle) [CAS]\n    S-->>A: true\n    A-->>L: Spot\n    L->>R: save(ticket)\n    L-->>G: Ticket\n    G-->>V: hands ticket\n\n    Note over V,L: ... time passes ...\n\n    V->>G: presents ticket at exit\n    G->>L: unpark(ticketId)\n    L->>R: findById\n    L->>L: feeStrategy.calculate(ticket, now)\n    L->>S: release()\n    L->>R: remove(ticketId)\n    L-->>G: Receipt\n```"
+          },
+          {
+            "type": "step",
+            "title": "Extensibility — Where Future Change Lands",
+            "content": "- **New spot type** → add to `SpotType` enum + `SpotType.compatibleWith()` mapping. Allocator/fee strategy untouched.\n- **New pricing model** → new `FeeStrategy` implementation (slabbed, day-pass, surge). Configure at construction; no edits elsewhere.\n- **New allocation policy** → new `SpotAllocator` (e.g., `EvPriorityAllocator` that prefers EV charging spots for EVs, then falls back). Lot wiring picks one.\n- **Reservations** → add a `ReservationService` that holds spots with TTL. `park()` first checks for an active reservation matching the vehicle; otherwise normal allocation.\n- **Multi-lot / multi-region** → introduce a `LotDirectory` that picks a lot; lot-level logic unchanged.\n- **Persistence** → `JpaTicketRepository` implements `TicketRepository`; spots persisted to DB with optimistic lock.\n- **Notifications** → publish `SpotAssignedEvent` / `SpotReleasedEvent`; subscribers update displays / metrics."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Edge Cases",
+            "content": "- **Lost ticket:** model `LostTicketPolicy` — charges max-day rate or requires plate verification; another `FeeStrategy` variant or a separate path.\n- **Lot full:** `LotFullException` — surface to caller; gate displays 'Full'.\n- **Concurrent unpark on the same ticket:** `tickets.remove(id)` should return whether removal succeeded; if not, treat as already exited (idempotent).\n- **Crash mid-park:** ticket saved but receipt issuance fails. On retry, ticket already exists — use idempotency key on `park` (vehicle plate + entry minute) so duplicate calls return the same ticket.\n- **Spot stuck occupied** (vehicle drove off without paying): nightly reconciliation job that flags spots occupied beyond max stay duration; manual override.\n- **Time skew:** all entry/exit times come from a single `Clock`; centralized rather than each spot reading `Instant.now()`."
+          },
+          {
+            "type": "step",
+            "title": "Trade-offs and Alternatives",
+            "content": "- **In-memory vs persistent:** in-memory is simpler and faster but loses state on restart. Persistent (Postgres) survives crash but adds latency per park/unpark. Choice driven by 'how bad is losing 30 seconds of parking state?'.\n- **Per-spot CAS vs per-floor lock:** CAS is lock-free and scales better; per-floor lock is simpler to reason about but serializes assignments on a floor.\n- **Strategy vs rule engine for fees:** Strategy interface is enough for 5-10 pricing variants. A rule engine (Drools) is overkill until tariffs become genuinely customer-configurable.\n- **Inheritance for vehicle types:** avoid. `VehicleCategory` enum + `compatibleWith` mapping is enough. A subclass per vehicle type buys nothing.\n- **Distributed coordination:** if multiple lot instances must share state, move state to Redis (`SET NX` for spot locks, sorted set for tickets). Adds operational complexity; only justified for a multi-region operator."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Entities:** `ParkingLot`, `Floor`, `Spot`, `Vehicle`, `Ticket`, `Receipt`.\n- **Variation behind interfaces:** `SpotAllocator`, `FeeStrategy`, `TicketRepository`.\n- **Atomic spot assignment** via `AtomicReference.compareAndSet` — lock-free per spot.\n- **`Clock` injection** for testability.\n- **Composition over inheritance** — `VehicleCategory` enum + compatibility table; no `Car extends Vehicle`.\n- **Extension points wired** for reservations, multi-lot, persistence, notifications.\n- **Idempotency** on park to survive retries; nightly reconciliation for stuck spots.\n- **Walk-in default;** reservations are an explicit extension."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Problem framing**\n\nVehicles arrive at gates, get assigned a spot, receive a ticket. On exit, spot freed and bill computed. Multiple floors; spots come in different sizes; pricing varies. Design pressure is concurrency (multiple gates) and extensibility (new spot types, fee structures, reservations) — not raw scale.\n\n**Clarifying questions**\n\nLot shape (single, multiple floors, count). Vehicle types. Spot types matched 1:1 or generic. Reservations or walk-in. Pricing (flat hourly, slabbed, day pass). Multiple gates. Persistence. Payment in scope.\n\n**Assumptions**\n\nSingle lot, multiple floors. Spot types COMPACT/LARGE/EV/HANDICAPPED. Vehicle categories BIKE/CAR/TRUCK/EV — each maps to compatible spot types. Walk-in (reservations as extension). Hourly pricing per spot type (slabbed as extension). Multiple concurrent gates; atomic reservation. In-memory state with TicketRepository interface for future persistence. Payment out of scope; unpark returns Receipt with amount due.\n\n**Core entities**\n\nParkingLot: entry point, holds floors, allocator, fee strategy, ticket repo. park(vehicle), unpark(ticket).\nFloor: owns list of spots, finds free spot for a type.\nSpot: one parking position. Type, occupied flag, current vehicle.\nVehicle: license plate, category. Category determines compatible spot types.\nTicket: immutable record (id, vehicle, spot, entry time).\nReceipt: immutable record (ticket, exit time, amount).\nSpotAllocator interface: NearestSpotAllocator, EvPriorityAllocator.\nFeeStrategy interface: HourlyFeeStrategy, SlabbedFeeStrategy.\nTicketRepository interface: in-memory impl for now.\n\n**Atomic spot reservation**\n\nTwo cars at two gates must not get same spot.\n\nPer-spot atomic check-and-set (recommended): Spot has AtomicReference<Vehicle> occupant. tryAssign(v) calls occupant.compareAndSet(null, v). Allocator iterates candidate spots; first one whose tryAssign returns true wins. Lock-free per spot.\n\nAlternatives: per-floor synchronized lock (simpler, serializes assignments per floor). Distributed Redis SET NX (for cross-instance, mention only if asked about distribution).\n\n**Code — lot, allocator, fee strategy**\n\nParkingLot.park(v): allocator.allocate(floors, v) or throw LotFullException. Create Ticket with TicketId.next(), v, spot, clock.instant(). tickets.save(t). Return t.\n\nParkingLot.unpark(id): tickets.findById, throw InvalidTicketException if missing. exit = clock.instant(). amount = feeStrategy.calculate(t, exit). t.spot().release(). tickets.remove(id). Return new Receipt.\n\nNearestSpotAllocator: iterate floors (ordered by proximity), iterate compatible SpotTypes for vehicle category, findFree on each floor, tryAssign. First successful CAS wins.\n\nHourlyFeeStrategy: minutes between entry and exit, round up to hours, minimum charge of 1 hour, multiply hourlyRates[spot.type] by hours.\n\nClock injection — testable without freezing real time.\n\n**End-to-end flow**\n\nVehicle arrives → EntryGate calls park(vehicle) → Lot calls allocator.allocate → spot.tryAssign (CAS) → lot creates ticket → saves → returns to gate → vehicle gets ticket. Time passes. Vehicle presents ticket → unpark(ticketId) → findById → feeStrategy.calculate → spot.release → remove ticket → Receipt.\n\n**Extensibility**\n\n- New spot type → add to enum + compatibleWith mapping; allocator/fee untouched\n- New pricing → new FeeStrategy impl; configure at construction\n- New allocation policy → new SpotAllocator (EvPriorityAllocator); lot wiring picks one\n- Reservations → ReservationService holds spots with TTL; park() checks active reservation matching vehicle first\n- Multi-lot → LotDirectory picks a lot; lot-level logic unchanged\n- Persistence → JpaTicketRepository implements interface; spots persisted with optimistic lock\n- Notifications → publish SpotAssignedEvent / SpotReleasedEvent; subscribers update displays/metrics\n\n**Failure modes**\n\n- Lost ticket: LostTicketPolicy — max-day rate or plate verification\n- Lot full: LotFullException; gate displays 'Full'\n- Concurrent unpark on same ticket: tickets.remove returns whether succeeded; idempotent\n- Crash mid-park: ticket saved but receipt fails. Idempotency key on park (plate + entry minute); duplicate calls return same ticket\n- Spot stuck occupied: nightly reconciliation job; flags spots beyond max stay duration; manual override\n- Time skew: all entry/exit from single Clock; centralized\n\n**Trade-offs and alternatives**\n\n- In-memory vs persistent: in-memory simpler/faster but loses state on restart; persistent survives crash with latency cost. Driven by tolerance for losing seconds of state\n- Per-spot CAS vs per-floor lock: CAS scales better; per-floor lock simpler but serializes per floor\n- Strategy vs rule engine for fees: Strategy enough for 5-10 variants; rule engine (Drools) overkill until customer-configurable tariffs\n- Inheritance for vehicle types: avoid; enum + compatibility table\n- Distributed coordination: Redis SET NX for multi-instance; only for multi-region operator\n\n**Recommendation**\n\n**Build a single ParkingLot aggregating typed Floors and Spots, with SpotAllocator and FeeStrategy as interfaces so allocation policy and pricing are swappable. Make spot assignment lock-free using AtomicReference + compareAndSet on each Spot, so concurrent gates can't double-book. Inject Clock and TicketRepository for testability and future persistence. Use enum + compatibility mapping for vehicle/spot types instead of inheritance hierarchies. Reservations, persistence, and multi-lot are clear extensions that drop in without touching the core flow.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you extend this design to support reservations with TTL?",
+        "What changes if you have to support thousands of lots across regions from a single API?",
+        "How do you handle a lost ticket cleanly without bolting it onto the fee strategy?",
+        "Walk through how `Spot.tryAssign` prevents two cars from being assigned the same spot."
+      ],
+      "seo": {
+        "metaTitle": "Design a Parking Lot — LLD",
+        "metaDescription": "Low-Level Design for a multi-floor parking lot: typed spots, SpotAllocator and FeeStrategy as Strategy interfaces, atomic spot reservation via AtomicReference CAS, extensibility for reservations and persistence, and concurrency edge cases."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "Problem framing Vehicles arrive at gates, get assigned a spot, receive a ticket.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "A parking lot system handles vehicles arriving and leaving: Vehicles enter through gates, get assigned a spot, receive a ticket. On exit, the spot is freed and the bill is computed from the ticket. Multiple floors; spots come in different sizes; pricing varies by type and duration. The interesting design pressure is concurrency (multiple gates assigning spots at once) and extensibility (new spot types, new fee structures, eventual reservations) — not raw scale. Treat it as a single-instance OO design unless the interviewer pushes you to distribute it."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "A parking lot system handles vehicles arriving and leaving: Vehicles enter through gates, get assigned a spot, receive a ticket. On exit, the spot is freed and the bill is computed from the ticket. Multiple floors; spots come in different sizes; pricing varies by type and duration. The interesting design pressure is concurrency (multiple gates assigning spots at once) and extensibility (new spot types, new fee structures, eventual reservations) — not raw scale. Treat it as a single-instance OO design unless the interviewer pushes you to distribute it."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Before any design: Lot shape: single lot, multiple floors? How many spots roughly? Vehicle types: bike, car, truck, EV? Spot types: matched 1:1 with vehicle types, or generic spots that fit anything? Reservations or walk-in only? Pricing: flat hourly, slabbed (first 2 hours flat then per-hour), day pass? Multiple entry/exit gates (concurrent assignment)? Persistence: restart-safe, or in-memory only for the interview? Payment in scope: model the API or skip and assume out of scope? Lock down scope explicitly before drawing classes",
+              "Single lot, multiple floors",
+              "Spot types: COMPACT, LARGE, EV, HANDICAPPED",
+              "Vehicle categories: BIKE, CAR, TRUCK, EV — each maps to one or more compatible spot types",
+              "Walk-in only (reservations called out as an extension)"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "A parking lot system handles vehicles arriving and leaving: Vehicles enter through gates, get assigned a spot, receive a ticket. On exit, the spot is freed and the bill is computed from the ticket. Multiple floors; spots come in different sizes; pricing varies by type and duration. The interesting design pressure is concurrency (multiple gates assigning spots at once) and extensibility (new spot types, new fee structures, eventual reservations) — not raw scale. Treat it as a single-instance OO design unless the interviewer pushes you to distribute it."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "A parking lot system handles vehicles arriving and leaving: Vehicles enter through gates, get assigned a spot, receive a ticket. On exit, the spot is freed and the bill is computed from the ticket. Multiple floors; spots come in different sizes; pricing varies by type and duration. The interesting design pressure is concurrency (multiple gates assigning spots at once) and extensibility (new spot types, new fee structures, eventual reservations) — not raw scale. Treat it as a single-instance OO design unless the interviewer pushes you to distribute it."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Single god ParkingLotService; non-atomic spot reservation (two cars get same spot); deep inheritance for vehicle types; fee logic baked into the lot."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Entities: ParkingLot, Floor, Spot, Vehicle, Ticket, Receipt. Variation behind interfaces: SpotAllocator, FeeStrategy, TicketRepository. Atomic spot assignment via AtomicReference.compareAndSet — lock-free per spot. Clock injection for testability. Composition over inheritance — VehicleCategory enum + compatibility table; no Car extends Vehicle. Extension points wired for reservations, multi-lot, persistence, notifications. Idempotency on park to survive retries; nightly reconciliation for stuck spots. Walk-in default; reservations are an explicit extension."
+          }
+        ],
+        "cap": "Reservations, persistence, and multi-lot are clear extensions that drop in without touching the core flow.",
+        "familiarity_anchors": [
+          "Model",
+          "ParkingLot",
+          "Floor"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you extend this design to support reservations with TTL?",
+          "What changes if you have to support thousands of lots across regions from a single API?",
+          "How do you handle a lost ticket cleanly without bolting it onto the fee strategy?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java class hierarchy for a payment gateway"
+      }
+    }
+  ]
+}

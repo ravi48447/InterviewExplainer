@@ -1,0 +1,769 @@
+{
+  "topic": "Kafka Architecture",
+  "topicSlug": "kafka-architecture",
+  "questions": [
+    {
+      "id": "eda-007",
+      "slug": "event-schema-evolution-backward-compatibility",
+      "question": "How do you handle event schema evolution in an event-driven system?",
+      "title": "Event Schema Evolution: Backward and Forward Compatibility",
+      "direct_answer": "Use schema versioning with backward-compatible changes (add optional fields only, never remove or rename required fields). For breaking changes, introduce a new event version alongside the old one and migrate consumers before retiring the old version. Apache **Avro** with **schema registry** enforces compatibility rules automatically.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand that events are contracts — changing them can break consumers you don't control or that run independently",
+        "common_mistake": "Removing or renaming event fields without coordinating consumer updates, causing deserialization failures in production",
+        "to_stand_out": "Discuss Avro's schema registry compatibility modes (BACKWARD, FORWARD, FULL), explain the dual-write migration pattern for breaking changes, and mention event versioning strategies"
+      },
+      "company_tags": [
+        "linkedin",
+        "confluent",
+        "netflix",
+        "spotify",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Friday Deploy That Broke Every Consumer You Didn't Know About",
+            "content": "A producer team renames the `customerId` field to `customerRef` in an order event and deploys on Friday.\n- By Saturday morning, three consumer services — owned by three different teams — are throwing `DeserializationException` on every message.\n- Consumer lag is growing by thousands per minute.\n- The analytics pipeline hasn't ingested data in 12 hours.\n- The notification service stopped sending order confirmations.\n- Nobody paged on-call because the producer's health checks all pass — it's publishing successfully.\n\nThis is the schema evolution problem.\n- Events are **public contracts**.\n- Unlike REST APIs where you often control both the client and server, events may have consumers you don't know about — other teams subscribed to your topic, partner integrations, analytics pipelines built months ago.\n- A field rename that looks like a harmless cleanup is a breaking change that can cascade across organizational boundaries.\n\nThe fundamental rule: **additive changes are safe, destructive changes are breaking**.\n- Adding a new optional field with a default value is backward compatible — consumers that don't know about it ignore it, consumers that do can use it.\n- Removing a field, renaming a field, or changing a field's type breaks every consumer that depends on the old shape.\n- This isn't about being careful — it's about having automated guardrails that prevent breaking schemas from reaching production.\n- That's what Schema Registry with compatibility enforcement provides: a build-time gate that rejects schema registrations that would break existing consumers."
+          },
+          {
+            "type": "step",
+            "title": "Safe Changes vs Breaking Changes — The Rules That Prevent Saturday Outages",
+            "content": "Schema changes fall into two categories, and the boundary between them must be clear to every developer who touches event definitions.\n\n**Safe (backward-compatible) changes** — consumers with the old schema can still read new messages:\n- Add an optional field with a default value\n- Add a new event type to the topic\n- Widen a numeric type (int → long)\n\n**Breaking changes** — consumers with the old schema will fail:\n- Remove a field\n- Rename a field\n- Change a field's type (string → int)\n- Make an optional field required\n\nThe practical implementation uses Avro with Confluent Schema Registry. Each event schema is registered with the registry, and the registry enforces a configurable compatibility mode per subject.\n\n```java\n// V1 — original event\npublic record OrderPlacedV1(\n    String orderId,\n    String customerId,\n    BigDecimal total\n) {}\n\n// V2 — SAFE: added optional field with default\n// Old consumers ignore promoCode, new consumers can use it\npublic record OrderPlacedV2(\n    String orderId,\n    String customerId,\n    BigDecimal total,\n    @Nullable String promoCode  // new, optional\n) {}\n```\n\nSchema Registry in `BACKWARD` compatibility mode rejects any new schema that would break consumers using the previous version. `FORWARD` compatibility protects producers — old messages must be readable by consumers using the new schema. `FULL` compatibility requires both directions. For most event-driven systems, `BACKWARD` is the right default: new producers should never break existing consumers."
+          },
+          {
+            "type": "step",
+            "title": "The Dual-Write Migration — When Breaking Changes Are Unavoidable",
+            "content": "Sometimes a breaking change is genuinely necessary. The `customerId` string needs to become a structured `Customer` object with ID, name, and email. No amount of optional field additions bridges this gap. The dual-write migration pattern handles this safely.\n\nThe approach has five phases: (1) Create the new event type or topic alongside the old one. (2) Update the producer to publish both old and new formats simultaneously. (3) Migrate consumers one by one to the new format, verifying each in staging. (4) Confirm all consumers have migrated — monitor that no consumer group is reading the old format. (5) Stop publishing the old format.\n\n```java\n@Service\npublic class OrderEventPublisher {\n\n    public void publishOrderPlaced(Order order) {\n        // Phase 2: dual-write — publish both formats\n        kafka.send(\"order-events\",\n            new OrderPlacedV2(order.getId(),\n                order.getCustomerId(), order.getTotal(), order.getPromoCode()));\n\n        kafka.send(\"order-events-v3\",\n            new OrderPlacedV3(order.getId(),\n                new Customer(order.getCustomerId(), order.getName(),\n                    order.getEmail()),\n                Money.of(order.getTotal(), order.getCurrency())));\n    }\n}\n```\n\nThe dual-write phase is the riskiest — you're maintaining two publishing paths and must ensure they stay consistent. Keep this phase as short as possible. Track migration progress by monitoring consumer group offsets on both topics. When the old topic shows zero active consumer groups, it's safe to stop publishing.\n\nAutomate schema registration in CI/CD rather than registering manually. The `kafka-schema-registry-maven-plugin` tests compatibility during the build phase, so a breaking change fails the pipeline before reaching production. This shifts schema enforcement from runtime deserialization failures to build-time validation — you find out in CI, not at 2 AM."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Additive changes are safe, destructive changes break consumers** — adding an optional field is backward compatible.\n- **Schema Registry in BACKWARD mode** — rejects registrations that would break consumers reading with the previous version.\n- **Dual-write migration for breaking changes** — publish old and new formats simultaneously until all consumer groups have migrated.\n- **CI/CD schema validation** — the `kafka-schema-registry-maven-plugin` tests compatibility during build.\n- **Avro/Protobuf over JSON for high-volume topics** — generated serializers catch mismatches at compile time; payloads are 5–10× smaller than JSON."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Events are public contracts — once published, consumers depend on their schema. The dangerous part is that you may not even know all your consumers. Another team subscribed to your topic six months ago, and your field rename just broke their pipeline without warning.\n\n**The safe evolution rule:**\n- Additive changes are backward compatible — adding an optional field with a default value is always safe because consumers that don't know about it simply ignore it\n- Removing a field, renaming a field, or changing its type breaks every consumer that depends on the old shape — these are breaking changes that require a migration strategy\n- The safest constraint: treat your event schema with the same discipline as a public REST API\n\n**Schema Registry enforcement:**\n- Apache Avro with Confluent Schema Registry is the production standard — the registry stores every schema version and enforces compatibility modes\n- BACKWARD mode means no new schema can break existing consumers; the registry rejects incompatible registrations at schema registration time, not at 2 AM when deserialization starts failing\n- Avro and Protobuf payloads are 5–10× smaller than JSON, and generated serializers catch mismatches at compile time\n\n**Handling unavoidable breaking changes:**\n- The dual-write migration: publish the event in both old and new format simultaneously; migrate consumers one at a time, verifying each in staging\n- Once you confirm no consumer groups are reading the old format — monitor consumer group offsets — stop publishing the old version\n- Automate schema registration in CI/CD so breaking changes fail the build pipeline, not production at 2 AM\n\nI recommend automating schema compatibility validation in CI as the single highest-leverage improvement for schema management — shifting from runtime deserialization failures to build-time validation catches breaking changes before they reach any environment."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between BACKWARD and FORWARD compatibility in Avro Schema Registry?",
+        "How would you migrate all consumers from OrderPlacedV1 to OrderPlacedV2 safely?",
+        "What are the trade-offs of using JSON vs Avro vs Protobuf for event serialization?"
+      ],
+      "seo": {
+        "metaTitle": "Event Schema Evolution Backward Compatibility Avro | InterviewExplainer",
+        "metaDescription": "Handle event schema evolution in Java microservices. Backward compatible changes, breaking change migration, Avro Schema Registry, and versioning strategies."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Events are public contracts — once published, consumers depend on their schema.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A producer team renames the customerId field to customerRef in an order event and deploys on Friday. By Saturday morning, three consumer services — owned by three different teams — are throwing DeserializationException on every message. Consumer lag is growing by thousands per minute. The analytics pipeline hasn't ingested data in 12 hours. The notification service stopped sending order confirmations. Nobody paged on-call because the producer's health checks all pass — it's publishing successfully. This is the schema evolution problem."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand that events are contracts — changing them can break consumers you don't control or that run independently"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Additive changes are safe, destructive changes break consumers — adding an optional field is backward compatible",
+              "Schema Registry in BACKWARD mode — rejects registrations that would break consumers reading with the previous version",
+              "Dual-write migration for breaking changes — publish old and new formats simultaneously until all consumer groups have migrated",
+              "CI/CD schema validation — the kafka-schema-registry-maven-plugin tests compatibility during build",
+              "Avro/Protobuf over JSON for high-volume topics — generated serializers catch mismatches at compile time; payloads are 5–10× smaller than JSON"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A producer team renames the customerId field to customerRef in an order event and deploys on Friday. By Saturday morning, three consumer services — owned by three different teams — are throwing DeserializationException on every message. Consumer lag is growing by thousands per minute. The analytics pipeline hasn't ingested data in 12 hours. The notification service stopped sending order confirmations. Nobody paged on-call because the producer's health checks all pass — it's publishing successfully. This is the schema evolution problem. Events are public contracts. Unlike REST APIs where you often control both the client and server, events may have consumers you don't know about — other teams subscribed to your topic, partner integrations, analytics pipelines built months ago. A field."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Removing or renaming event fields without coordinating consumer updates, causing deserialization failures in production"
+            ]
+          }
+        ],
+        "cap": "The safe evolution rule: Additive changes are backward compatible — adding an optional field with a default value is always safe because consumers that don't know about it simply ignore it Removing a",
+        "familiarity_anchors": [
+          "Apache"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between BACKWARD and FORWARD compatibility in Avro Schema Registry?",
+          "How would you migrate all consumers from OrderPlacedV1 to OrderPlacedV2 safely?",
+          "What are the trade-offs of using JSON vs Avro vs Protobuf for event serialization?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-008",
+      "slug": "embedded-kafka-testing-spring-boot",
+      "question": "How do you write integration tests for Spring Kafka consumers and producers?",
+      "title": "Kafka Integration Testing with @EmbeddedKafka",
+      "direct_answer": "@EmbeddedKafka starts an in-memory **Kafka** **broker** for tests. Use EmbeddedKafkaBroker to configure test topics, **KafkaTemplate** to produce test messages, and **consumer**.poll() or a test listener with CountDownLatch to verify consumption.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical ability to write Kafka integration tests without external dependencies",
+        "common_mistake": "Using Thread.sleep() to wait for message consumption — use CountDownLatch or Awaitility instead",
+        "to_stand_out": "Mention testing error handling paths and DLT routing, not just happy path"
+      },
+      "company_tags": [
+        "Confluent",
+        "Pivotal",
+        "Zalando",
+        "Thoughtworks",
+        "LinkedIn",
+        "Uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@EmbeddedKafka Starts a Real Kafka Broker in the Test JVM — No Docker, No External Dependencies",
+            "content": "Testing Kafka consumers and producers requires a running Kafka broker.\n- **`@EmbeddedKafka`** starts an in-memory Kafka broker inside the test JVM — real Kafka, not a mock.\n- Your producer sends real messages, your consumer receives them through the actual Kafka protocol.\n- This catches serialization issues, partition behavior, and consumer group mechanics that mocks would miss.\n\nAdd `spring-kafka-test` dependency and annotate the test class with `@EmbeddedKafka(partitions = 3, topics = {\"test-orders\"})`. Spring Boot auto-configures the embedded broker and sets `spring.kafka.bootstrap-servers` to the embedded broker's address.\n\nThe challenge with Kafka tests is **asynchronicity.** The producer sends a message, but the consumer processes it on a separate thread.\n- You can't assert immediately after sending.\n- Use **`ConsumerRecord` assertions with timeouts** — `KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10))` polls until records arrive or the timeout expires.\n- For listener-based tests, use `CountDownLatch` or `Awaitility` to wait for the listener to process the message."
+          },
+          {
+            "type": "step",
+            "title": "Testing Producers, Consumers, and Error Handling Scenarios",
+            "content": "**Producer tests** send a message with `KafkaTemplate` and verify it arrives using a test consumer created from `ConsumerFactory`. Assert on the record's key, value, headers, and partition. This validates serialization configuration and partition routing.\n\n**Consumer tests** produce a message using `KafkaTemplate` or a test producer and assert that the `@KafkaListener` method processed it. Inject a `CountDownLatch` into the listener and `await()` in the test. This validates deserialization, consumer group assignment, and listener logic.\n\n**Error handling tests** verify that failed messages reach the DLT. Send a message that causes the listener to throw, wait for retries to exhaust, and assert that a record appears on the DLT topic. This validates the entire error-handling pipeline: retry, backoff, and recovery.\n\nFor **unique topic names per test**, append `@DynamicPropertySource` or use `UUID.randomUUID()` in topic names. Shared topics between test methods cause interference — one test consumes another test's messages, leading to flaky tests."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@EmbeddedKafka` starts a **real Kafka broker inside the test JVM** — no Docker, no external infrastructure. Your producer and consumer use the actual Kafka protocol, catching serialization and partition issues that mocks miss.\n\nThe main challenge is asynchronicity. The producer sends on one thread, the consumer processes on another. **Use `CountDownLatch` or `Awaitility`** to wait for the listener to process the message.\n\nFor producer tests: send with `KafkaTemplate`, consume with a test consumer, assert on key/value/partition.\n\nFor consumer tests: produce a test message, wait for the `@KafkaListener` to process it via `CountDownLatch`.\n\nFor error handling tests: send a message that causes failure, verify it reaches the DLT after retries.\n\nUse unique topic names per test to prevent interference — shared topics cause flaky tests.\n\nIn practice, I use `@EmbeddedKafka` for integration tests and Testcontainers with a real Kafka container for more realistic end-to-end tests."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **@EmbeddedKafka starts a real Kafka broker in the test JVM** — not a mock; tests real serialization, partition assignment, and consumer group behavior; requires `spring-kafka-test` dependency.\n- **Kafka tests are asynchronous** — producer and consumer run on different threads; use `CountDownLatch`, `Awaitility`, or `KafkaTestUtils.getRecords()` with timeouts to wait for processing.\n- **Unique topic names per test prevent interference** — shared topics between test methods cause one test to consume another's messages; append UUID or use `@DynamicPropertySource` for isolation.\n- **Error handling tests verify the full retry-to-DLT pipeline** — send a failing message, wait for retry exhaustion, assert a record appears on the Dead Letter Topic with the original payload.\n- **Testcontainers provides more realistic Kafka testing** — runs a real Kafka Docker container; slower startup but matches production behavior more closely than embedded broker."
+          },
+          {
+            "type": "code_example",
+            "title": "Integration Tests with @EmbeddedKafka",
+            "content": "`@EmbeddedKafka` spins up an in-process Kafka broker on a random port for the duration of the test class. Real Kafka client code (producers, listeners, error handlers) runs unchanged — no mocks.\n\n```xml\n<dependency>\n    <groupId>org.springframework.kafka</groupId>\n    <artifactId>spring-kafka-test</artifactId>\n    <scope>test</scope>\n</dependency>\n```\n\n```java\n@SpringBootTest\n@EmbeddedKafka(\n    partitions = 3,\n    topics = {\"orders\", \"orders.DLT\"},\n    brokerProperties = {\n        \"listeners=PLAINTEXT://localhost:9092\",\n        \"port=9092\"\n    })\n@DirtiesContext                                       // fresh broker between test classes\nclass OrderListenerTest {\n\n    @Autowired private KafkaTemplate<String, OrderEvent> template;\n    @Autowired private OrderRepository orderRepo;\n    @Autowired private EmbeddedKafkaBroker embeddedKafka;\n\n    @Test\n    void listener_persists_order_event() throws Exception {\n        OrderEvent event = new OrderEvent(UUID.randomUUID(), \"alice\", new BigDecimal(\"99.90\"));\n\n        template.send(\"orders\", event.orderId().toString(), event).get(5, TimeUnit.SECONDS);\n\n        // Wait for the listener to consume + persist (avoid Thread.sleep!)\n        Awaitility.await()\n            .atMost(Duration.ofSeconds(5))\n            .untilAsserted(() ->\n                assertThat(orderRepo.findById(event.orderId())).isPresent());\n    }\n\n    @Test\n    void poison_message_routes_to_dlt() {\n        // Send malformed payload → ErrorHandler routes to orders.DLT\n        Map<String, Object> consumerProps = KafkaTestUtils.consumerProps(\n            \"dlt-test\", \"true\", embeddedKafka);\n        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, \"earliest\");\n        try (Consumer<String, byte[]> dltConsumer =\n                 new DefaultKafkaConsumerFactory<String, byte[]>(consumerProps,\n                     new StringDeserializer(), new ByteArrayDeserializer()).createConsumer()) {\n\n            embeddedKafka.consumeFromAnEmbeddedTopic(dltConsumer, \"orders.DLT\");\n            template.send(\"orders\", \"bad-id\", null);            // null payload triggers error\n\n            ConsumerRecord<String, byte[]> dlt =\n                KafkaTestUtils.getSingleRecord(dltConsumer, \"orders.DLT\", Duration.ofSeconds(5));\n            assertThat(dlt).isNotNull();\n        }\n    }\n}\n```\n\n```yaml\n# Override bootstrap servers in test profile so app uses the embedded broker\nspring:\n  config:\n    activate.on-profile: test\n  kafka:\n    bootstrap-servers: ${spring.embedded.kafka.brokers}\n```\n\n- `@EmbeddedKafka` runs an actual Kafka broker (KRaft or ZK depending on version) — your producer/consumer code is exercised end-to-end without external infrastructure.\n- Use **Awaitility** or `CountDownLatch` instead of `Thread.sleep` to wait for the listener — sleeps are flaky and slow.\n- `@DirtiesContext` rebuilds the application context (and the broker) between test classes, which is slow. Group related tests in one class to amortize the broker startup cost (~3-5 seconds).\n- For higher fidelity (real protocol, real disks), use **Testcontainers** with `confluentinc/cp-kafka` — slower (10-15 s startup) but closer to production. Many teams use `@EmbeddedKafka` for unit-style tests and Testcontainers for end-to-end suites."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test Kafka transactional producers with @EmbeddedKafka?",
+        "What is the difference between @EmbeddedKafka and Testcontainers for Kafka testing?",
+        "How do you verify message headers in Kafka integration tests?"
+      ],
+      "seo": {
+        "metaTitle": "@EmbeddedKafka Integration Testing Spring Boot — Java Interview",
+        "metaDescription": "Kafka integration testing with @EmbeddedKafka in Spring Boot. CountDownLatch, Awaitility, DLT testing, and consumer test patterns."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "@EmbeddedKafka starts a real Kafka broker inside the test JVM — no Docker, no external infrastructure.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Testing Kafka consumers and producers requires a running Kafka broker. @EmbeddedKafka starts an in-memory Kafka broker inside the test JVM — real Kafka, not a mock. Your producer sends real messages, your consumer receives them through the actual Kafka protocol. This catches serialization issues, partition behavior, and consumer group mechanics that mocks would miss. Add spring-kafka-test dependency and annotate the test class with @EmbeddedKafka(partitions = 3, topics = {\"test-orders\"}). Spring Boot auto-configures the embedded broker and sets spring.kafka.bootstrap-servers to the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical ability to write Kafka integration tests without external dependencies"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@EmbeddedKafka starts a real Kafka broker in the test JVM — not a mock; tests real serialization, partition assignment, and consumer group behavior; requires spring-kafka-test dependency",
+              "Kafka tests are asynchronous — producer and consumer run on different threads; use CountDownLatch, Awaitility, or KafkaTestUtils",
+              "getRecords() with timeouts to wait for processing",
+              "Unique topic names per test prevent interference — shared topics between test methods cause one test to consume another's messages; append UUID or use @DynamicPropertySource for isolation",
+              "Error handling tests verify the full retry-to-DLT pipeline — send a failing message, wait for retry exhaustion, assert a record appears on the Dead Letter Topic with the original payload"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "@EmbeddedKafka spins up an in-process Kafka broker on a random port for the duration of the test class. Real Kafka client code (producers, listeners, error handlers) runs unchanged — no mocks. ``xml <dependency> <groupId>org.springframework.kafka</groupId> <artifactId>spring-kafka-test</artifactId> <scope>test</scope> </dependency> ` `java @SpringBootTest @EmbeddedKafka( partitions = 3, topics = {\"orders\", \"orders.DLT\"}, brokerProperties = { \"listeners=PLAINTEXT://localhost:9092\", \"port=9092\" }) @DirtiesContext // fresh broker between test classes class OrderListenerTest { @Autowired private KafkaTemplate<String, OrderEvent> template; @Autowired private OrderRepository orderRepo; @Autowired private EmbeddedKafkaBroker embeddedKafka; @Test void listener_persists_order_event() throws Exception { OrderEvent event = new OrderEvent(UUID.randomUUID(), \"alice\", new BigDecimal(\"99.90\")); template.send(\"orders\", event.orderId().toString(), event).get(5, TimeUnit.SECONDS); // Wait for the listener to consume + persist (avoid Thread.sleep!) Awaitility.await() .atMost(Duration.ofSeconds(5)) .untilAsserted(() -> assertThat(orderRepo.findById(event.orderId())).isPresent()); } @Test void poison_message_routes_to_dlt() { // Send malformed payload."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using Thread",
+              "sleep() to wait for message consumption — use CountDownLatch or Awaitility instead"
+            ]
+          }
+        ],
+        "cap": "In practice, I use @EmbeddedKafka for integration tests and Testcontainers with a real Kafka container for more realistic end-to-end tests.",
+        "familiarity_anchors": [
+          "EmbeddedKafka",
+          "Kafka",
+          "EmbeddedKafkaBroker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test Kafka transactional producers with @EmbeddedKafka?",
+          "What is the difference between @EmbeddedKafka and Testcontainers for Kafka testing?",
+          "How do you verify message headers in Kafka integration tests?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "ka-001",
+      "slug": "kafka-broker-partition-leadership-isr",
+      "question": "How does Kafka manage partition leadership and in-sync replicas (ISR)?",
+      "title": "Kafka Partition Leadership and the In-Sync Replica Set",
+      "direct_answer": "A Kafka topic is split into **partitions**; every partition has one **leader** broker and N follower replicas. Followers that have caught up within `replica.lag.time.max.ms` form the **ISR** (in-sync replicas). Producers with `acks=all` only get acknowledgment when every ISR member has the write, and `min.insync.replicas` is the durability floor — if the ISR shrinks below it, writes are rejected. **Unclean leader election** is disabled by default to prevent data loss when no in-sync replica is available.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand how Kafka achieves durability through replication, and how ISR membership controls the trade-off between availability and data safety",
+        "common_mistake": "Thinking replication factor alone provides durability — `acks=all` without `min.insync.replicas >= 2` collapses to `acks=1` semantics when only the leader is in the ISR",
+        "to_stand_out": "Explain the unclean-leader-election trade-off, the role of `replica.lag.time.max.ms` (not message count) in ISR membership, and how a shrinking ISR causes silent durability loss"
+      },
+      "company_tags": [
+        "LinkedIn",
+        "Confluent",
+        "Uber",
+        "Netflix",
+        "Airbnb",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One Leader Per Partition, N Followers, and a Set That Decides Whether Your Write Was Durable",
+            "content": "A Kafka topic is a logical name; the unit Kafka actually replicates is the **partition**.\n- Every partition has exactly one **leader** broker and `replication.factor - 1` follower replicas distributed across other brokers.\n- Producers and consumers always talk to the leader for that partition.\n- Followers exist only to keep a copy of the log so the partition survives broker failure.\n\nWhat makes Kafka's replication model interesting is that not all followers are treated equally.\n- At any moment, a subset of replicas — including the leader itself — is considered the **in-sync replica set (ISR)**.\n- To be in the ISR, a follower must have fetched the leader's log within `replica.lag.time.max.ms` (default 30 seconds).\n- Fall behind for longer and the controller removes you from the ISR; the partition keeps accepting writes with a smaller ISR.\n- Catch up again and you're re-added.\n\nThe ISR is the data structure that controls durability.\n- With `acks=all`, the producer waits for every ISR member to acknowledge a write before considering it committed.\n- If you have replication factor 3 and all 3 are in the ISR, an `acks=all` write only returns success when 3 brokers have it.\n- If two followers fall behind and the ISR shrinks to just the leader, that same `acks=all` write returns success as soon as the leader has it — silently degrading to `acks=1` semantics.\n- This is why **`min.insync.replicas`** exists: set it to 2 on a replication-factor-3 topic, and the broker rejects writes whenever the ISR has fewer than 2 members.\n- The producer sees `NotEnoughReplicasException` and decides what to do — almost always retry rather than lose data."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Topic, Partitions, Leaders, and ISR Across Brokers",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nflowchart TB\n    subgraph topic[\"Topic: orders (replication.factor=3)\"]\n        subgraph p0[\"Partition 0\"]\n            p0Leader[\"Broker 1\\nLeader\"]\n            p0F1[\"Broker 2\\nFollower (ISR)\"]\n            p0F2[\"Broker 3\\nFollower (ISR)\"]\n        end\n        subgraph p1[\"Partition 1\"]\n            p1Leader[\"Broker 2\\nLeader\"]\n            p1F1[\"Broker 3\\nFollower (ISR)\"]\n            p1F2[\"Broker 1\\nFollower (lagging, OUT of ISR)\"]\n        end\n        subgraph p2[\"Partition 2\"]\n            p2Leader[\"Broker 3\\nLeader\"]\n            p2F1[\"Broker 1\\nFollower (ISR)\"]\n            p2F2[\"Broker 2\\nFollower (ISR)\"]\n        end\n    end\n    producer[\"Producer (acks=all)\"] --> p0Leader\n    producer --> p1Leader\n    producer --> p2Leader\n    p0Leader --> p0F1\n    p0Leader --> p0F2\n    p1Leader --> p1F1\n    p1Leader -.lagging.-> p1F2\n    p2Leader --> p2F1\n    p2Leader --> p2F2\n```"
+          },
+          {
+            "type": "step",
+            "title": "How a Follower Joins or Leaves the ISR",
+            "content": "Followers continuously **fetch** from the leader using the same protocol consumers use.\n- The leader tracks the highest offset each follower has fetched.\n- When a follower's last fetch is older than `replica.lag.time.max.ms` (default 30 seconds), the controller removes it from the ISR for that partition.\n- The shrink is recorded in the cluster metadata and propagated to all brokers.\n\n**Why time-based and not message-based?** Earlier versions of Kafka used `replica.lag.max.messages`, but a sudden burst of producer traffic could push followers past that threshold even when they were healthy and catching up. Time-based lag is robust to traffic spikes — what matters is whether the follower is still actively fetching, not how many messages behind it currently is.\n\nA follower re-enters the ISR when it has caught up to the leader's log-end offset.\n- The leader notices on the next fetch request that the follower's position equals the high-water mark, and the controller adds it back.\n- The shrink and expand events show up in the broker's `kafka.server:type=ReplicaManager,name=IsrShrinksPerSec` and `IsrExpandsPerSec` JMX metrics — frequent shrinks usually point to slow disks, network saturation between brokers, or under-sized broker fetch threads."
+          },
+          {
+            "type": "step",
+            "title": "`acks`, `min.insync.replicas`, and the Durability Floor",
+            "content": "These two settings work together and must be reasoned about together.\n\n**Producer `acks`** controls what the producer waits for before considering a send complete:\n- `acks=0` — fire and forget, no acknowledgment, messages lost on any broker hiccup.\n- `acks=1` — leader writes to its local log and acknowledges; followers may not have it yet. Leader failure before replication = data loss.\n- `acks=all` (or `-1`) — leader waits for every member of the **current ISR** to fetch the record before acknowledging.\n\n**Topic `min.insync.replicas`** is the floor enforced by the broker. When a producer writes with `acks=all` and the ISR has fewer than `min.insync.replicas` members, the broker returns `NotEnoughReplicasException` and the write is rejected.\n\nThe canonical safe configuration: `replication.factor=3`, `min.insync.replicas=2`, producer `acks=all`.\n- This survives one broker failure with full durability — even if one replica is offline, two are still in the ISR and writes succeed.\n- If two replicas are offline, writes are rejected rather than silently downgrading to single-broker durability.\n- The producer can retry until the cluster heals."
+          },
+          {
+            "type": "step",
+            "title": "Unclean Leader Election — The Knob That Trades Availability for Data Loss",
+            "content": "When the leader of a partition fails, the controller elects a new leader from the surviving in-sync replicas. But what if no in-sync replica is available — for example, all replicas were down at the same time, or the leader failed and its only ISR follower had crashed seconds earlier?\n\nWith **`unclean.leader.election.enable=false`** (the default since Kafka 0.11), the partition becomes unavailable. Producers writing to it get `NotEnoughReplicasAfterAppendException`; consumers stop receiving new records. The cluster waits until an in-sync replica comes back online. **No data is lost**, but the partition is offline.\n\nWith `unclean.leader.election.enable=true`, the controller will elect any surviving replica — even one that was out of the ISR.\n- That replica becomes the new leader from its current log-end offset, which means any messages the old leader had that this replica didn't fetch are **permanently lost**.\n- Consumers that already read past that offset see their offset get truncated and may re-read older data.\n\nThe default is the right choice for any system where data is more important than uptime — payments, orders, audit logs.\n- Keep unclean leader election disabled, set `min.insync.replicas=2`, and accept that a rare cluster-wide failure can pause writes until you recover.\n- The systems that flip it on tend to be telemetry or log-aggregation pipelines where losing a few minutes of data is preferable to the partition being unavailable for hours."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Each partition has one leader and N followers** — replication factor 3 means 1 leader + 2 followers; producers and consumers only talk to the leader.\n- **ISR membership is time-based, not message-based** — a follower falling behind by `replica.lag.time.max.ms` (default 30s) is removed; this is robust to traffic spikes.\n- **`acks=all` waits for every current ISR member** — but if the ISR shrinks to just the leader, `acks=all` silently behaves like `acks=1`.\n- **`min.insync.replicas=2` is the durability floor** — combined with `acks=all` and replication factor 3, it rejects writes when only one replica is left, preventing silent durability loss.\n- **Unclean leader election (default false) trades availability for safety** — on, an out-of-sync replica can become leader and data is lost; off, the partition stays offline until an in-sync replica returns."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A Kafka topic is split into partitions, and every partition has one leader broker and N followers. Producers and consumers only talk to the leader; followers exist to keep a copy of the log so the partition survives broker failure.\n\n**The ISR is the key concept:**\n- Not all followers are treated equally — at any moment a subset, including the leader, is the in-sync replica set\n- A follower stays in the ISR as long as it fetches from the leader within `replica.lag.time.max.ms`, default 30 seconds\n- It's time-based rather than message-based so that bursts of producer traffic don't kick healthy followers out of the ISR\n\n**`acks` and `min.insync.replicas` work together:**\n- `acks=all` means the producer waits for every current ISR member to acknowledge\n- The trap is that if the ISR shrinks to just the leader, `acks=all` silently degrades to `acks=1`\n- `min.insync.replicas=2` on a replication-factor-3 topic prevents that — the broker rejects writes when fewer than two replicas are in the ISR, so the producer sees an exception and retries instead of losing data\n\n**Unclean leader election:**\n- When the leader fails and no in-sync replica is available, by default the partition stays offline until one comes back — no data is lost but writes pause\n- Setting `unclean.leader.election.enable=true` lets an out-of-sync replica become leader, which loses any messages it didn't have — only acceptable for logs and telemetry\n\nMy recommended baseline for any durability-sensitive topic is replication factor 3, `min.insync.replicas=2`, producer `acks=all`, and unclean leader election off — this survives one broker failure with no data loss and surfaces problems as exceptions rather than silent corruption."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `acks=all` and `min.insync.replicas`?",
+        "How does Kafka decide when to remove a follower from the ISR?",
+        "When would you ever turn on `unclean.leader.election.enable`?",
+        "What metrics indicate ISR shrink/expand churn in production?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Partition Leadership and ISR Explained | InterviewExplainer",
+        "metaDescription": "How Kafka uses partition leaders, follower replicas, and the in-sync replica set (ISR) for durability. acks=all, min.insync.replicas, unclean leader election."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "A Kafka topic is split into partitions, and every partition has one leader broker and N followers.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A Kafka topic is a logical name; the unit Kafka actually replicates is the partition. Every partition has exactly one leader broker and replication.factor - 1 follower replicas distributed across other brokers. Producers and consumers always talk to the leader for that partition. Followers exist only to keep a copy of the log so the partition survives broker failure. What makes Kafka's replication model interesting is that not all followers are treated equally. At any moment, a subset of replicas."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand how Kafka achieves durability through replication, and how ISR membership controls the trade-off between availability and data safety"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Each partition has one leader and N followers — replication factor 3 means 1 leader + 2 followers; producers and consumers only talk to the leader",
+              "ISR membership is time-based, not message-based — a follower falling behind by replica",
+              "ms (default 30s) is removed; this is robust to traffic spikes",
+              "acks=all waits for every current ISR member — but if the ISR shrinks to just the leader, acks=all silently behaves like acks=1",
+              "replicas=2 is the durability floor — combined with acks=all and replication factor 3, it rejects writes when only one replica is left, preventing silent durability loss"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A Kafka topic is a logical name; the unit Kafka actually replicates is the partition. Every partition has exactly one leader broker and replication.factor - 1 follower replicas distributed across other brokers. Producers and consumers always talk to the leader for that partition. Followers exist only to keep a copy of the log so the partition survives broker failure. What makes Kafka's replication model interesting is that not all followers are treated equally. At any moment, a subset of replicas — including the leader itself — is considered the in-sync replica set (ISR). To be in the ISR, a follower must have fetched the leader's log within replica.lag.time.max.ms (default 30 seconds). Fall behind for longer and the controller removes you."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking replication factor alone provides durability — acks=all without min",
+              "replicas >= 2 collapses to acks=1 semantics when only the leader is in the ISR"
+            ]
+          }
+        ],
+        "cap": "The ISR is the key concept: Not all followers are treated equally — at any moment a subset, including the leader, is the in-sync replica set A follower stays in the ISR as long as.",
+        "familiarity_anchors": [
+          "Kafka",
+          "Followers",
+          "Producers"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between `acks=all` and `min.insync.replicas`?",
+          "How does Kafka decide when to remove a follower from the ISR?",
+          "When would you ever turn on `unclean.leader.election.enable`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "ka-002",
+      "slug": "kafka-controller-election-kraft-vs-zookeeper",
+      "question": "What is the Kafka controller, and how does KRaft mode differ from ZooKeeper-based clusters?",
+      "title": "Kafka Controller: KRaft Quorum vs ZooKeeper",
+      "direct_answer": "The **controller** is the broker responsible for partition leader elections, ISR updates, and propagating cluster metadata. In legacy ZooKeeper mode, a single controller is elected via ZooKeeper, and metadata is stored in ZK znodes. In **KRaft mode** (production-ready since 3.3, default in 3.5+), Kafka removes ZooKeeper entirely: a small set of dedicated controller nodes form a **Raft consensus quorum** and store metadata in an internal `__cluster_metadata` topic. KRaft enables faster failover, single-binary operations, and clusters with millions of partitions instead of tens of thousands.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand the role of the controller in cluster coordination and the architectural shift from ZooKeeper to KRaft",
+        "common_mistake": "Thinking the controller is involved in every produce/consume request — it only handles metadata changes (leader elections, topic creation, ISR updates), not data path",
+        "to_stand_out": "Explain why the ZooKeeper model bottlenecked at ~200K partitions, how KRaft's metadata log scales differently, and the migration path for existing ZK clusters"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber",
+        "Netflix",
+        "Airbnb",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Controller Doesn't Touch Your Data — But Without It, the Cluster Can't Decide Who Owns What",
+            "content": "Most explanations of Kafka focus on producers, consumers, and brokers.\n- The **controller** is the broker that nobody mentions until something breaks, and then it's the only thing anyone talks about.\n- The controller's job is **cluster coordination**, not data movement: it elects partition leaders when a broker dies, updates the ISR when a follower falls behind, registers new brokers joining the cluster, and propagates topic-creation and ACL changes to every broker.\n\nIn the original Kafka architecture, the controller's state lived in **Apache ZooKeeper** — a separate distributed coordination service.\n- Brokers registered themselves as ZK ephemeral nodes; the controller was elected via a ZK race; partition assignments and ISR membership were stored in ZK znodes; brokers watched those znodes to learn about changes.\n- ZooKeeper worked, but it added a second distributed system to operate, monitor, secure, and back up.\n- It also became a scalability ceiling: every broker on startup loaded the full metadata from ZK, and a controller failover meant the new controller had to read the entire metadata tree before resuming operations.\n- At a few hundred thousand partitions per cluster, that recovery took minutes.\n\n**KRaft** (Kafka Raft Metadata mode), introduced in KIP-500 and production-ready since Kafka 3.3, replaces ZooKeeper with an internal Raft consensus quorum running inside Kafka itself.\n- A small set of brokers — typically 3 or 5 — are configured as `controller.quorum.voters`.\n- They run the Raft protocol, electing a single active controller and replicating the cluster metadata as an append-only log stored in the internal `__cluster_metadata` topic.\n- Every other broker tails this topic to learn cluster state.\n- Failover is now a tail-the-log operation that takes seconds, not minutes, because the new controller has the metadata in memory already."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "ZooKeeper vs KRaft Cluster Topology",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nflowchart TB\n    subgraph zkMode[\"Legacy: ZooKeeper Mode\"]\n        zk1[\"ZooKeeper 1\"]\n        zk2[\"ZooKeeper 2\"]\n        zk3[\"ZooKeeper 3\"]\n        zkCtrl[\"Broker A\\n(Active Controller)\"]\n        zkB1[\"Broker B\"]\n        zkB2[\"Broker C\"]\n        zk1 --- zk2\n        zk2 --- zk3\n        zk1 --- zk3\n        zkCtrl -->|reads/writes znodes| zk1\n        zkB1 -->|registers| zk1\n        zkB2 -->|registers| zk1\n    end\n    subgraph kraftMode[\"Modern: KRaft Mode\"]\n        kCtrl1[\"Controller 1\\n(Raft Voter)\"]\n        kCtrl2[\"Controller 2\\n(Raft Voter, Active)\"]\n        kCtrl3[\"Controller 3\\n(Raft Voter)\"]\n        metaLog[\"__cluster_metadata\\nReplicated Raft log\"]\n        kBrok1[\"Broker 1\"]\n        kBrok2[\"Broker 2\"]\n        kBrok3[\"Broker 3\"]\n        kCtrl1 --- kCtrl2\n        kCtrl2 --- kCtrl3\n        kCtrl1 --- kCtrl3\n        kCtrl2 --> metaLog\n        kBrok1 -->|tails| metaLog\n        kBrok2 -->|tails| metaLog\n        kBrok3 -->|tails| metaLog\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "How Controller Election Works in Each Mode",
+            "content": "**ZooKeeper mode** uses ZK's ephemeral node mechanism.\n- On startup, every broker tries to create the `/controller` ephemeral znode.\n- The first one to succeed becomes the controller; the rest set a watch on that znode.\n- When the controller crashes, its session with ZooKeeper expires, the ephemeral node disappears, all brokers receive a watch notification, and they race again to create `/controller`.\n- The new controller then has to load the full metadata state — `/brokers`, `/topics`, `/admin`, `/config` — from ZK before it can serve requests.\n- On a large cluster this can take 30 seconds to several minutes.\n\n**KRaft mode** embeds Raft consensus.\n- The voter set is fixed in `controller.quorum.voters`.\n- They elect a leader via the standard Raft election: candidates request votes, the candidate with the highest term and most up-to-date log wins.\n- The leader appends every metadata change (broker registration, topic creation, leader change, ISR update) as a record in the metadata log; followers replicate it.\n- Because every voter already has the metadata replicated locally, leader failover is sub-second — the new leader is elected and immediately resumes processing because it already has the log in memory.\n\nThe non-controller brokers don't participate in elections.\n- They subscribe to the metadata log as ordinary consumers (with a special internal client).\n- They learn about leader changes, topic creation, and ACL updates by reading new records from the log.\n- This is the same mechanism Kafka already had for normal data — KRaft is, in a sense, Kafka eating its own dog food for cluster metadata."
+          },
+          {
+            "type": "code_example",
+            "title": "server.properties: ZooKeeper vs KRaft Configuration",
+            "content": "**Legacy ZooKeeper-based broker (`server.properties`):**\n\n```properties\nbroker.id=1\nlisteners=PLAINTEXT://:9092\nlog.dirs=/var/lib/kafka/logs\n\n# Required: external ZooKeeper ensemble\nzookeeper.connect=zk1:2181,zk2:2181,zk3:2181\nzookeeper.connection.timeout.ms=18000\n```\n\n**KRaft combined node (controller + broker, fine for dev / small prod):**\n\n```properties\nprocess.roles=broker,controller\nnode.id=1\ncontroller.quorum.voters=1@kafka1:9093,2@kafka2:9093,3@kafka3:9093\n\nlisteners=PLAINTEXT://:9092,CONTROLLER://:9093\ninter.broker.listener.name=PLAINTEXT\ncontroller.listener.names=CONTROLLER\nlistener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT\n\nlog.dirs=/var/lib/kafka/logs\n# Note: NO zookeeper.connect setting in KRaft mode\n```\n\n**KRaft dedicated controller node (recommended for production):**\n\n```properties\nprocess.roles=controller\nnode.id=101\ncontroller.quorum.voters=101@ctrl1:9093,102@ctrl2:9093,103@ctrl3:9093\nlisteners=CONTROLLER://:9093\ncontroller.listener.names=CONTROLLER\nlog.dirs=/var/lib/kafka/metadata\n```\n\nBefore the first start, format the storage directory with the cluster ID:\n\n```bash\nKAFKA_CLUSTER_ID=$(bin/kafka-storage.sh random-uuid)\nbin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties\n```\n\nThe critical configuration differences: KRaft has `process.roles` (broker, controller, or both), `node.id` instead of `broker.id`, `controller.quorum.voters` listing the static voter set, and **no** `zookeeper.connect`. Forgetting to format the storage directory is the most common KRaft setup mistake — the broker refuses to start and logs `No meta.properties found`."
+          },
+          {
+            "type": "step",
+            "title": "Why KRaft — and the Migration Path From ZooKeeper",
+            "content": "**Operational benefits** are why every greenfield deployment uses KRaft and most existing clusters are migrating:\n- One distributed system instead of two — no separate ZooKeeper to operate, monitor, patch, secure, back up, or upgrade.\n- Sub-second controller failover instead of multi-minute, because metadata is already in memory on every voter.\n- Cluster scale that comfortably handles **millions of partitions** rather than the ~200K practical ZooKeeper ceiling.\n- Faster broker startup — brokers tail the metadata log incrementally instead of loading the full ZK state.\n- Single-process deployments are possible; one binary to install instead of Kafka + ZK.\n\n**Migration path for existing ZK clusters** (KIP-866):\n1.\n- Upgrade all brokers to a Kafka version that supports the migration (3.4+).\n2.\n- Provision a separate KRaft controller quorum and start it in **migration mode** — it reads metadata from ZooKeeper and begins building the metadata log.\n3.\n- Restart brokers one at a time so they treat the KRaft controllers as authoritative while ZK is still running as a fallback.\n4.\n- Once all brokers are KRaft-aware and the metadata log is fully built, flip the cluster into KRaft mode and decommission ZooKeeper.\n\nApache Kafka 4.0 (mid-2024) removed ZooKeeper support entirely — it is the recommended target. Confluent Platform 7.5+ ships KRaft as the default. ZooKeeper deprecation is no longer theoretical: any cluster planning to be on a supported Kafka version in 2025 needs a migration plan."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **The controller manages metadata, not data** — leader elections, ISR updates, topic creation, broker registration; it never touches produce/consume traffic.\n- **ZK mode stored metadata in ZooKeeper** — controller failover required reloading the full metadata tree, taking minutes on large clusters.\n- **KRaft uses an internal Raft quorum** — `controller.quorum.voters` defines a fixed voter set, metadata lives in the `__cluster_metadata` topic, and failover is sub-second.\n- **KRaft scales to millions of partitions** — ZooKeeper-mode clusters bottlenecked around 200K partitions per cluster.\n- **KRaft is mandatory for Kafka 4.0+** — ZooKeeper support was removed; existing ZK clusters need a KIP-866 migration before upgrading."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The controller is the broker responsible for cluster coordination — it elects partition leaders when a broker dies, updates the ISR, and propagates topic creation and ACL changes. Importantly, the controller is not in the data path; it doesn't touch produce or consume traffic.\n\n**The historical model used ZooKeeper:**\n- Brokers registered themselves as ephemeral znodes; the controller was elected by being the first to create `/controller` in ZooKeeper\n- Cluster metadata — brokers, topics, partition assignments, configs — lived in ZK\n- The downside was operating two distributed systems and a hard scaling ceiling around 200,000 partitions per cluster, with controller failover that took minutes because the new controller had to reload all metadata from ZK\n\n**KRaft replaces ZooKeeper:**\n- A small set of brokers, typically 3 or 5, are designated as `controller.quorum.voters` and run Raft consensus among themselves\n- Cluster metadata is stored as an append-only log in the internal `__cluster_metadata` topic\n- Every other broker tails that log to learn cluster state, the same way ordinary consumers tail any topic\n- Failover is sub-second because every voter already has the metadata in memory; clusters now scale comfortably to millions of partitions\n\n**Operational impact:**\n- One distributed system instead of two — no separate ZK to deploy, monitor, patch, secure, and back up\n- Faster broker startup, faster controller failover, simpler single-binary deployments\n- Kafka 4.0 removed ZooKeeper support entirely; existing ZK clusters need to use the KIP-866 migration path\n\nFor any new cluster I default to KRaft with a dedicated 3-node controller quorum separate from the data brokers, because it gives the cleanest operational model and matches where the project is going."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the role of `controller.quorum.voters` in KRaft mode?",
+        "Why did ZooKeeper-based Kafka cap out around 200,000 partitions?",
+        "How does the KIP-866 ZK-to-KRaft migration work?",
+        "What's the difference between a combined-mode and dedicated-controller KRaft node?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Controller: KRaft vs ZooKeeper Explained | InterviewExplainer",
+        "metaDescription": "Kafka controller, KRaft mode vs ZooKeeper. Raft quorum, __cluster_metadata topic, faster failover, scaling to millions of partitions, and ZK migration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The controller is the broker responsible for cluster coordination — it elects partition leaders when a broker dies, updates the ISR, and propagates topic creation and ACL changes.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most explanations of Kafka focus on producers, consumers, and brokers. The controller is the broker that nobody mentions until something breaks, and then it's the only thing anyone talks about. The controller's job is cluster coordination, not data movement: it elects partition leaders when a broker dies, updates the ISR when a follower falls behind, registers new brokers joining the cluster, and propagates topic-creation and ACL changes to every broker. In the original Kafka architecture, the controller's state lived in."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the role of the controller in cluster coordination and the architectural shift from ZooKeeper to KRaft"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "The controller manages metadata, not data — leader elections, ISR updates, topic creation, broker registration; it never touches produce/consume traffic",
+              "ZK mode stored metadata in ZooKeeper — controller failover required reloading the full metadata tree, taking minutes on large clusters",
+              "KRaft uses an internal Raft quorum — controller",
+              "voters defines a fixed voter set, metadata lives in the __cluster_metadata topic, and failover is sub-second",
+              "KRaft scales to millions of partitions — ZooKeeper-mode clusters bottlenecked around 200K partitions per cluster"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Legacy ZooKeeper-based broker (server.properties): ``properties broker.id=1 listeners=PLAINTEXT://:9092 log.dirs=/var/lib/kafka/logs Required: external ZooKeeper ensemble zookeeper.connect=zk1:2181,zk2:2181,zk3:2181 zookeeper.connection.timeout.ms=18000 ` KRaft combined node (controller + broker, fine for dev / small prod): `properties process.roles=broker,controller node.id=1 controller.quorum.voters=1@kafka1:9093,2@kafka2:9093,3@kafka3:9093 listeners=PLAINTEXT://:9092,CONTROLLER://:9093 inter.broker.listener.name=PLAINTEXT controller.listener.names=CONTROLLER listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT log.dirs=/var/lib/kafka/logs Note: NO zookeeper.connect setting in KRaft mode ` KRaft dedicated controller node (recommended for production): `properties process.roles=controller node.id=101 controller.quorum.voters=101@ctrl1:9093,102@ctrl2:9093,103@ctrl3:9093 listeners=CONTROLLER://:9093 controller.listener.names=CONTROLLER log.dirs=/var/lib/kafka/metadata ` Before the first start, format the storage directory with the cluster ID: `bash KAFKA_CLUSTER_ID=$(bin/kafka-storage.sh random-uuid) bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties ` The critical configuration differences: KRaft has process.roles (broker, controller, or both), node.id instead of broker.id, controller.quorum.voters listing the static voter set, and no zookeeper.connect. Forgetting to format the storage directory is the most common KRaft setup mistake — the."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking the controller is involved in every produce/consume request",
+              "it only handles metadata changes (leader elections, topic creation, ISR updates), not data path"
+            ]
+          }
+        ],
+        "cap": "The historical model used ZooKeeper: Brokers registered themselves as ephemeral znodes; the controller was elected by being the first to create /controller in ZooKeeper Cluster metadata — brokers, top",
+        "familiarity_anchors": [
+          "ZooKeeper",
+          "KRaft",
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the role of `controller.quorum.voters` in KRaft mode?",
+          "Why did ZooKeeper-based Kafka cap out around 200,000 partitions?",
+          "How does the KIP-866 ZK-to-KRaft migration work?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "ka-003",
+      "slug": "kafka-log-compaction-and-retention",
+      "question": "How do Kafka log retention and log compaction work, and when should you use each?",
+      "title": "Kafka Log Retention vs Log Compaction",
+      "direct_answer": "Kafka stores each partition as an ordered set of **segment files**. The **delete** retention policy (default) drops whole segments older than `retention.ms` or once total size exceeds `retention.bytes`. The **compact** policy keeps only the **latest value per key** and uses null-valued **tombstones** to delete keys; older versions get garbage collected. Use delete retention for event streams and audit logs; use compaction for stateful topics like `__consumer_offsets`, CDC change logs, and config topics where consumers only care about the current state per key. The two policies can be combined as `cleanup.policy=compact,delete`.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand Kafka's segment-based log layout and the two retention strategies, including when to use compaction vs time-based deletion",
+        "common_mistake": "Assuming compaction immediately removes old values — it only runs on inactive segments, so the active segment always has duplicates and tombstones aren't deleted until `delete.retention.ms` later",
+        "to_stand_out": "Explain the role of the active segment, why `__consumer_offsets` is a compacted topic, and the `cleanup.policy=compact,delete` combination for time-bounded compacted topics"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber",
+        "Netflix",
+        "Airbnb",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Very Different Models for 'How Long Does Kafka Keep My Data?'",
+            "content": "A Kafka partition is not a single huge file — it's a directory of **segment files**, each one a chunk of the log capped by size (`segment.bytes`, default 1 GiB) or age (`segment.ms`, default 7 days).\n- At any moment exactly one segment is the **active segment** that producers append to; the rest are immutable closed segments.\n- This segment-based layout is what makes both retention policies efficient: cleaning up old data means deleting whole files, not editing them in place.\n\nKafka offers two `cleanup.policy` modes that work entirely differently:\n\n**`delete` (the default)** treats the topic as a time-windowed event log.\n- Once a closed segment is older than `retention.ms` (default 7 days) or once the partition's total size exceeds `retention.bytes`, the broker deletes the entire segment file.\n- This is fast — a single unlink — but coarse-grained: a segment with one new record and 999,999 old records survives until the new record itself ages out.\n\n**`compact`** treats the topic as a **changelog keyed by record key**.\n- The broker periodically rewrites closed segments, keeping only the most recent record for each key and dropping older versions.\n- To delete a key entirely, you publish a record with the same key and a **null value** — a tombstone — which compaction will eventually retain just long enough that consumers see the deletion before garbage-collecting the tombstone too.\n- The result: the topic shrinks to the size of the current state, not the full history.\n\nChoosing between them is a question about what consumers actually need. If they need the full event history (orders placed, page views), use `delete`. If they only need the current value per key (the latest user profile, the current offset for a consumer group, the current configuration), use `compact`."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Segment Layout and Compaction Behavior",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nflowchart TB\n    subgraph beforeCompact[\"Before Compaction (closed segments)\"]\n        seg1Old[\"Segment 1\\n(k=user1, v=A)\\n(k=user2, v=B)\\n(k=user1, v=C)\\n(k=user3, v=D)\"]\n        seg2Old[\"Segment 2\\n(k=user1, v=E)\\n(k=user2, v=null)  TOMBSTONE\\n(k=user3, v=F)\"]\n    end\n    subgraph afterCompact[\"After Compaction (rewritten)\"]\n        segMerged[\"Compacted Segment\\n(k=user1, v=E)\\n(k=user2, v=null)  TOMBSTONE\\n(k=user3, v=F)\"]\n    end\n    subgraph activeSeg[\"Active Segment (NEVER compacted)\"]\n        segActive[\"Segment 3 (active)\\n(k=user1, v=G)\\n(k=user4, v=H)\"]\n    end\n    beforeCompact -->|cleaner thread\\nrewrites| afterCompact\n    afterCompact -.tombstone aged out\\nafter delete.retention.ms.-> finalState[\"Final State\\n(k=user1, v=E)\\n(k=user3, v=F)\"]\n```"
+          },
+          {
+            "type": "step",
+            "title": "How the Cleaner Thread Actually Works",
+            "content": "The compaction work is done by a background pool of threads called the **log cleaner**, sized by `log.cleaner.threads` (default 1). Each thread picks the partition with the highest **dirty ratio** — the fraction of bytes in closed segments that are duplicates or tombstones — once it crosses `min.cleanable.dirty.ratio` (default 0.5).\n\nThe cleaner reads all closed segments, builds an in-memory map from key to latest offset, then rewrites the segments containing only the records whose offset matches the latest for that key.\n- Tombstones are kept during this pass so consumers reading near real-time still see the deletion.\n- After `delete.retention.ms` (default 24 hours) the tombstones themselves are eligible for deletion in a subsequent compaction pass.\n\n**The active segment is never compacted.** This is the most important operational detail.\n- If your producers stop appending, the active segment never rolls, and compaction never runs on it.\n- To force the active segment to roll on a slow topic, set `segment.ms` low enough (e.g. 1 hour) that time alone forces a roll, or `segment.bytes` small enough that the active segment fills up.\n- Without one of these, a low-volume compacted topic can hold weeks of duplicate values in its active segment.\n\nIf consumers must always observe a tombstone for a deleted key, set `delete.retention.ms` long enough that even a slow consumer reading from earliest can see it. For `__consumer_offsets`, the default 24 hours is plenty; for application changelogs feeding downstream caches, several days is safer."
+          },
+          {
+            "type": "code_example",
+            "title": "Topic Configurations: Pure Delete, Pure Compact, and Hybrid",
+            "content": "Topic configs are normally set with `kafka-configs.sh` or via the `kafka-topics.sh --create` command. The three common shapes:\n\n```bash\n# 1) Pure delete retention — event log, 7 days, max 100 GiB\nbin/kafka-topics.sh --bootstrap-server localhost:9092 --create \\\n  --topic order-events \\\n  --partitions 12 --replication-factor 3 \\\n  --config cleanup.policy=delete \\\n  --config retention.ms=604800000 \\\n  --config retention.bytes=107374182400\n\n# 2) Pure compaction — keep latest value per key forever\nbin/kafka-topics.sh --bootstrap-server localhost:9092 --create \\\n  --topic user-profile-changelog \\\n  --partitions 6 --replication-factor 3 \\\n  --config cleanup.policy=compact \\\n  --config min.cleanable.dirty.ratio=0.5 \\\n  --config segment.ms=3600000 \\\n  --config delete.retention.ms=86400000\n\n# 3) Hybrid: compact AND delete after 30 days\n#    Useful when you only care about latest value per key\n#    BUT you also want a hard time bound (GDPR, storage cost)\nbin/kafka-topics.sh --bootstrap-server localhost:9092 --create \\\n  --topic device-state-changelog \\\n  --partitions 12 --replication-factor 3 \\\n  --config cleanup.policy=compact,delete \\\n  --config retention.ms=2592000000\n```\n\nFor compacted topics in Spring producer code, **always send a real key** (not null) — compaction is keyed and a null key cannot be deduplicated:\n\n```java\nProducerRecord<String, String> rec = new ProducerRecord<>(\n    \"user-profile-changelog\",\n    user.getId(),               // KEY required for compaction\n    objectMapper.writeValueAsString(user)\n);\nkafkaTemplate.send(rec);\n\n// To DELETE a key, send a tombstone (null value, same key):\nkafkaTemplate.send(new ProducerRecord<>(\n    \"user-profile-changelog\", deletedUserId, null));\n```"
+          },
+          {
+            "type": "step",
+            "title": "Where Each Policy Belongs in Practice",
+            "content": "**Use `cleanup.policy=delete` for:**\n- Event streams where consumers care about the full history (`order-placed`, `page-view`, `payment-attempted`).\n- Audit and security logs where each event matters and old data ages out by policy or compliance.\n- High-throughput pipelines where retention is bounded by disk capacity.\n\n**Use `cleanup.policy=compact` for:**\n- Stateful changelogs where downstream consumers materialize a key→latest-value table. Kafka Streams' state stores back themselves with compacted topics for exactly this reason.\n- The internal `__consumer_offsets` topic — consumers only ever need the latest committed offset per (group, topic, partition); compaction prevents the topic from growing unbounded.\n- CDC topics emitted by Debezium when downstream sinks only need the current row state.\n- Configuration topics that broadcast latest config per key to all subscribers.\n\n**Use `cleanup.policy=compact,delete` for:**\n- Compacted state that must also obey a time bound — GDPR right-to-be-forgotten requirements, regulatory retention limits, or simply controlling storage cost on topics with very many keys that go cold.\n\nThe one anti-pattern to avoid: sending events with no key to a compacted topic. Without a key the broker has nothing to dedupe on, the topic grows like a delete topic but without the time-based cleanup, and you'll discover this only when the partition fills the disk."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Each partition is a sequence of segment files** — only one segment is active and being appended to; the rest are immutable.\n- **`cleanup.policy=delete` drops whole segments by age or total size** — fast and coarse-grained, suited to event streams and audit logs.\n- **`cleanup.policy=compact` keeps only the latest value per key** — null values are tombstones that delete a key after `delete.retention.ms`.\n- **The active segment is never compacted** — low-volume compacted topics need `segment.ms` set so segments roll on time even without traffic.\n- **`__consumer_offsets` is a compacted topic** — only the latest committed offset per (group, topic, partition) needs to survive."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka stores each partition as a series of segment files — one active segment that producers append to, plus a chain of immutable closed segments. Cleanup policies operate on closed segments by deleting or rewriting whole files.\n\n**Two policies:** - `cleanup.policy=delete` is the default — once a closed segment is older than `retention.ms` or the partition exceeds `retention.bytes`, the broker drops the whole segment file.\n- Use this for event streams and audit logs.\n- `cleanup.policy=compact` keeps only the most recent record per key.\n- To delete a key you publish a record with the same key and a null value — that's a tombstone, and after `delete.retention.ms` it gets garbage collected too.\n\n**Important operational details:**\n- The active segment is never compacted, so a low-volume compacted topic needs `segment.ms` set to a few hours so segments roll on time even without producer traffic — otherwise duplicates pile up indefinitely\n- Compaction runs when the dirty ratio crosses `min.cleanable.dirty.ratio`, default 0.5; the cleaner thread reads closed segments, builds a key-to-latest-offset map, and rewrites them keeping only the latest value per key\n- For compacted topics, producers must always send a real key — null keys can't be deduplicated and the topic will grow without bound\n\n**Where each fits:**\n- Delete for order events, page views, and audit logs where history matters\n- Compact for `__consumer_offsets`, Kafka Streams state stores, CDC change logs, and configuration topics where consumers only care about current state per key\n- `cleanup.policy=compact,delete` combines the two for compacted state that also needs a hard time bound — useful for GDPR or just controlling storage cost\n\nA single compacted partition can replace what would otherwise need a separate database for storing per-key state, which is why it underpins so much of the Kafka Streams ecosystem."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is the `__consumer_offsets` topic compacted instead of using delete retention?",
+        "Why must compacted topics always have a non-null key?",
+        "What is `min.cleanable.dirty.ratio` and when would you tune it?",
+        "How does Kafka Streams use compacted topics to back state stores?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Log Compaction vs Retention Explained | InterviewExplainer",
+        "metaDescription": "Kafka log retention vs log compaction. Segment files, tombstones, cleanup.policy=compact,delete, when to use each, and how __consumer_offsets uses compaction."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Kafka stores each partition as a series of segment files — one active segment that producers append to, plus a chain of immutable closed segments.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A Kafka partition is not a single huge file — it's a directory of segment files, each one a chunk of the log capped by size (segment.bytes, default 1 GiB) or age (segment.ms, default 7 days). At any moment exactly one segment is the active segment that producers append to; the rest are immutable closed segments. This segment-based layout is what makes both retention policies efficient: cleaning up old data means deleting whole files, not editing them in place. Kafka."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand Kafka's segment-based log layout and the two retention strategies, including when to use compaction vs time-based deletion"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Each partition is a sequence of segment files — only one segment is active and being appended to; the rest are immutable",
+              "policy=delete drops whole segments by age or total size — fast and coarse-grained, suited to event streams and audit logs",
+              "policy=compact keeps only the latest value per key — null values are tombstones that delete a key after delete",
+              "The active segment is never compacted — low-volume compacted topics need segment",
+              "ms set so segments roll on time even without traffic"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Topic configs are normally set with kafka-configs.sh or via the kafka-topics.sh --create command. The three common shapes: ``bash 1) Pure delete retention — event log, 7 days, max 100 GiB bin/kafka-topics.sh --bootstrap-server localhost:9092 --create \\ --topic order-events \\ --partitions 12 --replication-factor 3 \\ --config cleanup.policy=delete \\ --config retention.ms=604800000 \\ --config retention.bytes=107374182400 2) Pure compaction — keep latest value per key forever bin/kafka-topics.sh --bootstrap-server localhost:9092 --create \\ --topic user-profile-changelog \\ --partitions 6 --replication-factor 3 \\ --config cleanup.policy=compact \\ --config min.cleanable.dirty.ratio=0.5 \\ --config segment.ms=3600000 \\ --config delete.retention.ms=86400000 3) Hybrid: compact AND delete after 30 days Useful when you only care about latest value per key BUT you also want a hard time bound (GDPR, storage cost) bin/kafka-topics.sh --bootstrap-server localhost:9092 --create \\ --topic."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Assuming compaction immediately removes old values",
+              "it only runs on inactive segments, so the active segment always has duplicates and tombstones aren't deleted until delete"
+            ]
+          }
+        ],
+        "cap": "Important operational details: The active segment is never compacted, so a low-volume compacted topic needs segment.ms set to a few hours so segments roll on time even without producer traffic — other",
+        "familiarity_anchors": [
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is the `__consumer_offsets` topic compacted instead of using delete retention?",
+          "Why must compacted topics always have a non-null key?",
+          "What is `min.cleanable.dirty.ratio` and when would you tune it?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "ka-004",
+      "slug": "kafka-replication-and-durability",
+      "question": "How does Kafka replication and producer-side durability (acks, idempotence, transactions) work end-to-end?",
+      "title": "Kafka Replication and Producer Durability: acks, Idempotence, Transactions",
+      "direct_answer": "Each partition is replicated `replication.factor` times across brokers; the leader handles writes and followers fetch to stay in the **ISR**. Producer **`acks`** controls what counts as a successful write: `acks=0` is fire-and-forget, `acks=1` waits for the leader, `acks=all` waits for every ISR member. **`enable.idempotence=true`** (default since Kafka 3.0) gives **exactly-once per partition** by tagging records with a producer ID and sequence number so the broker rejects duplicates from retries. **Transactional producers** (`transactional.id`) extend exactly-once across multiple partitions and topics by wrapping produces and offset commits in an atomic broker-coordinated transaction.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand the layered guarantees Kafka offers: replication for durability, acks for visibility, idempotence for per-partition exactly-once, and transactions for cross-partition atomicity",
+        "common_mistake": "Believing `acks=all` alone gives exactly-once — it gives at-least-once; without idempotence, retries still produce duplicates",
+        "to_stand_out": "Explain that idempotence is per-partition only, transactions are required for atomic multi-partition writes, and that read_committed isolation is mandatory for downstream exactly-once"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber",
+        "Netflix",
+        "Airbnb",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Replication Gives You Durability — Producer Settings Decide What 'Successful Write' Even Means",
+            "content": "Kafka's durability story is built in layers.\n- At the bottom is **replication**: each partition has a leader broker and `replication.factor - 1` followers, distributed across brokers.\n- Followers continuously fetch from the leader; those that stay caught up form the in-sync replica set (ISR).\n- Once data reaches every ISR member, it survives the loss of any single broker.\n\nReplication alone doesn't tell the producer when a write is safe.\n- That's what **`acks`** does.\n- With `acks=0` the producer doesn't wait for any acknowledgment — fast, but a network blip silently loses messages.\n- With `acks=1` the leader writes to its local log and acknowledges immediately; followers may not have the record yet, so leader failure before replication causes loss.\n- With `acks=all` the leader waits for every current ISR member to fetch the record before responding; combined with `min.insync.replicas=2`, this is the strongest durability guarantee Kafka offers.\n\nBut even `acks=all` only gives **at-least-once**.\n- If the producer doesn't receive the broker's acknowledgment — perhaps the ack was lost or the producer timed out — the producer retries, and the broker happily appends a duplicate.\n- **Idempotent producers** (`enable.idempotence=true`, default since Kafka 3.0) fix this by giving every producer a unique producer ID and tagging each record with a monotonically increasing sequence number per partition.\n- The broker keeps the highest accepted sequence per producer per partition and rejects duplicates and out-of-order writes.\n- The result is **exactly-once delivery per partition** — the strongest single-producer guarantee.\n\nIdempotence is per partition.\n- To make a multi-partition or multi-topic write atomic — for example, consume from `orders`, produce to `inventory-updates` and `email-queue`, commit the consumer offset, and have all three either commit or roll back together — you need **transactional producers** with `transactional.id`.\n- Transactions add a transaction coordinator on the broker side that tracks the transaction's state and writes commit or abort markers to every involved partition.\n- Downstream consumers set `isolation.level=read_committed` to skip records from aborted or in-flight transactions."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Producer → Leader → Followers with `acks=all`",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nsequenceDiagram\n    autonumber\n    participant P as Producer<br/>(idempotent)\n    participant L as Partition Leader<br/>(Broker 1)\n    participant F1 as Follower<br/>(Broker 2, ISR)\n    participant F2 as Follower<br/>(Broker 3, ISR)\n    P->>L: ProduceRequest(records, pid=42, seq=100, acks=all)\n    L->>L: Append to local log<br/>at offset N\n    par Replication\n        F1->>L: FetchRequest(from offset N)\n        L-->>F1: Record(s) at offset N\n        F1->>F1: Append to local log\n        F1->>L: FetchRequest(from offset N+1)<br/>(implicit ack)\n    and\n        F2->>L: FetchRequest(from offset N)\n        L-->>F2: Record(s) at offset N\n        F2->>F2: Append to local log\n        F2->>L: FetchRequest(from offset N+1)<br/>(implicit ack)\n    end\n    L->>L: All ISR replicated up to offset N<br/>advance high-water mark\n    L-->>P: ProduceResponse(offset=N, no error)\n    Note over P,L: If response is lost, producer retries with same pid+seq.<br/>Broker dedupes via sequence-number check.\n```"
+          },
+          {
+            "type": "step",
+            "title": "Idempotence — How Per-Partition Exactly-Once Actually Works",
+            "content": "When `enable.idempotence=true`, the producer initializes by sending an `InitProducerId` request to the broker. The broker assigns a unique **producer ID (PID)** and a producer epoch. The producer then tags every record with `(PID, partition, sequence number)`, where the sequence number starts at 0 per partition and increments by 1 per record.\n\nThe broker maintains, per partition, a small map from PID to highest-accepted sequence number.\n- On every produce request it checks:\n- If the new sequence equals `last + 1`, accept the record and advance the counter.\n- If the new sequence equals `last`, this is a duplicate retry — the broker silently returns success without appending.\n- This is exactly the case where the network ate the previous acknowledgment.\n- If the new sequence is greater than `last + 1`, the producer skipped — the broker returns `OutOfOrderSequenceException`, which the client surfaces and the producer aborts.\n\nFor this to preserve ordering when `max.in.flight.requests.per.connection > 1` (default 5), the producer maintains in-flight sequence numbers per partition and re-orders retries internally, so the broker only ever sees sequences arrive in the right order. Without idempotence, multiple in-flight requests with retries can cause out-of-order writes; with idempotence enabled, ordering is preserved up to the maximum of 5 in-flight requests.\n\nIdempotence requires `acks=all` (the producer enforces this when you turn it on). The producer ID lasts for the lifetime of the producer instance — restart the producer and it gets a fresh PID, so cross-restart deduplication is the job of transactions, not vanilla idempotence."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot: Idempotent + Transactional Producer Configuration",
+            "content": "**Idempotent producer (covers most use cases):**\n\n```java\n@Configuration\npublic class KafkaProducerConfig {\n\n    @Bean\n    public ProducerFactory<String, OrderEvent> producerFactory() {\n        Map<String, Object> props = new HashMap<>();\n        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, \"kafka1:9092,kafka2:9092,kafka3:9092\");\n        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);\n        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);\n\n        // Durability and idempotence (default true on 3.0+, set explicitly for clarity)\n        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);\n        props.put(ProducerConfig.ACKS_CONFIG, \"all\");\n        props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);\n        props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);\n        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120_000);\n\n        return new DefaultKafkaProducerFactory<>(props);\n    }\n\n    @Bean\n    public KafkaTemplate<String, OrderEvent> kafkaTemplate(ProducerFactory<String, OrderEvent> pf) {\n        return new KafkaTemplate<>(pf);\n    }\n}\n```\n\n**Transactional producer (atomic multi-partition writes + offset commit):**\n\n```java\n@Configuration\npublic class TransactionalKafkaConfig {\n\n    @Bean\n    public ProducerFactory<String, OrderEvent> txnProducerFactory() {\n        Map<String, Object> props = new HashMap<>();\n        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, \"kafka1:9092,kafka2:9092,kafka3:9092\");\n        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);\n        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);\n        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);\n        props.put(ProducerConfig.ACKS_CONFIG, \"all\");\n\n        DefaultKafkaProducerFactory<String, OrderEvent> pf = new DefaultKafkaProducerFactory<>(props);\n        // The transactional.id prefix MUST be stable per logical producer instance.\n        // Spring appends a per-instance suffix.\n        pf.setTransactionIdPrefix(\"order-svc-tx-\");\n        return pf;\n    }\n\n    @Bean\n    public KafkaTransactionManager<String, OrderEvent> kafkaTxManager(\n            ProducerFactory<String, OrderEvent> pf) {\n        return new KafkaTransactionManager<>(pf);\n    }\n\n    @Bean\n    public KafkaTemplate<String, OrderEvent> txnTemplate(ProducerFactory<String, OrderEvent> pf) {\n        return new KafkaTemplate<>(pf);\n    }\n}\n\n@Service\npublic class OrderProcessor {\n\n    private final KafkaTemplate<String, OrderEvent> kafka;\n\n    public OrderProcessor(KafkaTemplate<String, OrderEvent> kafka) { this.kafka = kafka; }\n\n    // Both sends commit atomically with the consumer offset — or all roll back.\n    @KafkaListener(topics = \"orders\", groupId = \"order-svc\")\n    @Transactional(\"kafkaTxManager\")\n    public void onOrder(OrderEvent in) {\n        kafka.send(\"inventory-updates\", in.orderId(), new InventoryAdjust(in));\n        kafka.send(\"email-queue\",       in.orderId(), new EmailRequest(in));\n        // No explicit commit — Spring commits offset + sends inside one transaction.\n    }\n}\n```\n\n**Downstream consumer must use `read_committed`** to skip aborted or in-flight transactional records:\n\n```yaml\nspring:\n  kafka:\n    consumer:\n      isolation-level: read_committed\n      enable-auto-commit: false\n```"
+          },
+          {
+            "type": "step",
+            "title": "Picking the Right Guarantee for the Workload",
+            "content": "**Idempotence alone (default since 3.0)** is the right baseline for any producer.\n- It costs essentially nothing — slightly larger record headers and a small per-PID map on the broker — and eliminates the most common cause of duplicates: retries that succeeded silently.\n- Combined with `acks=all` and `min.insync.replicas=2`, this is the configuration to use unless you have a specific reason to weaken it.\n\n**Transactions** add real overhead: a coordinator round-trip per transaction, commit markers written to every involved partition, and the producer is single-threaded with respect to a transaction.\n- End-to-end throughput typically drops 10-30%.\n- Use transactions when you actually need cross-partition atomicity:\n- A consumer that reads from one topic, produces to others, and commits the consumer offset — the canonical Kafka Streams `processing.guarantee=exactly_once_v2` pattern.\n- Atomic fan-out to multiple downstream topics that downstream consumers must observe consistently.\n\n**Don't reach for transactions when the real problem is dual-write to Kafka + a database.** Kafka transactions cannot span Kafka and a relational database.\n- If the database commits but the Kafka commit fails, you have inconsistency.\n- The **outbox pattern** — write the event row in the same DB transaction as the business state, then publish from the outbox via a separate process or Debezium — is the right answer here.\n\n**Always pair `acks=all` with `min.insync.replicas=2` on a replication-factor-3 topic.** Without the floor, `acks=all` silently degrades to `acks=1` whenever the ISR shrinks to just the leader, undoing your durability guarantee at exactly the moment you needed it most."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Replication makes data survive broker failure** — `replication.factor=3` with `min.insync.replicas=2` survives one broker loss with no durability degradation.\n- **`acks` controls visibility, not durability** — `acks=all` waits for every ISR member; without `min.insync.replicas`, it silently weakens to `acks=1` if the ISR shrinks.\n- **`enable.idempotence=true` gives exactly-once per partition** — producer ID + sequence number lets the broker dedupe retries; default in Kafka 3.0+, costs almost nothing.\n- **Transactions extend exactly-once across partitions/topics** — required for atomic consume-process-produce; downstream must set `isolation.level=read_committed`.\n- **Kafka transactions don't cover Kafka + database** — for that use the outbox pattern; for pure Kafka pipelines, prefer the cheaper idempotent producer unless you actually need cross-partition atomicity."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka durability is built in layers. Replication is the foundation: each partition has a leader and N followers, and followers fetch continuously from the leader to stay in the ISR. Producer settings then decide what counts as a successful write.\n\n**The acks setting:**\n- `acks=0` is fire-and-forget — fast but unsafe\n- `acks=1` waits for the leader only — leader failure before replication loses data\n- `acks=all` waits for every current ISR member — but it silently degrades to `acks=1` if the ISR shrinks to just the leader, which is why you need `min.insync.replicas=2` on the topic\n\n**Idempotence:**\n- `enable.idempotence=true`, default since Kafka 3.0, gives exactly-once per partition\n- The broker assigns each producer a unique producer ID, the producer tags every record with a sequence number per partition, and the broker dedupes retries by checking the highest sequence it accepted\n- The broker also rejects out-of-order writes, so ordering is preserved even with multiple in-flight requests\n- Idempotence requires `acks=all` and the producer enforces it\n\n**Transactions:**\n- Idempotence is per partition only; for atomic writes across multiple partitions or topics — including the consumer offset commit — use a transactional producer with `transactional.id`\n- A broker-side transaction coordinator tracks the transaction and writes commit or abort markers to every involved partition\n- Downstream consumers must set `isolation.level=read_committed` to skip records from aborted or in-flight transactions\n- Throughput typically drops 10-30% versus pure idempotence, so use transactions only when you actually need cross-partition atomicity\n\n**Important boundary:**\n- Kafka transactions don't cover Kafka + a relational database — for that use the outbox pattern\n\nMy default for any new producer is `acks=all`, `enable.idempotence=true`, `min.insync.replicas=2` on the topic, and add transactions only when the workload genuinely needs atomic multi-partition writes."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does idempotence require `acks=all`?",
+        "What's the practical throughput cost of enabling Kafka transactions?",
+        "How does `isolation.level=read_committed` change consumer behavior?",
+        "When would you choose the outbox pattern over Kafka transactions?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Replication, acks, Idempotence, Transactions | InterviewExplainer",
+        "metaDescription": "Kafka replication and durability: acks=0/1/all, enable.idempotence, transactional producers, min.insync.replicas, exactly-once semantics for Spring Boot."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Kafka durability is built in layers.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Kafka's durability story is built in layers. At the bottom is replication: each partition has a leader broker and replication.factor - 1 followers, distributed across brokers. Followers continuously fetch from the leader; those that stay caught up form the in-sync replica set (ISR). Once data reaches every ISR member, it survives the loss of any single broker. Replication alone doesn't tell the producer when a write is safe. That's what acks does. With acks=0 the producer doesn't wait for any."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the layered guarantees Kafka offers: replication for durability, acks for visibility, idempotence for per-partition exactly-once, and transactions for cross-partition atomicity"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Replication makes data survive broker failure — replication",
+              "factor=3 with min",
+              "replicas=2 survives one broker loss with no durability degradation",
+              "acks controls visibility, not durability — acks=all waits for every ISR member; without min",
+              "replicas, it silently weakens to acks=1 if the ISR shrinks"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Idempotent producer (covers most use cases): ``java @Configuration public class KafkaProducerConfig { @Bean public ProducerFactory<String, OrderEvent> producerFactory() { Map<String, Object> props = new HashMap<>(); props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, \"kafka1:9092,kafka2:9092,kafka3:9092\"); props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class); props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class); // Durability and idempotence (default true on 3.0+, set explicitly for clarity) props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true); props.put(ProducerConfig.ACKS_CONFIG, \"all\"); props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE); props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5); props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120_000); return new DefaultKafkaProducerFactory<>(props); } @Bean public KafkaTemplate<String, OrderEvent> kafkaTemplate(ProducerFactory<String, OrderEvent> pf) { return new KafkaTemplate<>(pf); } } ` Transactional producer (atomic multi-partition writes + offset commit): `java @Configuration public class TransactionalKafkaConfig { @Bean public ProducerFactory<String, OrderEvent> txnProducerFactory() { Map<String, Object> props = new HashMap<>(); props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, \"kafka1:9092,kafka2:9092,kafka3:9092\"); props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class); props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class); props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true); props.put(ProducerConfig.ACKS_CONFIG, \"all\"); DefaultKafkaProducerFactory<String, OrderEvent> pf = new DefaultKafkaProducerFactory<>(props); // The transactional.id prefix MUST be stable per."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Believing acks=all alone gives exactly-once — it gives at-least-once",
+              "without idempotence, retries still produce duplicates"
+            ]
+          }
+        ],
+        "cap": "The acks setting: acks=0 is fire-and-forget — fast but unsafe acks=1 waits for the leader only — leader failure before replication loses data acks=all waits for every current ISR member — but it silen",
+        "familiarity_anchors": [
+          "Producer",
+          "Kafka",
+          "Transactional"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does idempotence require `acks=all`?",
+          "What's the practical throughput cost of enabling Kafka transactions?",
+          "How does `isolation.level=read_committed` change consumer behavior?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    }
+  ]
+}

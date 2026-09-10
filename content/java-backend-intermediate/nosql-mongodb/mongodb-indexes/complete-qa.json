@@ -1,0 +1,377 @@
+{
+  "topic": "Mongodb Indexes",
+  "topicSlug": "mongodb-indexes",
+  "questions": [
+    {
+      "id": "mdb-idx-001",
+      "slug": "mongodb-indexing-compound-sparse-ttl",
+      "question": "Explain the different types of indexes in MongoDB — compound, sparse, partial, and TTL — and how you use them in a Spring Boot application.",
+      "title": "MongoDB Indexes: Compound, Sparse, Partial, TTL",
+      "direct_answer": "MongoDB indexes are **B-tree structures** that let the query planner skip collection scans. **Compound indexes** cover multiple fields and follow the **ESR rule** (Equality → Sort → Range) so the leading fields are the most selective. **Sparse indexes** include only documents where the field exists — great for optional fields and for sparse-unique constraints. **Partial indexes** are stricter: a `partialFilterExpression` picks exactly which documents to index (active users only, unshipped orders). **TTL indexes** auto-delete documents after `expireAfterSeconds`, perfect for sessions and log data. In Spring Data MongoDB you declare them with `@Indexed`, `@CompoundIndex`, or programmatically via `MongoTemplate.indexOps()`.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you can choose the right index type for an access pattern and understand the ESR rule and trade-offs",
+        "common_mistake": "Confusing sparse with partial indexes, ignoring the ESR rule on compound-index field ordering, or assuming TTL deletes immediately",
+        "to_stand_out": "Explain the ESR rule, name the difference between sparse and partial indexes, cover multikey limits (only one array field in a compound), and reference `explain('executionStats')`"
+      },
+      "company_tags": [
+        "mongodb",
+        "shopify",
+        "atlassian",
+        "ebay",
+        "hubspot"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Indexes Matter",
+            "content": "Without indexes, MongoDB executes a **collection scan (COLLSCAN)** — reading every document — which is O(N) and unacceptable at production scale. An index is an ordered B-tree that lets the planner pick an **IXSCAN** returning matches in sorted order with only the pages that contain them.\n\nMongoDB supports **single-field, compound, multikey, text, geospatial, hashed, sparse, partial, and TTL** indexes.\n- The most common and impactful are **compound** (multi-field, ESR-rule ordering), **sparse** (only index documents that have the field), **partial** (index only documents matching a filter), and **TTL** (auto-expire documents).\n- Picking the right combination for each access pattern is the most important database-tuning skill in MongoDB."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The ESR Rule for Compound Indexes",
+            "content": "```mermaid\nflowchart LR\n    query[\"Query plan\"] --> equality[\"Equality fields first (selective exact match)\"]\n    equality --> sort[\"Sort fields next (index order matches sort)\"]\n    sort --> range[\"Range fields last (reduces scan width)\"]\n    example[\"Example index { status: 1, createdAt: -1, total: 1 }\"] --> equality\n    example --> sort\n    example --> range\n```"
+          },
+          {
+            "type": "step",
+            "title": "Single and Compound Indexes (ESR Rule)",
+            "content": "**ESR rule for compound-index field order**\n- **Equality** fields first — most selective predicates, exact match\n- **Sort** fields next — index ordering must match the query's `sort()`\n- **Range** fields last — narrow within the sorted slice\n\n```javascript\n// Query: active orders for a user, newest first, price under 500\ndb.orders.find({\n  userId: \"u9\", status: \"ACTIVE\", total: { $lt: 500 }\n}).sort({ createdAt: -1 });\n\n// ESR-compliant compound index\ndb.orders.createIndex(\n  { userId: 1, status: 1, createdAt: -1, total: 1 },\n  { name: \"orders_esr\" }\n);\n```\n\n**Left-prefix rule**\n- An index `{ a: 1, b: 1, c: 1 }` serves queries on `{a}`, `{a,b}`, `{a,b,c}` — NOT on `{b}` or `{c}` alone\n- Design the compound so the prefix matches your most common access paths"
+          },
+          {
+            "type": "step",
+            "title": "Sparse vs Partial Indexes",
+            "content": "**Sparse — index only documents where the field exists**\n\n```javascript\ndb.users.createIndex({ phone: 1 }, { sparse: true });\n// Users with no phone field are skipped; smaller index\n\n// Sparse + unique — allows many docs without the field,\n// but any duplicate value among those with it is rejected\ndb.users.createIndex(\n  { referralCode: 1 },\n  { sparse: true, unique: true }\n);\n```\n\n**Partial — index only documents matching a filter (stricter and more flexible)**\n\n```javascript\ndb.orders.createIndex(\n  { userId: 1, createdAt: -1 },\n  {\n    name: \"orders_active_idx\",\n    partialFilterExpression: { status: { $in: [\"ACTIVE\", \"PENDING\"] } }\n  }\n);\n\n// Index includes only documents with status ACTIVE or PENDING\n// Query must include the same filter predicate to use the index:\ndb.orders.find({ userId: \"u9\", status: \"ACTIVE\" }).sort({ createdAt: -1 });\n```\n\n**Sparse vs partial — the distinction**\n- Sparse = 'field exists'\n- Partial = 'documents match a filter expression'\n- Partial is a superset; prefer partial for new indexes unless the sparse semantics are exactly what you want"
+          },
+          {
+            "type": "step",
+            "title": "TTL Indexes for Auto-Expiry",
+            "content": "**Auto-delete documents after a duration**\n\n```javascript\n// Delete sessions 1 hour after createdAt\ndb.sessions.createIndex(\n  { createdAt: 1 },\n  { expireAfterSeconds: 3600 }\n);\n\n// Or target an explicit expiry timestamp\ndb.sessions.createIndex(\n  { expiresAt: 1 },\n  { expireAfterSeconds: 0 }   // delete when expiresAt < now()\n);\n```\n\n**Operational notes**\n- TTL monitor runs about every 60 seconds — expiry is approximate, not real-time\n- TTL field must be a BSON date (or an array of dates; deletion happens when the earliest expires)\n- Combining TTL with compound indexes is not supported — the TTL index must be single-field\n- Use for sessions, OTPs, rate-limit windows, expirable caches, debug logs"
+          },
+          {
+            "type": "step",
+            "title": "Multikey, Hashed, and Declaring in Spring Data",
+            "content": "**Multikey on array fields — one array per compound index**\n\n```javascript\n// { tags: [\"java\", \"spring\"] } — multikey index is automatic\ndb.posts.createIndex({ tags: 1 });\n\n// A compound index can include only ONE array field:\ndb.posts.createIndex({ tags: 1, createdAt: -1 });  // ok\n// db.posts.createIndex({ tags: 1, authors: 1 });   // ERROR if both are arrays\n```\n\n**Hashed for sharding**\n\n```javascript\ndb.adminCommand({ shardCollection: \"mydb.orders\", key: { _id: \"hashed\" } });\n```\n\n**Spring Data MongoDB declarations**\n\n```java\n@Document(collection = \"sessions\")\n@CompoundIndexes({\n  @CompoundIndex(name = \"user_status_idx\",\n                 def  = \"{'userId': 1, 'status': 1}\")\n})\npublic class Session {\n  @Id String id;\n  String userId;\n  String status;\n\n  @Indexed(sparse = true)\n  String referralCode;\n\n  @Indexed(expireAfterSeconds = 3600)\n  Instant expiresAt;\n}\n\n// Programmatic partial index\nmongoTemplate.indexOps(Order.class).ensureIndex(\n  new Index().on(\"userId\", ASC).on(\"createdAt\", DESC)\n    .partial(PartialIndexFilter.of(\n        Criteria.where(\"status\").in(\"ACTIVE\", \"PENDING\"))));\n```\n\n**Production tip** — prefer explicit migration scripts (Mongock, Liquibase for Mongo) over annotation-driven creation so index changes are reviewable in PRs."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Index Costs",
+            "content": "**When more indexes help:**\n- Read-heavy workloads with known access paths\n- Queries with ESR-compliant predicates\n- Sort and range queries that the right index can serve from memory\n\n**When they hurt:**\n- Every index slows writes — each insert/update rewrites all relevant indexes\n- Over-indexing bloats working set; RAM evicts useful pages\n- Unused indexes still pay the write tax — audit regularly with `$indexStats`\n\n**Watch for:**\n- Index prefix mismatch — plan shows COLLSCAN where you expected IXSCAN\n- Multikey explosion — huge arrays create huge index sizes\n- Sparse index doesn't help when the query lacks the field predicate\n- Background vs foreground builds — use `createIndexes` commands that don't block in 4.2+"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **ESR rule**: compound-index field order is Equality → Sort → Range\n- **Sparse** indexes skip documents missing the field; **partial** indexes use a filter expression\n- **TTL** auto-expires documents on a single-field date index\n- **Multikey** indexes arrays; only one array field per compound index\n- **`explain('executionStats')`** verifies IXSCAN vs COLLSCAN and key-examination ratio\n- **Every index slows writes** — audit unused with `$indexStats`\n- **Spring Data** offers `@Indexed` / `@CompoundIndex`; prefer explicit migrations for production"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Explain the index model**\n- B-tree structures that avoid collection scans\n- Without them, every query is O(N)\n\n**Cover the core types**\n- Compound + ESR: Equality, Sort, Range order\n- Sparse: skip docs missing the field (also sparse-unique trick)\n- Partial: stricter filter expression — prefer this for new indexes\n- TTL: auto-expire after `expireAfterSeconds`, single-field date\n- Multikey: automatic on arrays, one array per compound index\n\n**Mention the costs**\n- Every index slows writes\n- Unused indexes still pay the tax — audit with `$indexStats`\n- Use `explain('executionStats')` to confirm IXSCAN and the key-to-doc ratio\n\n**Wrap up with Spring Data**\n- `@Indexed`, `@CompoundIndex`, or `MongoTemplate.indexOps()` programmatic\n- Use migration scripts for reviewable index changes in production"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is partial index usually preferable to sparse index for new designs?",
+        "How do you identify and drop unused indexes safely in production?",
+        "When would you use a hashed index outside of sharding?",
+        "How does the TTL monitor interact with replica-set secondaries?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Indexes: Compound, Sparse, Partial, TTL Explained",
+        "metaDescription": "Deep dive into MongoDB indexes — ESR rule, compound, sparse vs partial, TTL, multikey, and Spring Data declarations with examples."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "Explain the index model B-tree structures that avoid collection scans Without them, every query is O(N) Cover the core types Compound + ESR: Equality, Sort, Range order Sparse: skip docs missing the f",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Without indexes, MongoDB executes a collection scan (COLLSCAN) — reading every document — which is O(N) and unacceptable at production scale. An index is an ordered B-tree that lets the planner pick an IXSCAN returning matches in sorted order with only the pages that contain them. MongoDB supports single-field, compound, multikey, text, geospatial, hashed, sparse, partial, and TTL indexes. The most common and impactful are compound (multi-field, ESR-rule ordering), sparse."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "When more indexes help: Read-heavy workloads with known access paths Queries with ESR-compliant predicates Sort and range queries that the right index can serve from memory When they hurt: Every index slows writes — each insert/update rewrites all relevant indexes Over-indexing bloats working set",
+              "RAM evicts useful pages Unused indexes still pay the write tax — audit regularly with $indexStats Watch for: Index prefix mismatch — plan shows COLLSCAN where you expected IXSCAN Multikey explosion — huge arrays create huge index sizes Sparse index doesn't help when the query lacks the field predicate Background vs foreground builds — use createIndexes commands that don't block in 4"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When more indexes help: Read-heavy workloads with known access paths Queries with ESR-compliant predicates Sort and range queries that the right index can serve from memory When they hurt: Every index slows writes — each insert/update rewrites all relevant indexes Over-indexing bloats working set; RAM evicts useful pages Unused indexes still pay the write tax — audit regularly with $indexStats Watch for: Index prefix mismatch — plan shows COLLSCAN where you expected IXSCAN Multikey explosion — huge arrays create huge index sizes Sparse index doesn't help when the query lacks."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Without indexes, MongoDB executes a collection scan (COLLSCAN) — reading every document — which is O(N) and unacceptable at production scale. An index is an ordered B-tree that lets the planner pick an IXSCAN returning matches in sorted order with only the pages that contain them. MongoDB supports single-field, compound, multikey, text, geospatial, hashed, sparse, partial, and TTL indexes. The."
+          }
+        ],
+        "cap": "Explain the index model B-tree structures that avoid collection scans Without them, every query is O(N) Cover the core types Compound + ESR: Equality, Sort, Range order Sparse: skip docs missing the f",
+        "familiarity_anchors": [
+          "MongoDB",
+          "Compound",
+          "Equality"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is partial index usually preferable to sparse index for new designs?",
+          "How do you identify and drop unused indexes safely in production?",
+          "When would you use a hashed index outside of sharding?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-idx-002",
+      "slug": "mongodb-covered-queries-and-esr-rule",
+      "question": "What are covered queries in MongoDB, how does the ESR rule drive compound-index design, and how do you verify with `explain()`?",
+      "title": "MongoDB Covered Queries and the ESR Rule",
+      "direct_answer": "A **covered query** is served entirely from an index — filter, sort, and projection all hit index fields, so MongoDB never fetches the document body. The `explain()` plan shows `IXSCAN` → `PROJECTION_COVERED` with **no `FETCH` stage**. Achieving it requires a **compound index that contains every field the query reads** and **excluding `_id`** from projection unless it is in the index. The **ESR rule** (Equality → Sort → Range) drives field order: put exact-match predicates first, sort fields next, then range fields. Covered queries are the fastest possible read in MongoDB — they stay in RAM, never touch the document cache, and scale linearly with index size.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you understand the difference between index-hitting and covered queries and can design for the fastest read path",
+        "common_mistake": "Thinking any IXSCAN is 'covered', or leaving `_id: 1` in projection and losing coverage",
+        "to_stand_out": "Walk through an `explain('executionStats')` output, show ESR-compliant index design, and name the FETCH-stage absence as the signal of coverage"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "uber",
+        "paypal",
+        "twitter"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Covered Query Definition",
+            "content": "A **covered query** is one where the index alone answers the query — filter, sort, and returned fields all live in the same index, so MongoDB never loads the document body from disk. It is the fastest read shape in MongoDB because the working set is limited to index pages, which are much smaller and more cacheable than full documents.\n\nThree conditions must hold:\n- Every filter field is in the index\n- Every projected field is in the index\n- `_id` is either in the index or explicitly excluded from the projection\n\nCovered queries matter for **hot paths**: login lookups, autocomplete, dashboard counts, and anywhere p99 latency must stay below a few milliseconds. Pair them with **ESR-ordered compound indexes** and validate with `explain('executionStats')` to ensure the plan never falls into a `FETCH` stage."
+          },
+          {
+            "type": "step",
+            "title": "Designing a Covered Query",
+            "content": "**Goal query**\n\n```javascript\n// Find active orders for a user; show only userId, createdAt, total\ndb.orders.find(\n  { userId: \"u9\", status: \"ACTIVE\" },\n  { _id: 0, userId: 1, createdAt: 1, total: 1 }\n).sort({ createdAt: -1 });\n```\n\n**Index that covers it (ESR order: Equality → Sort → Range)**\n\n```javascript\ndb.orders.createIndex(\n  { userId: 1, status: 1, createdAt: -1, total: 1 },\n  { name: \"orders_covered\" }\n);\n```\n\n**Key rules applied**\n- `userId` and `status` are equality predicates → first in index\n- `createdAt` matches the `sort()` direction → next\n- `total` is included so projection is covered → last\n- Projection excludes `_id` because `_id` is not in the index"
+          },
+          {
+            "type": "step",
+            "title": "Verifying with `explain('executionStats')`",
+            "content": "**Run explain**\n\n```javascript\ndb.orders.find(\n  { userId: \"u9\", status: \"ACTIVE\" },\n  { _id: 0, userId: 1, createdAt: 1, total: 1 }\n).sort({ createdAt: -1 }).explain(\"executionStats\");\n```\n\n**What a covered plan looks like (trimmed)**\n\n```javascript\n{\n  queryPlanner: {\n    winningPlan: {\n      stage: \"PROJECTION_COVERED\",\n      transformBy: { _id: 0, userId: 1, createdAt: 1, total: 1 },\n      inputStage: {\n        stage: \"IXSCAN\",\n        indexName: \"orders_covered\",\n        indexBounds: {\n          userId:    [\"[\\\"u9\\\", \\\"u9\\\"]\"],\n          status:    [\"[\\\"ACTIVE\\\", \\\"ACTIVE\\\"]\"],\n          createdAt: [\"[MaxKey, MinKey]\"],\n          total:     [\"[MinKey, MaxKey]\"]\n        }\n      }\n    }\n  },\n  executionStats: {\n    nReturned:           42,\n    totalKeysExamined:   42,\n    totalDocsExamined:    0,   // zero documents fetched — covered!\n    executionTimeMillis:  1\n  }\n}\n```\n\n**Signals of coverage**\n- `PROJECTION_COVERED` stage wraps `IXSCAN`\n- **No `FETCH` stage** in the plan tree\n- `totalDocsExamined: 0`\n- `totalKeysExamined ≈ nReturned` — little or no index-to-result amplification"
+          },
+          {
+            "type": "step",
+            "title": "Common Reasons Coverage Breaks",
+            "content": "**Projection includes a non-indexed field**\n- Adding `customer: 1` forces a `FETCH` — document body must be loaded\n\n**`_id` left in projection without being in the index**\n- `_id: 1` is the default; explicitly set `_id: 0` to drop it\n\n**Filter uses a field outside the index**\n- Even one extra predicate triggers a `FETCH`\n\n**Sort direction mismatches the index**\n- Index on `{ createdAt: -1 }` supports `sort({ createdAt: -1 })` and reverse scan for `sort({ createdAt: 1 })`\n- Mixed direction within a compound sort needs an exact match index\n\n**Multikey on the indexed field**\n- If the index is multikey (array field), MongoDB generally cannot cover the query — it needs the document to resolve array semantics"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Covered vs Uncovered vs Collection Scan",
+            "content": "| Plan stage | Docs examined | Typical latency | When |\n|---|---|---|---|\n| `COLLSCAN` | All documents | very high | No usable index |\n| `IXSCAN` + `FETCH` | Matching docs | medium | Index filters but projection/sort needs doc |\n| `IXSCAN` + `PROJECTION_COVERED` | 0 | lowest | All fields in index, _id excluded |\n| `IXSCAN` + `FETCH` + `SORT` | Matching docs + sort mem | high | Sort not matching index order |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Covering in Production",
+            "content": "**When covering helps:**\n- Hot-path reads under tight latency SLO\n- Tiny projections (id + 2–3 fields)\n- Dashboards with repetitive queries\n- High-QPS autocomplete / login checks\n\n**When it hurts:**\n- Every additional indexed field slows writes\n- Wide projections force wide indexes — bloat and RAM pressure\n- Multikey indexes generally can't cover — arrays complicate it\n\n**Watch for:**\n- Coverage breaks silently when someone adds a field to the projection\n- Schema evolution adding a field to a doc while queries still project fewer fields — still covered, still safe\n- Monitor with `$indexStats` to confirm the covering index sees traffic"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Covered query = index serves filter + sort + projection**, no document fetch\n- **ESR rule**: Equality → Sort → Range index field order\n- **Drop `_id`** from projection unless it is in the index\n- **`PROJECTION_COVERED` + absent `FETCH` stage** in `explain()` confirms coverage\n- **`totalDocsExamined: 0`** is the definitive signal\n- **Multikey indexes** (arrays) typically break coverage\n- **Every indexed field slows writes** — cover only hot-path queries"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Define coverage**\n- Covered query: index alone answers filter + sort + projection\n- Fastest possible read in MongoDB\n\n**Apply the ESR rule**\n- Equality predicates first, sort fields next, range fields last\n- Include projected fields so no fetch is needed\n- Drop `_id` from projection unless it's in the index\n\n**Verify with explain**\n- `PROJECTION_COVERED` wraps `IXSCAN`\n- No `FETCH` stage\n- `totalDocsExamined: 0`\n\n**Close with trade-offs**\n- Every covering index slows writes\n- Multikey generally breaks coverage\n- Use `$indexStats` to confirm traffic"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does a multikey index usually prevent a covered query?",
+        "How does `allowDiskUse()` affect sort execution when no covering index exists?",
+        "What's the cost of adding a trailing field to a covering index just to cover a projection?",
+        "When would you accept an uncovered query over the write cost of a wider index?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Covered Queries and the ESR Rule",
+        "metaDescription": "Design covered queries in MongoDB — ESR-ordered compound indexes, projection rules, and verifying PROJECTION_COVERED with explain()."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "Define coverage Covered query: index alone answers filter + sort + projection Fastest possible read in MongoDB Apply the ESR rule Equality predicates first, sort fields next, range fields last Include",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "A covered query is one where the index alone answers the query — filter, sort, and returned fields all live in the same index, so MongoDB never loads the document body from disk. It is the fastest read shape in MongoDB because the working set is limited to index pages, which are much smaller and more cacheable than full documents. Three conditions must hold: Every filter field is in the."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Plan stage | Docs examined | Typical latency | When | |---|---|---|---| | COLLSCAN | All documents | very high | No usable index | | IXSCAN + FETCH | Matching docs | medium | Index filters but projection/sort needs doc | | IXSCAN + PROJECTION_COVERED | 0 | lowest | All fields in index, _id excluded | | IXSCAN + FETCH + SORT | Matching docs + sort mem | high | Sort not matching index order |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When covering helps: Hot-path reads under tight latency SLO Tiny projections (id + 2–3 fields) Dashboards with repetitive queries High-QPS autocomplete / login checks When it hurts: Every additional indexed field slows writes Wide projections force wide indexes — bloat and RAM pressure Multikey indexes generally can't cover — arrays complicate it Watch for: Coverage breaks silently when someone adds a field to the projection Schema evolution adding a field to a doc while queries still project fewer fields — still covered, still safe Monitor with $indexStats to confirm the."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "A covered query is one where the index alone answers the query — filter, sort, and returned fields all live in the same index, so MongoDB never loads the document body from disk. It is the fastest read shape in MongoDB because the working set is limited to index pages, which are much smaller and more cacheable than full documents."
+          }
+        ],
+        "cap": "Define coverage Covered query: index alone answers filter + sort + projection Fastest possible read in MongoDB Apply the ESR rule Equality predicates first, sort fields next, range fields last Include",
+        "familiarity_anchors": [
+          "MongoDB",
+          "IXSCAN",
+          "FETCH"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does a multikey index usually prevent a covered query?",
+          "How does `allowDiskUse()` affect sort execution when no covering index exists?",
+          "What's the cost of adding a trailing field to a covering index just to cover a projection?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-idx-003",
+      "slug": "mongodb-text-indexes-vs-atlas-search",
+      "question": "MongoDB text indexes vs Atlas Search — when is the built-in text index enough and when do you upgrade?",
+      "title": "MongoDB Text Indexes vs Atlas Search",
+      "direct_answer": "**Text indexes** are MongoDB's built-in full-text feature — create an index of type `\"text\"` and query with `$text`/`$search`. They are simple, work on any deployment, and do stemming in a handful of languages, but they support **only one text index per collection**, no fuzzy matching, no autocomplete, and limited relevance tuning. **Atlas Search** runs Lucene inside Atlas, auto-syncs from the oplog, and gives you **BM25 scoring, fuzzy, autocomplete, custom analyzers, facets, highlighting, and vector search** via the `$search` aggregation stage. Use text indexes for basic keyword search on self-hosted MongoDB; use Atlas Search whenever you need anything beyond simple matching.",
+      "layout_type": "comparison-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you can pick between legacy text indexes and Atlas Search based on feature depth and deployment",
+        "common_mistake": "Using text indexes for production search workloads, or assuming Atlas Search requires a separate Elasticsearch cluster",
+        "to_stand_out": "Mention the one-text-index-per-collection limit, BM25 vs TF-IDF scoring difference, `$search` aggregation stage, and Atlas Vector Search for embeddings"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "wayfair",
+        "zillow",
+        "grubhub"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Different Generations",
+            "content": "MongoDB **text indexes** were the original full-text feature — a specialized index type that tokenizes string fields, applies simple stemming, and answers `$text` queries with a basic TF-IDF-like score. They run anywhere MongoDB runs and require no extra infrastructure.\n\n**Atlas Search** is the modern replacement — Apache Lucene embedded in Atlas cluster nodes, auto-synced from the oplog, exposed through the `$search` aggregation stage. It gives you BM25 scoring, fuzzy matching, autocomplete, custom analyzers, faceting, highlighting, compound queries, and vector search — everything you would expect from Elasticsearch, without a separate cluster.\n\nThe decision is rarely close: text indexes are a low-featured fallback for self-hosted MongoDB; Atlas Search is what you use on Atlas the moment search matters."
+          },
+          {
+            "type": "step",
+            "title": "Text Indexes in Action",
+            "content": "**Create a text index and query**\n\n```javascript\n// One text index per collection; can span multiple string fields\ndb.products.createIndex(\n  { name: \"text\", description: \"text\" },\n  { weights: { name: 5, description: 1 }, default_language: \"english\" }\n);\n\n// Query with $text\ndb.products.find(\n  { $text: { $search: \"wireless headphones\" } },\n  { score: { $meta: \"textScore\" } }\n).sort({ score: { $meta: \"textScore\" } }).limit(20);\n```\n\n**What you get**\n- Tokenization, simple stemming (limited languages), stop words\n- Phrase search with quotes — `$search: \"\\\"wireless headphones\\\"\"`\n- Exclusion with minus — `$search: \"wireless -wired\"`\n- One text index per collection (hard limit)\n\n**What you don't get**\n- Fuzzy / typo-tolerant matching\n- Autocomplete / edge n-gram analyzers\n- Relevance tuning beyond per-field weights\n- Multi-language per document\n- Faceting, highlighting, synonyms, vector search"
+          },
+          {
+            "type": "step",
+            "title": "Atlas Search in Action",
+            "content": "**Define a search index (JSON spec in Atlas)**\n\n```javascript\ndb.products.createSearchIndex({\n  name: \"default\",\n  definition: {\n    mappings: {\n      dynamic: false,\n      fields: {\n        name: {\n          type: \"string\",\n          analyzer: \"lucene.english\",\n          multi: { autocomplete: { type: \"autocomplete\", tokenization: \"edgeGram\" } }\n        },\n        description: { type: \"string\", analyzer: \"lucene.english\" },\n        category:    { type: \"token\" },\n        embedding:   { type: \"knnVector\", dimensions: 1536, similarity: \"cosine\" }\n      }\n    }\n  }\n});\n```\n\n**Query with `$search` aggregation stage**\n\n```javascript\ndb.products.aggregate([\n  { $search: {\n      index: \"default\",\n      compound: {\n        must: [\n          { text: { query: \"wireless headphones\", path: [\"name\", \"description\"], fuzzy: { maxEdits: 1 } } }\n        ],\n        filter: [ { equals: { path: \"category\", value: \"audio\" } } ]\n      },\n      highlight: { path: [\"name\", \"description\"] }\n  }},\n  { $limit: 20 },\n  { $project: {\n      name: 1,\n      score:      { $meta: \"searchScore\" },\n      highlights: { $meta: \"searchHighlights\" }\n  }}\n]);\n\n// Vector search for RAG / semantic retrieval\ndb.products.aggregate([\n  { $vectorSearch: {\n      index: \"default\", path: \"embedding\",\n      queryVector: embedding, numCandidates: 200, limit: 20\n  }}\n]);\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Text Index vs Atlas Search",
+            "content": "| Feature | Text Index | Atlas Search |\n|---|---|---|\n| Engine | Custom | Apache Lucene |\n| Scoring | TF-IDF-like | BM25 + custom functions |\n| Fuzzy | No | Yes (`fuzzy.maxEdits`) |\n| Autocomplete | No | Yes (edgeGram tokenizer) |\n| Analyzers | Limited language list | Lucene + custom |\n| Synonyms | No | Yes |\n| Highlighting | No | Yes |\n| Faceting | No | Yes |\n| Vector search | No | Yes (knnVector + `$vectorSearch`) |\n| Indexes per collection | 1 | Many |\n| Deployment | Anywhere | Atlas only |\n| Composes with pipeline | `$text` match only | Full `$search` stage + compound |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Picking the Right Tool",
+            "content": "**When text indexes are enough:**\n- Self-hosted MongoDB where Atlas Search isn't available\n- Basic keyword search on a small set of documents\n- No fuzzy, no autocomplete, no relevance tuning\n\n**When Atlas Search is the answer:**\n- Autocomplete or typo-tolerance required\n- Custom analyzers (stemming, normalization, synonyms)\n- Faceting or highlighting for search UI\n- Vector search for semantic / RAG workloads\n- Multiple search shapes per collection\n\n**Watch for:**\n- Text indexes limit — one per collection\n- Atlas Search dedicated search nodes recommended at > 500 QPS to isolate load\n- Reindex strategy when the mapping changes\n- Search-specific scaling separate from primary workload"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Text indexes** are MongoDB's built-in basic full-text; one per collection\n- **Atlas Search** is Lucene in Atlas with `$search` stage and auto-sync from oplog\n- **BM25**, fuzzy, autocomplete, facets, highlight, synonyms are Atlas-only\n- **Atlas Vector Search** enables semantic / RAG workloads with `$vectorSearch`\n- **`$search` aggregation stage** composes with the rest of the pipeline\n- **Dedicated search nodes** recommended at high QPS to isolate load\n- **Pick text indexes only for self-hosted basic search**; otherwise Atlas Search"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Contrast the two generations**\n- Text indexes: basic, anywhere, one per collection, TF-IDF-like\n- Atlas Search: Lucene in Atlas, BM25, fuzzy, autocomplete, facets, vector\n\n**Cover the decision**\n- Self-hosted + basic keyword → text index\n- Anything beyond simple matching → Atlas Search\n- RAG / semantic retrieval → Atlas Vector Search via `$vectorSearch`\n\n**Show the ergonomic win**\n- `$search` stage composes with the rest of the pipeline\n- No separate Elasticsearch cluster to run\n\n**Close**\n- Dedicated search nodes at high QPS to isolate load\n- Mapping changes require a reindex — plan blue/green"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Atlas Search stay in sync with MongoDB writes?",
+        "When would you deploy dedicated search nodes in Atlas?",
+        "How does `$vectorSearch` compare to Elasticsearch kNN for RAG?",
+        "What's the reindex strategy when you change an Atlas Search mapping?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Text Indexes vs Atlas Search: When to Upgrade",
+        "metaDescription": "Compare MongoDB text indexes and Atlas Search — BM25 scoring, fuzzy, autocomplete, facets, vector search, and when to choose each."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "Contrast the two generations Text indexes: basic, anywhere, one per collection, TF-IDF-like Atlas Search: Lucene in Atlas, BM25, fuzzy, autocomplete, facets, vector Cover the decision Self-hosted + ba",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "MongoDB text indexes were the original full-text feature — a specialized index type that tokenizes string fields, applies simple stemming, and answers $text queries with a basic TF-IDF-like score. They run anywhere MongoDB runs and require no extra infrastructure. Atlas Search is the modern replacement — Apache Lucene embedded in Atlas cluster nodes, auto-synced from the oplog, exposed through the $search aggregation stage. It gives you BM25 scoring, fuzzy matching."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Feature | Text Index | Atlas Search | |---|---|---| | Engine | Custom | Apache Lucene | | Scoring | TF-IDF-like | BM25 + custom functions | | Fuzzy | No | Yes (fuzzy",
+              "maxEdits) | | Autocomplete | No | Yes (edgeGram tokenizer) | | Analyzers | Limited language list | Lucene + custom | | Synonyms | No | Yes | | Highlighting | No | Yes | | Faceting | No | Yes | | Vector search | No | Yes (knnVector + $vectorSearch) | | Indexes per collection | 1 | Many | | Deployment | Anywhere | Atlas only | | Composes with pipeline | $text match only | Full $search stage + compound |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When text indexes are enough: Self-hosted MongoDB where Atlas Search isn't available Basic keyword search on a small set of documents No fuzzy, no autocomplete, no relevance tuning When Atlas Search is the answer: Autocomplete or typo-tolerance required Custom analyzers (stemming, normalization, synonyms) Faceting or highlighting for search UI Vector search for semantic / RAG workloads Multiple search shapes per collection Watch for: Text indexes limit — one per collection Atlas Search dedicated search nodes recommended at > 500 QPS to isolate load Reindex strategy when the mapping changes Search-specific."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "MongoDB text indexes were the original full-text feature — a specialized index type that tokenizes string fields, applies simple stemming, and answers $text queries with a basic TF-IDF-like score. They run anywhere MongoDB runs and require no extra infrastructure. Atlas Search is the modern replacement — Apache Lucene embedded in Atlas cluster nodes, auto-synced from the oplog, exposed through the."
+          }
+        ],
+        "cap": "Contrast the two generations Text indexes: basic, anywhere, one per collection, TF-IDF-like Atlas Search: Lucene in Atlas, BM25, fuzzy, autocomplete, facets, vector Cover the decision Self-hosted + ba",
+        "familiarity_anchors": [
+          "MongoDB",
+          "Atlas",
+          "Search"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Atlas Search stay in sync with MongoDB writes?",
+          "When would you deploy dedicated search nodes in Atlas?",
+          "How does `$vectorSearch` compare to Elasticsearch kNN for RAG?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    }
+  ]
+}

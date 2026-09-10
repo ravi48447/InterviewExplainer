@@ -1,0 +1,272 @@
+{
+  "topic": "Distributed Log Aggregation",
+  "topicSlug": "distributed-log-aggregation",
+  "questions": [
+    {
+      "id": "obs-009",
+      "slug": "log-aggregation-elk-stack-elasticsearch-logstash-kibana",
+      "question": "How does the ELK Stack (Elasticsearch, Logstash, Kibana) work for Java log aggregation, and how do you set it up with Spring Boot?",
+      "title": "Log Aggregation with the ELK Stack for Java Services",
+      "direct_answer": "Spring Boot emits JSON logs via Logstash Logback Encoder. Logstash (or Filebeat) ships them to Elasticsearch. Kibana provides search, dashboards, and alerting over the indexed logs. Correlation IDs and trace IDs in the JSON make cross-service log investigation possible.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of the log pipeline from application to search UI, and why structured logging is essential for it.",
+        "common_mistake": "Sending plain-text logs to Elasticsearch, which requires fragile Grok parsing in Logstash and breaks on log format changes.",
+        "to_stand_out": "Mention Filebeat as a lightweight alternative to Logstash for shipping, the Elastic Common Schema (ECS) field naming convention, and index lifecycle management for cost control."
+      },
+      "company_tags": [
+        "Elastic",
+        "LinkedIn",
+        "Uber",
+        "eBay",
+        "Booking.com"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Pipeline Problem: How JSON Lines Flow from Spring Boot to a Searchable Index",
+            "content": "When your Java service runs across 20 pods behind a load balancer, logs are scattered across 20 different containers. SSH-ing into each pod and running `grep` is not a debugging strategy — it is a time sink that costs you the first 30 minutes of every incident. The **ELK Stack** solves this by aggregating logs from all pods into a central, searchable index.\n\nThe pipeline has three components: **Elasticsearch** stores and indexes logs, making them searchable within seconds of ingestion. **Logstash** (or **Filebeat**, the lightweight alternative) collects logs from applications and ships them to Elasticsearch. **Kibana** provides the search interface, dashboards, and visualizations that engineers use during incidents.\n\nThe pipeline works best when logs are structured. If your Spring Boot service emits plain-text logs, Logstash must parse them with fragile Grok patterns that break when the format changes. If your service emits **JSON lines** via `logstash-logback-encoder`, each field maps directly to an Elasticsearch field — instantly searchable, filterable, and aggregatable without any parsing configuration."
+          },
+          {
+            "type": "step",
+            "title": "Filebeat vs Logstash: Choose the Lightest Tool That Solves Your Problem",
+            "content": "The original ELK Stack used Logstash as the log shipper, but Logstash is a heavy process with a JVM footprint that consumes significant memory and CPU. For most Spring Boot deployments that already emit structured JSON, **Filebeat** is the better choice. Filebeat is a lightweight Go binary that tails log files, parses JSON lines, and ships them directly to Elasticsearch with minimal resource overhead.\n\nThe decision heuristic is simple: if your logs are already structured JSON, use Filebeat. If you need complex transformations — merging multiline stack traces from legacy formats, enriching with GeoIP data, routing to different indices based on content — use Logstash. In practice, many teams run Filebeat on each node shipping to Elasticsearch directly, with a Logstash tier only for the few legacy services that still emit unstructured text.\n\nFor Kubernetes deployments, Filebeat runs as a DaemonSet and tails container log files from `/var/log/containers/`. Configure `json.keys_under_root: true` so JSON fields from your application are promoted to top-level Elasticsearch fields. Without this setting, all your structured fields are nested under a `json` parent object, making Kibana queries unnecessarily verbose — `json.traceId` instead of just `traceId`."
+          },
+          {
+            "type": "step",
+            "title": "Index Lifecycle Management: The Lever That Controls Your Storage Bill",
+            "content": "Log storage costs grow fast. A service handling 10,000 requests per second and emitting 3 log lines per request produces roughly 1.2 TB of data per day in Elasticsearch. Without lifecycle management, that data sits on expensive hot-tier SSD nodes forever.\n\n**Index Lifecycle Management (ILM)** defines automatic policies for how indices age through four phases. **Hot** phase: current day's index on fast SSD nodes with full replicas — optimized for write throughput and real-time search. **Warm** phase: 7-30 day old indices moved to cheaper storage, force-merged to reduce segment count and improve read performance. **Cold** phase: 30-90 day old indices further compressed, searchable but slower — used for historical investigation. **Delete** phase: beyond your retention period, automatically purged.\n\nThis tiered approach can reduce storage costs by 60-70% compared to keeping all data on hot nodes. Two field mapping optimizations make a material difference. First, use `keyword` type instead of `text` for fields like `traceId`, `correlationId`, and `orderId`. These fields are used for exact-match filtering, not full-text search, and `keyword` indexing is faster and smaller. Second, disable indexing entirely on fields you will never search — large message bodies or raw stack traces stored only for display — using `\"index\": false` in the mapping."
+          },
+          {
+            "type": "step",
+            "title": "The Killer Feature: Trace ID Search Across All Services",
+            "content": "The most powerful capability of centralized log aggregation is cross-service search by trace ID. When Micrometer Tracing embeds `traceId` in every log line via MDC, and your JSON encoder includes MDC fields, every service's logs carry the same trace ID for a given request.\n\nIn Kibana, searching `traceId: \"4bf92f3577b34da6\"` returns every log line from every service that handled that request — in chronological order, with full stack traces and business context. This is the bridge between tracing and logging: the trace waterfall in Jaeger shows you *where* the time went, and the log search in Kibana tells you *what happened* at each step.\n\nAdopt the **Elastic Common Schema (ECS)** for field naming — `trace.id` instead of `traceId`, `service.name` instead of `application`. ECS ensures field names are consistent across teams and compatible with Elastic's built-in dashboards and detection rules. When multiple teams name their fields differently, Kibana saved searches and dashboards break silently when you try to correlate across services."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Filebeat → Logstash → Elasticsearch → Kibana is the ELK pipeline** — Filebeat tails container stdout; Logstash parses and enriches; Elasticsearch indexes; Kibana queries and visualizes\n- **Logstash required for plain-text logs; skip for JSON** — JSON logs index directly to Elasticsearch without Logstash parsing; Logstash adds latency and resource usage; only necessary when log format transformation is needed\n- **Kibana KQL for field-level filtering** — `level: \"ERROR\" AND traceId: \"abc123\"` returns matching log entries; `response_time >= 500` filters by numeric field value; more precise than full-text search across unstructured log lines\n- **ILM prevents unbounded disk growth** — configure rollover at 50GB or 1 day; move to warm nodes after 7 days; delete after 30 days; without ILM, log indices accumulate indefinitely and exhaust disk space\n- **`traceId` in log entries links to distributed traces** — Kibana field formatter generates a clickable Jaeger URL from the trace ID field; jump from a log error to the full distributed trace in one click"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The ELK stack centralizes logs from all services and instances into a single searchable system — without it, debugging requires SSH access to individual pods and grep across log files, which doesn't scale beyond a handful of services.\n\n**The pipeline**\n- Spring Boot emits JSON logs to stdout; Filebeat (a lightweight log shipper) reads the container's stdout and forwards log lines to Logstash or directly to Elasticsearch\n- Logstash parses, filters, and enriches log events before indexing them — add a `geoip` filter for IP addresses, a `date` filter to parse custom timestamp formats, a `grok` filter for plain-text logs that can't be sent as JSON\n- Elasticsearch indexes each log entry as a document; Kibana provides the search and visualization interface\n\n**Kibana Discover — searching logs**\n- Select the log index and a time range; `level: ERROR AND service: orders-service` returns all errors from the orders service in the selected window\n- KQL (Kibana Query Language) supports field-level filtering, wildcards, and range queries; more powerful than full-text search for structured logs\n\n**Kibana dashboards for observability**\n- Error rate panel: `count where level: \"ERROR\" by @timestamp per 5m` — visualizes error frequency over time; spike in errors correlates with a deployment or infrastructure event\n- Correlate with Jaeger: the `traceId` field in each log entry links to the distributed trace in Jaeger; configure Kibana's field formatter to generate a clickable Jaeger link from the trace ID\n\n**Index management**\n- Log indices grow quickly — configure ILM (Index Lifecycle Management) to roll over indices when they exceed 50GB, move to warm storage after 7 days, and delete after 30 days; without ILM, Elasticsearch disk usage grows without bound\n- Use data streams with ILM in Elasticsearch 7.9+ for automatic index rollover with a single named stream"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between Logstash and Filebeat?",
+        "How would you handle log aggregation in a Kubernetes-based deployment?",
+        "What is the Elastic Common Schema and why does it matter?"
+      ],
+      "seo": {
+        "title": "ELK Stack Log Aggregation for Java Spring Boot — Interview Answer",
+        "description": "How to set up Elasticsearch, Logstash, Kibana (ELK) log aggregation for a Spring Boot Java service with structured JSON logging.",
+        "keywords": [
+          "ELK stack java",
+          "elasticsearch logstash kibana spring boot",
+          "log aggregation java",
+          "filebeat spring boot",
+          "structured logging elasticsearch"
+        ],
+        "metaDescription": "Spring Boot emits JSON logs via Logstash Logback Encoder. Logstash (or Filebeat) ships them to Elasticsearch.",
+        "metaTitle": "Log Aggregation with the ELK Stack for Java Services"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "The ELK stack centralizes logs from all services and instances into a single searchable system — without it, debugging requires SSH access to individual pods and grep across log files, which doesn't scale beyond a.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When your Java service runs across 20 pods behind a load balancer, logs are scattered across 20 different containers. SSH-ing into each pod and running grep is not a debugging strategy — it is a time sink that costs you the first 30 minutes of every incident. The ELK Stack solves this by aggregating logs from all pods into a central, searchable index. The pipeline has three components: Elasticsearch stores and indexes logs, making them searchable within seconds of ingestion."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of the log pipeline from application to search UI, and why structured logging is essential for it."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Filebeat → Logstash → Elasticsearch → Kibana is the ELK pipeline — Filebeat tails container stdout",
+              "Logstash parses and enriches",
+              "Elasticsearch indexes",
+              "Kibana queries and visualizes Logstash required for plain-text logs",
+              "skip for JSON — JSON logs index directly to Elasticsearch without Logstash parsing",
+              "Logstash adds latency and resource usage",
+              "only necessary when log format transformation is needed Kibana KQL for field-level filtering — level: \"ERROR\" AND traceId: \"abc123\" returns matching log entries",
+              "response_time >= 500 filters by numeric field value",
+              "more precise than full-text search across unstructured log lines ILM prevents unbounded disk growth — configure rollover at 50GB or 1 day",
+              "move to warm nodes after 7 days",
+              "delete after 30 days",
+              "without ILM, log indices accumulate indefinitely and exhaust disk space traceId in log entries links to distributed traces — Kibana field formatter generates a clickable Jaeger URL from the trace ID field",
+              "jump from a log error to the full distributed trace in one click"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When your Java service runs across 20 pods behind a load balancer, logs are scattered across 20 different containers. SSH-ing into each pod and running grep is not a debugging strategy — it is a time sink that costs you the first 30 minutes of every incident. The ELK Stack solves this by aggregating logs from all pods into a central, searchable index. The pipeline has three components: Elasticsearch stores and indexes logs, making them searchable within seconds of ingestion. Logstash (or Filebeat, the lightweight alternative) collects logs from applications and ships them to Elasticsearch. Kibana provides the search interface, dashboards, and visualizations that engineers use during incidents. The pipeline works best when logs are structured. If your Spring Boot."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Sending plain-text logs to Elasticsearch, which requires fragile Grok parsing in Logstash and breaks on log format changes"
+            ]
+          }
+        ],
+        "cap": "The pipeline Spring Boot emits JSON logs to stdout; Filebeat (a lightweight log shipper) reads the container's stdout and forwards log lines to Logstash or directly to Elasticsearch Logstash parses, f",
+        "familiarity_anchors": [
+          "Spring",
+          "Logstash",
+          "Logback"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between Logstash and Filebeat?",
+          "How would you handle log aggregation in a Kubernetes-based deployment?",
+          "What is the Elastic Common Schema and why does it matter?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    },
+    {
+      "id": "lm-009",
+      "slug": "kubernetes-log-aggregation",
+      "question": "How do you set up log aggregation in Kubernetes for Java applications?",
+      "title": "Log Aggregation in Kubernetes for Java Apps",
+      "direct_answer": "In Kubernetes, each container writes to stdout/stderr, and the kubelet stores these as files on the node. Use a DaemonSet (Filebeat or Fluent Bit) to collect logs from all nodes and forward to Elasticsearch or a cloud logging service. Each log line is enriched with pod name, namespace, and node metadata.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Understanding of how logging changes in a containerized, orchestrated environment",
+        "common_mistake": "Writing logs to files inside containers — they're lost when the pod restarts",
+        "to_stand_out": "Explain node-level DaemonSet vs sidecar patterns, and when to use each"
+      },
+      "company_tags": [
+        "Google",
+        "Amazon",
+        "Microsoft",
+        "Cloudflare"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Container Logging Breaks Everything You Knew About Log Files",
+            "content": "In traditional VM deployments, applications write log files to disk and log rotation tools manage their lifecycle. In Kubernetes, that model breaks completely. Pods are **ephemeral** — when a pod crashes or gets rescheduled, any log files inside the container vanish instantly. Writing logs to files inside containers is not just inefficient, it is data loss waiting to happen.\n\nKubernetes establishes a different contract: your application writes to **stdout and stderr**, the kubelet captures those streams to node-level files under `/var/log/containers/`, and a log collector running on each node forwards them to a central store. The application should be completely ignorant of log shipping mechanics. This separation keeps containers portable and makes the logging pipeline consistent across every service in the cluster.\n\nThe node-level **DaemonSet pattern** is the standard collection approach: a logging agent like Fluent Bit or Filebeat runs on every node, reads container log files, enriches them with Kubernetes metadata (pod name, namespace, labels), and forwards to Elasticsearch or a cloud logging service. This is fundamentally different from per-application log shipping, and understanding why this architecture exists is what interviewers are looking for."
+          },
+          {
+            "type": "step",
+            "title": "The stdout Contract: How Spring Boot Logs Reach the Collector",
+            "content": "The first requirement is that your Spring Boot application writes structured JSON to stdout — not to a file, not to a network socket, just stdout. The kubelet captures the container's stdout stream and writes it to a log file on the node's filesystem. The DaemonSet collector tails that node-level file.\n\n```xml\n<!-- logback-spring.xml for Kubernetes -->\n<configuration>\n  <appender name=\"CONSOLE\" class=\"ch.qos.logback.core.ConsoleAppender\">\n    <encoder class=\"net.logstash.logback.encoder.LogstashEncoder\">\n      <includeMdc>true</includeMdc>\n    </encoder>\n  </appender>\n  <root level=\"INFO\">\n    <appender-ref ref=\"CONSOLE\" />\n  </root>\n</configuration>\n```\n\nThe `ConsoleAppender` writes to stdout by default. Using `LogstashEncoder` ensures each log line is a complete JSON object that the collector can parse without regex. Do not use file appenders in containers — they compete with the kubelet's stream capture, complicate log rotation, and lose data on pod restart. If you need to preserve logs across container restarts, that is the job of the collector and the central store, not the application."
+          },
+          {
+            "type": "step",
+            "title": "DaemonSet vs Sidecar: Two Collection Patterns and When Each Wins",
+            "content": "The **DaemonSet pattern** runs one collector pod per node. Fluent Bit or Filebeat tails all container log files from `/var/log/containers/` on the host, collecting logs from every pod on that node with a single process. The overhead is predictable and shared — one collector process handles all pods, which scales better than alternatives.\n\n```yaml\n# Fluent Bit DaemonSet input + Kubernetes filter (simplified)\n[INPUT]\n    Name              tail\n    Path              /var/log/containers/*.log\n    Parser            docker\n    Tag               kube.*\n[FILTER]\n    Name              kubernetes\n    Match             kube.*\n    Kube_URL          https://kubernetes.default.svc:443\n    Merge_Log         On    # Promotes JSON fields into the record\n[OUTPUT]\n    Name              es\n    Match             *\n    Host              elasticsearch-service\n    Index             fluentbit\n```\n\nThe **sidecar pattern** runs a collector container alongside your application container in the same pod. This is useful when different services need different log processing pipelines, when multi-tenant isolation requires per-pod log routing, or when the application writes to a file that the sidecar tails. The trade-off is resource overhead: every pod gets its own collector process, which adds CPU and memory to every replica. For most Spring Boot deployments, the DaemonSet pattern is the right default."
+          },
+          {
+            "type": "step",
+            "title": "Kubernetes Metadata Enrichment: The Context That Makes Logs Actionable",
+            "content": "The most valuable capability of Kubernetes log aggregation is **automatic metadata enrichment**. The Fluent Bit kubernetes filter attaches pod name, namespace, container name, node name, and all pod labels to every log record. This metadata is not available inside the application — only the collector on the node has access to the Kubernetes API.\n\nThis enrichment transforms how you investigate incidents. Filter Kibana for `kubernetes.labels.app: order-service AND level: ERROR` and you see errors from all pods of that deployment. During a rolling deployment, you can filter by `kubernetes.labels.version: v2.1.3` to compare logs from the new version against the old. If a canary pod is throwing errors that stable pods are not, the metadata makes this distinction obvious.\n\nThe `Merge_Log` setting in Fluent Bit is critical for structured JSON logs. When enabled, it parses the JSON content of each log line and promotes the fields to the top level of the record. Without `Merge_Log`, your application's fields like `traceId` and `orderId` are buried inside a nested `log` string field, making Kibana queries verbose and filtering impractical. With it, those fields are first-class citizens alongside the Kubernetes metadata."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Containers write to stdout; DaemonSet ships logs from node files** — application code never manages log file rotation or paths; stdout is the log destination; the platform handles collection\n- **Fluent Bit DaemonSet is resource-efficient for Kubernetes log shipping** — one pod per node; low CPU and memory; ConfigMap-based configuration; forwards to Elasticsearch, CloudWatch, or Cloud Logging\n- **Kubernetes filter adds pod/namespace metadata to log entries** — Fluent Bit's Kubernetes enrichment adds `pod_name`, `namespace`, and `node_name` without application code changes; enables filtering by deployment across rolling restarts\n- **JSON stdout from Spring Boot enables field-level indexing without grok** — Fluent Bit's JSON parser recognizes structured fields directly; plain-text logs require grok patterns that fail when format changes\n- **Multi-line parser required for Java stack traces** — configure Fluentd/Fluent Bit to merge continuation lines (starting with whitespace) with their preceding exception message line; otherwise each stack trace line is a separate unrelated log event"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "In Kubernetes, the logging model shifts from application-managed log files to stdout/stderr — which means containers write to the console, the kubelet stores the output as node-local files, and a log shipping agent collects and forwards them to a central store.\n\n**How Kubernetes logging works**\n- Each container writes to stdout and stderr; the kubelet stores this as log files on the node under `/var/log/pods/`; `kubectl logs pod-name` reads from these node-local files\n- Node-local log files are ephemeral — when a pod is evicted or the node is recycled, the logs are gone; centralized log aggregation must collect and forward logs before pods are replaced\n\n**The DaemonSet log shipping pattern**\n- A DaemonSet runs one Fluentd, Fluent Bit, or Filebeat pod per node — which means every log file on every node is shipped to the central log store as pods start and stop\n- Fluent Bit is the most resource-efficient option for Kubernetes: low CPU and memory footprint; configures in a ConfigMap that mounts into the DaemonSet pods; forwards to Elasticsearch, Cloud Logging, or CloudWatch\n\n**Structured logs from Spring Boot**\n- Configure Spring Boot to output JSON to stdout — each log line is a JSON object; the Fluent Bit parser recognizes JSON and indexes fields without regex grok patterns\n- Add Kubernetes metadata to log entries via Fluent Bit's Kubernetes filter: pod name, namespace, container name, and node name are added to every log entry automatically — which means `namespace = \"production\" AND pod_name =~ \"orders-.*\"` filters logs from all pods in the orders deployment\n\n**Multi-line log handling**\n- Java stack traces span multiple lines — a single exception generates 20-50 log lines; without multi-line configuration in Fluentd/Fluent Bit, each line is indexed as a separate event, making stack traces unreadable\n- Configure the multi-line parser to merge lines that start with whitespace (stack trace continuation lines) into one log event with the first line (the exception message) as the event start"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the sidecar logging pattern and when would you use it over a DaemonSet?",
+        "How do you handle log aggregation when pods are running in multiple namespaces?",
+        "How do you set log retention in Kubernetes at the node level?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes Log Aggregation Java Spring Boot | Fluent Bit ELK",
+        "metaDescription": "Set up log aggregation for Java Spring Boot applications in Kubernetes using Fluent Bit DaemonSet, structured JSON logging, and Elasticsearch with Kibana."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "In Kubernetes, the logging model shifts from application-managed log files to stdout/stderr — which means containers write to the console, the kubelet stores the output as node-local files, and a log shipping agent collects and.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "In traditional VM deployments, applications write log files to disk and log rotation tools manage their lifecycle. In Kubernetes, that model breaks completely. Pods are ephemeral — when a pod crashes or gets rescheduled, any log files inside the container vanish instantly. Writing logs to files inside containers is not just inefficient, it is data loss waiting to happen. Kubernetes establishes a different contract: your application writes to stdout and stderr, the kubelet captures those streams to node-level files under."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of how logging changes in a containerized, orchestrated environment"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Containers write to stdout",
+              "DaemonSet ships logs from node files — application code never manages log file rotation or paths",
+              "stdout is the log destination",
+              "the platform handles collection Fluent Bit DaemonSet is resource-efficient for Kubernetes log shipping — one pod per node",
+              "low CPU and memory",
+              "ConfigMap-based configuration",
+              "forwards to Elasticsearch, CloudWatch, or Cloud Logging Kubernetes filter adds pod/namespace metadata to log entries — Fluent Bit's Kubernetes enrichment adds pod_name, namespace, and node_name without application code changes",
+              "enables filtering by deployment across rolling restarts JSON stdout from Spring Boot enables field-level indexing without grok — Fluent Bit's JSON parser recognizes structured fields directly",
+              "plain-text logs require grok patterns that fail when format changes Multi-line parser required for Java stack traces — configure Fluentd/Fluent Bit to merge continuation lines (starting with whitespace) with their preceding exception message line",
+              "otherwise each stack trace line is a separate unrelated log event"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "In traditional VM deployments, applications write log files to disk and log rotation tools manage their lifecycle. In Kubernetes, that model breaks completely. Pods are ephemeral — when a pod crashes or gets rescheduled, any log files inside the container vanish instantly. Writing logs to files inside containers is not just inefficient, it is data loss waiting to happen. Kubernetes establishes a different contract: your application writes to stdout and stderr, the kubelet captures those streams to node-level files under /var/log/containers/, and a log collector running on each node forwards them to a central store. The application should be completely ignorant of log shipping mechanics. This separation keeps containers portable and makes the logging pipeline consistent across every service in."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Writing logs to files inside containers",
+              "they're lost when the pod restarts"
+            ]
+          }
+        ],
+        "cap": "How Kubernetes logging works Each container writes to stdout and stderr; the kubelet stores this as log files on the node under /var/log/pods/; kubectl logs pod-name reads from these node-local files",
+        "familiarity_anchors": [
+          "Kubernetes",
+          "DaemonSet",
+          "Filebeat"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the sidecar logging pattern and when would you use it over a DaemonSet?",
+          "How do you handle log aggregation when pods are running in multiple namespaces?",
+          "How do you set log retention in Kubernetes at the node level?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    }
+  ]
+}

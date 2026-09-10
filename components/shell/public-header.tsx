@@ -1,0 +1,70 @@
+import { BrandMark } from '@/components/shell/brand-mark'
+import { DesktopNav } from '@/components/shell/header/desktop-nav'
+import { MobileNav } from '@/components/shell/header/mobile-nav'
+import { HeaderSearch } from '@/components/shell/header/header-search'
+import { HeaderUserActions } from '@/components/shell/header/header-user-actions'
+import { ThemeToggle } from '@/components/shell/header/theme-toggle'
+
+/**
+ * PublicHeader — canonical public-site header (P03-T032..T056, T031).
+ *
+ * Server-rendered frame + small client islands. Renders crawlable brand +
+ * nav anchors on the server so search engines see them without JS (T033,
+ * T034, Z057). Only interactive bits become client JS: mobile drawer, learn
+ * dropdown open state, theme toggle, user menu, search modal (T036).
+ *
+ * Receives `pathname` from its client-shell parent (AppShell) so active-state
+ * is correct on first render; DesktopNav also owns its own client-aware
+ * active detection for inter-navigation updates.
+ *
+ * Responsive:
+ *   <lg  → mobile drawer toggle + brand + actions (T053)
+ *   lg+  → brand + desktop nav + search + actions + theme
+ *
+ * Stability: `sticky top-0 z-[var(--z-sticky)]` with backdrop blur (T054, W). The shell
+ * always renders; auth/search never block the frame (T051).
+ *
+ * Ownership: the ONLY public header. Route-specific forks are forbidden
+ * (T032) — variant differences live in the shell variants.
+ */
+export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
+  const isHome = pathname === '/'
+  return (
+    <header
+      className={isHome ? "absolute inset-x-0 top-0 z-[var(--z-sticky)] w-full border-b border-white/70 bg-white/[0.58] shadow-[0_1px_16px_rgba(15,35,70,.045)] backdrop-blur-lg" : "sticky top-0 z-[var(--z-sticky)] w-full border-b border-border bg-card/95 shadow-[0_1px_10px_hsl(var(--foreground)/0.025)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/90"}
+      role="banner"
+    >
+      <div className={`mx-auto flex h-[74px] w-full items-center gap-2 px-4 sm:px-6 lg:gap-4 lg:px-8 ${isHome ? "max-w-[1440px]" : "max-w-[1800px] lg:px-12"}`}>
+        {/* Mobile drawer (client island) */}
+        <div className="lg:hidden">
+          <MobileNav />
+        </div>
+
+        {/* Brand (server) */}
+        <BrandMark size="md" />
+
+        {/* Desktop primary nav (server-rendered crawlable anchors + dropdown island) */}
+        <DesktopNav pathname={pathname} />
+
+        {/* Spacer pushes actions right */}
+        <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+          {/* Search (client island, hub-gated) */}
+          <div className="block">
+            <HeaderSearch />
+          </div>
+
+          {/* Theme (client island) */}
+          <div className="hidden sm:block">
+            <ThemeToggle />
+          </div>
+
+          {/* User actions (client island) */}
+          <div className="hidden sm:block">
+            <HeaderUserActions />
+          </div>
+        </div>
+      </div>
+
+    </header>
+  )
+}

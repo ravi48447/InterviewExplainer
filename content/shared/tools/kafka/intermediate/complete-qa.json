@@ -1,0 +1,569 @@
+{
+  "meta": {
+    "stack": "kafka",
+    "level": "intermediate",
+    "last_updated": "2026-04-06",
+    "description": "Apache Kafka interview questions for intermediate engineers (2-5 years experience). Language-agnostic \u2014 code examples are overridden per language by $ref consumers."
+  },
+  "questions": [
+    {
+      "id": "kafka-producer-acks",
+      "slug": "kafka-producer-acknowledgments-explained",
+      "question": "Explain Kafka producer acknowledgments and when you would use each setting in production.",
+      "direct_answer": "Kafka producers have three ack modes: acks=0 (fire-and-forget, no confirmation), acks=1 (leader partition confirms, replicas may lag), and acks=all (all in-sync replicas confirm before returning). For financial transactions or critical data, use acks=all with min.insync.replicas=2. For high-throughput metrics pipelines where occasional loss is acceptable, acks=0 maximizes throughput.",
+      "interviewer_intent": {
+        "testing": "Whether you understand the durability vs throughput trade-off, not just what each setting means",
+        "common_mistake": "Saying acks=all is always the right answer \u2014 it kills throughput for use cases like log aggregation",
+        "to_stand_out": "Mention min.insync.replicas and explain a real scenario where you chose a specific ack setting and why"
+      },
+      "company_tags": [
+        "linkedin",
+        "uber",
+        "stripe",
+        "airbnb",
+        "confluent"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-06",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Durability vs Throughput Trade-off",
+            "content": "Every Kafka producer send is a bet: how much latency are you willing to pay for durability? The `acks` setting controls how many brokers must confirm they've written your record before the producer considers it \"sent.\" Three modes exist \u2014 `acks=0` (fire and forget), `acks=1` (leader confirms), and `acks=all` (all in-sync replicas confirm). Choosing the wrong one means either losing critical financial data or adding unnecessary latency to a metrics pipeline that doesn't need it.\n\nThe real subtlety isn't the ack mode itself \u2014 it's how `acks` interacts with `min.insync.replicas`, `retries`, and idempotence. Getting acks=all right requires configuring all four together."
+          },
+          {
+            "type": "step",
+            "title": "The Three Ack Modes Explained",
+            "content": "**acks=0 (Fire and Forget)** \u2014 The producer sends the record and moves on immediately. No confirmation from any broker. The returned offset is -1 (meaningless). If the broker is down, the record is silently lost. Throughput is 2-3x higher than acks=1 because there's zero round-trip wait. Use for: metrics pipelines, click-stream analytics, sensor telemetry \u2014 anywhere losing a few events per million is acceptable.\n\n**acks=1 (Leader Acknowledges)** \u2014 The partition leader writes the record to its local log and sends back confirmation. The producer knows the record reached at least one broker. The risk: if the leader crashes after acknowledging but *before* replicating to followers, that record is gone when a new leader is elected. Use for: application logs, non-critical notifications, audit trails where very rare loss (leader crash during replication lag) is tolerable.\n\n**acks=all / acks=-1 (All In-Sync Replicas)** \u2014 The leader waits until every replica in the ISR (in-sync replica set) has written the record, then acknowledges. As long as any ISR member survives, your data is safe. This is the only mode suitable for financial transactions, payment events, or any data you cannot afford to lose."
+          },
+          {
+            "type": "step",
+            "title": "min.insync.replicas: The Hidden Requirement",
+            "content": "`acks=all` alone is **not enough**. By default, `min.insync.replicas=1` \u2014 meaning a single replica (the leader itself) satisfies the \"all\" requirement. This defeats the entire purpose.\n\nThe production configuration:\n\n```\nreplication.factor = 3          // 3 copies of every partition\nmin.insync.replicas = 2         // at least 2 must be in sync\nacks = all                      // wait for all ISR members\n```\n\nWith this setup: if one broker is down, two remain in sync \u2014 writes proceed normally. If two brokers are down, only one is left (below min.insync.replicas), and the producer gets `NotEnoughReplicasException` \u2014 the system refuses to accept data it can't safely replicate. This is the correct behavior: **failing loudly is better than silently losing data**.\n\nThe math: with `replication.factor=3` and `min.insync.replicas=2`, you can tolerate exactly one broker failure while maintaining full durability guarantees."
+          },
+          {
+            "type": "step",
+            "title": "Idempotent Producers and Exactly-Once Delivery",
+            "content": "Network failures create a subtle problem: the producer sends a record, the broker writes it, but the acknowledgment is lost in transit. The producer retries \u2014 now the broker has two copies. `enable.idempotence=true` solves this by assigning each producer a unique Producer ID (PID) and each record a sequence number per partition. The broker detects and discards duplicates automatically.\n\n```java\nProperties props = new Properties();\nprops.put(ProducerConfig.ACKS_CONFIG, \"all\");\nprops.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);    // deduplicate retries\nprops.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);  // retry until success\nprops.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5); // safe with idempotence\n\n// With idempotence, the broker tracks (PID, partition, sequence)\n// Duplicate sends get the same offset back \u2014 no duplicates in the log\nKafkaProducer<String, String> producer = new KafkaProducer<>(props);\n\nproducer.send(new ProducerRecord<>(\"payments\", userId, payload), (metadata, ex) -> {\n    if (ex != null) log.error(\"Send failed for partition {}\", metadata.partition(), ex);\n    else log.debug(\"Offset {} partition {}\", metadata.offset(), metadata.partition());\n});\n```\n\nIdempotence has negligible overhead \u2014 there's no good reason to leave it off. Since Kafka 3.0, it's enabled by default."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **acks=0** sends without waiting \u2014 maximum throughput, zero durability. Good for metrics, bad for payments. Returned offset is -1\n- **acks=1** waits for the leader \u2014 data survives unless the leader crashes before replicating. Covers 95% of non-critical use cases\n- **acks=all** waits for all ISR members \u2014 only mode for critical data. Must pair with `min.insync.replicas=2` or the \"all\" is meaningless (default is 1)\n- **Idempotent producer** (`enable.idempotence=true`) prevents duplicates from retries via PID + sequence number. Default since Kafka 3.0 \u2014 no reason to disable it\n- **The production formula**: `replication.factor=3` + `min.insync.replicas=2` + `acks=all` + `enable.idempotence=true` = durable, deduplicated, can tolerate 1 broker failure"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka producer acks are about the **durability vs throughput trade-off**. `acks=0` is fire and forget \u2014 maximum throughput but zero guarantee the broker even received the record. `acks=1` means the partition leader confirms the write, which covers most cases, but if the leader crashes before replicating you lose that record. `acks=all` waits for every in-sync replica to confirm \u2014 this is the only mode I'd use for anything financial.\n\nThe critical detail most people miss is that `acks=all` alone isn't enough. You need `min.insync.replicas=2` on the topic, otherwise \"all\" can be satisfied by just the leader. The production setup I use is `replication.factor=3`, `min.insync.replicas=2`, `acks=all`, plus `enable.idempotence=true` to prevent duplicates from retries. That gives you durable, deduplicated writes that tolerate one broker failure.\n\nFor a metrics pipeline I'd use `acks=0` \u2014 losing a few data points per million doesn't matter, and you get 2-3x the throughput."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens when min.insync.replicas is set higher than the number of available in-sync replicas?",
+        "How does Kafka's idempotent producer prevent duplicates during retries?",
+        "Explain the difference between at-least-once, at-most-once, and exactly-once delivery in Kafka."
+      ],
+      "seo": {
+        "metaTitle": "Kafka Producer Acknowledgments Explained | Interview Questions | InterviewExplainer",
+        "metaDescription": "Master Kafka producer acks=0, acks=1, acks=all for interviews. Understand durability vs throughput trade-offs, min.insync.replicas, and idempotent producers."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Kafka producer acks are about the durability vs throughput trade-off.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Every Kafka producer send is a bet: how much latency are you willing to pay for durability? The acks setting controls how many brokers must confirm they've written your record before the producer considers it \"sent.\" Three modes exist \u2014 acks=0 (fire and forget), acks=1 (leader confirms), and acks=all (all in-sync replicas confirm). Choosing the wrong one means either losing critical financial data or adding unnecessary latency to a metrics pipeline that doesn't need it. The real subtlety isn't the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the durability vs throughput trade-off, not just what each setting means"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "acks=0 sends without waiting \u2014 maximum throughput, zero durability",
+              "Good for metrics, bad for payments",
+              "Returned offset is -1 acks=1 waits for the leader \u2014 data survives unless the leader crashes before replicating",
+              "Covers 95% of non-critical use cases acks=all waits for all ISR members \u2014 only mode for critical data",
+              "Must pair with min"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Every Kafka producer send is a bet: how much latency are you willing to pay for durability? The acks setting controls how many brokers must confirm they've written your record before the producer considers it \"sent.\" Three modes exist \u2014 acks=0 (fire and forget), acks=1 (leader confirms), and acks=all (all in-sync replicas confirm). Choosing the wrong one means either losing critical financial data or adding unnecessary latency to a metrics pipeline that doesn't need it. The real subtlety isn't the ack mode itself \u2014 it's how acks interacts with min.insync.replicas, retries, and idempotence. Getting acks=all right requires configuring all four together."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Saying acks=all is always the right answer \u2014 it kills throughput for use cases like log aggregation"
+            ]
+          }
+        ],
+        "cap": "For a metrics pipeline I'd use acks=0 \u2014 losing a few data points per million doesn't matter, and you get 2-3x the throughput.",
+        "familiarity_anchors": [
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens when min.insync.replicas is set higher than the number of available in-sync replicas?",
+          "How does Kafka's idempotent producer prevent duplicates during retries?",
+          "Explain the difference between at-least-once, at-most-once, and exactly-once delivery in Kafka."
+        ]
+      }
+    },
+    {
+      "id": "kafka-consumer-groups",
+      "slug": "kafka-consumer-groups-rebalancing",
+      "question": "How do Kafka consumer groups work and what happens during a rebalance?",
+      "direct_answer": "A consumer group is a set of consumers sharing the work of consuming a topic. Each partition is assigned to exactly one consumer in the group at any time, enabling horizontal scaling. A rebalance is triggered when consumers join/leave/crash or partitions change \u2014 during it, all consumption pauses and partitions are reassigned. In production, rebalances are painful because they cause processing gaps and can cause duplicate processing if offsets aren't committed before the rebalance completes.",
+      "interviewer_intent": {
+        "testing": "Whether you understand the partition-consumer relationship and have seen the practical pain of rebalances in production",
+        "common_mistake": "Thinking more consumers always means more parallelism \u2014 you can't have more consumers than partitions effectively",
+        "to_stand_out": "Mention cooperative rebalancing (Kafka 2.4+) and how it eliminates the stop-the-world problem"
+      },
+      "company_tags": [
+        "netflix",
+        "airbnb",
+        "linkedin",
+        "shopify"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-06",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Partition Assignment and the Consumer Group Protocol",
+            "content": "A Kafka **consumer group** is a set of consumers that cooperatively read from a topic by dividing its partitions among themselves. The fundamental rule: each partition is assigned to exactly one consumer within a group at any time. This guarantees that records within a partition are processed by a single consumer in order.\n\nThe group coordinator (a Kafka broker) manages membership and partition assignment. When the group membership changes \u2014 a consumer joins, leaves, or is considered dead \u2014 the coordinator triggers a **rebalance** to redistribute partitions. Rebalances are necessary but painful: they pause consumption and can cause duplicate processing if offsets aren't committed cleanly."
+          },
+          {
+            "type": "step",
+            "title": "How Partition Assignment Works",
+            "content": "If a topic has 12 partitions and a consumer group has 3 consumers, each consumer gets 4 partitions. Add a 4th consumer \u2192 each gets 3. Add a 13th consumer \u2192 one sits idle because you can't split a partition between consumers. **Partition count is the parallelism ceiling.**\n\nTwo consumer groups reading the same topic are completely independent \u2014 each group gets ALL partitions. This is the broadcast pattern: `group-A` and `group-B` both see every record. Within each group, partitions are divided.\n\nThe assignment strategy determines which consumer gets which partitions:\n- **RangeAssignor** (old default): assigns contiguous ranges. Consumer 0 gets partitions 0-3, consumer 1 gets 4-7. Simple but uneven across multiple topics\n- **RoundRobinAssignor**: distributes partitions round-robin. More even but less predictable\n- **StickyAssignor**: tries to keep the same assignment after rebalance, minimizing partition movement\n- **CooperativeStickyAssignor** (recommended): same as sticky but with cooperative rebalancing \u2014 the critical upgrade"
+          },
+          {
+            "type": "step",
+            "title": "Rebalancing: The Eager vs Cooperative Problem",
+            "content": "**Eager rebalancing (old default)** is stop-the-world. When triggered, ALL consumers revoke ALL their partitions simultaneously, then the coordinator reassigns everything from scratch. If you have 100 partitions across 10 consumers and one consumer dies, all 90 remaining assigned partitions stop being consumed \u2014 not just the 10 that need redistribution. Consumption pauses for seconds to minutes depending on group size.\n\n**What triggers a rebalance:**\n- Consumer joins (new instance or restart)\n- Consumer leaves (clean shutdown via `consumer.close()`)\n- Consumer crashes (missed heartbeat \u2014 `session.timeout.ms` exceeded)\n- Processing takes too long (`max.poll.interval.ms` exceeded between `poll()` calls)\n- Partitions added to the topic\n\n**Cooperative rebalancing (Kafka 2.4+)** is incremental. Only the partitions that need to move are revoked. Consumers that keep their partitions continue processing uninterrupted. A consumer dying with 10 partitions causes only those 10 to be redistributed \u2014 the other 90 continue normally.\n\n```java\n// Enable cooperative rebalancing \u2014 one config change, massive impact\nprops.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG,\n    CooperativeStickyAssignor.class.getName());\n```"
+          },
+          {
+            "type": "step",
+            "title": "Duplicate Processing and Offset Management",
+            "content": "The most dangerous rebalance side-effect is **duplicate processing**. Here's the sequence: consumer A processes 50 records from partition 3 but hasn't committed the offset yet. A rebalance triggers. Consumer B is now assigned partition 3 and starts reading from the last committed offset \u2014 re-processing those 50 records.\n\nDefense strategies:\n\n```java\n// Manual offset commit \u2014 commit AFTER processing, not before\nprops.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);\n\nwhile (true) {\n    ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));\n    for (ConsumerRecord<String, String> record : records) {\n        processRecord(record);  // process first\n    }\n    consumer.commitSync();      // then commit \u2014 at-least-once guarantee\n}\n```\n\n`enable.auto.commit=true` (default) commits periodically in the background. If a rebalance happens between a commit and your processing, you either lose records (committed but not processed) or reprocess them (processed but not committed). Manual commit with `commitSync()` after processing gives **at-least-once** semantics \u2014 duplicates possible, but no data loss.\n\nFor exactly-once, use Kafka transactions: `producer.sendOffsetsToTransaction()` atomically commits consumer offsets and producer output in a single transaction."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **One partition = one consumer per group** \u2014 partition count is the parallelism ceiling. More consumers than partitions means idle consumers\n- **Rebalance pauses all consumption** in eager mode. Switch to `CooperativeStickyAssignor` to make rebalances incremental (only moved partitions stop)\n- **session.timeout.ms** is heartbeat-based (broker declares consumer dead). **max.poll.interval.ms** is processing-based (consumer taking too long between polls). Tune both for your workload\n- **Disable auto-commit** (`enable.auto.commit=false`) and commit manually after processing to prevent data loss during rebalances\n- **Two groups on the same topic** = broadcast \u2014 each group independently gets all partitions. Within a group, partitions are divided (competing consumers pattern)"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A consumer group is a set of consumers that **divide a topic's partitions** among themselves. The core rule: each partition goes to exactly one consumer in the group. So 12 partitions and 3 consumers means each gets 4. You can't have more active consumers than partitions \u2014 extras sit idle.\n\nA **rebalance** happens when the group membership changes \u2014 a consumer joins, leaves, crashes, or takes too long to process. In the old eager mode, rebalancing is stop-the-world: all consumers drop all partitions and get them reassigned from scratch. Even if only one consumer died, everyone pauses. **Cooperative rebalancing** in Kafka 2.4+ fixes this \u2014 only the partitions that need to move are revoked, everything else keeps processing.\n\nThe production danger is **duplicate processing**. If a consumer processes records but hasn't committed the offset when a rebalance hits, the new consumer assigned that partition re-processes those records. The fix is disabling auto-commit and committing manually after processing \u2014 you get at-least-once semantics, which means your downstream processing should be idempotent."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between session.timeout.ms and max.poll.interval.ms?",
+        "How would you implement a consumer that reads from the beginning of a topic on restart?",
+        "Explain the difference between earliest and latest offset reset policies."
+      ],
+      "seo": {
+        "metaTitle": "Kafka Consumer Groups & Rebalancing | Interview Questions | InterviewExplainer",
+        "metaDescription": "Understand Kafka consumer groups, partition assignment, and rebalancing for interviews. Learn cooperative sticky rebalancing and how to avoid duplicate processing."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A consumer group is a set of consumers that divide a topic's partitions among themselves.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A Kafka consumer group is a set of consumers that cooperatively read from a topic by dividing its partitions among themselves. The fundamental rule: each partition is assigned to exactly one consumer within a group at any time. This guarantees that records within a partition are processed by a single consumer in order. The group coordinator (a Kafka broker) manages membership and partition assignment. When the group membership changes \u2014 a consumer joins, leaves, or is considered dead \u2014 the coordinator triggers a rebalance to redistribute partitions. Rebalances are necessary."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "If a topic has 12 partitions and a consumer group has 3 consumers, each consumer gets 4 partitions.",
+              "Add a 4th consumer \u2192 each gets 3.",
+              "Add a 13th consumer \u2192 one sits idle because you can't split a partition between consumers.",
+              "Partition count is the parallelism ceiling.",
+              "Two consumer groups reading the same topic are completely independent \u2014 each group gets ALL partitions.",
+              "This is the broadcast pattern: group-A and group-B both see every record."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "One partition = one consumer per group \u2014 partition count is the parallelism ceiling",
+              "More consumers than partitions means idle consumers Rebalance pauses all consumption in eager mode",
+              "Switch to CooperativeStickyAssignor to make rebalances incremental (only moved partitions stop) session",
+              "ms is heartbeat-based (broker declares consumer dead)",
+              "ms is processing-based (consumer taking too long between polls)"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Thinking more consumers always means more parallelism \u2014 you can't have more consumers than partitions effectively"
+          }
+        ],
+        "cap": "The fix is disabling auto-commit and committing manually after processing \u2014 you get at-least-once semantics, which means your downstream processing should be idempotent.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between session.timeout.ms and max.poll.interval.ms?",
+          "How would you implement a consumer that reads from the beginning of a topic on restart?",
+          "Explain the difference between earliest and latest offset reset policies."
+        ]
+      }
+    },
+    {
+      "id": "kafka-partitioning-strategy",
+      "slug": "kafka-partitioning-strategy-ordering",
+      "question": "How does Kafka partitioning work and how do you ensure message ordering?",
+      "direct_answer": "Kafka maintains strict ordering only within a single partition. Messages with the same key always go to the same partition (via hash of the key mod num_partitions), guaranteeing order per key. For global ordering across all messages, you need exactly one partition \u2014 which eliminates parallelism entirely. In practice, you design your key to be the unit of ordering you care about: user_id for user events, order_id for payment events.",
+      "interviewer_intent": {
+        "testing": "Whether you understand the ordering guarantee boundary and can design keys for real use cases",
+        "common_mistake": "Assuming Kafka guarantees global ordering across partitions \u2014 it does not",
+        "to_stand_out": "Discuss the trade-off: more partitions = more parallelism but potentially out-of-order processing for unkeyed messages; show you've thought about key design for your domain"
+      },
+      "company_tags": [
+        "stripe",
+        "square",
+        "robinhood",
+        "confluent"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-06",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Ordering Guarantees: Per-Partition, Not Per-Topic",
+            "content": "Kafka guarantees strict ordering **within a single partition** \u2014 records are appended in order and consumed in order. Across partitions, there is **no ordering guarantee**. This is the fundamental constraint that drives all Kafka key design decisions.\n\nThe partition a record goes to is determined by its **key**. Same key \u2192 same partition \u2192 ordered processing. No key \u2192 round-robin distribution \u2192 no ordering. This means your key design IS your ordering strategy."
+          },
+          {
+            "type": "step",
+            "title": "The Partitioning Algorithm and Key Design",
+            "content": "By default, Kafka uses `murmur2(key) % numPartitions` to assign records to partitions. This is deterministic \u2014 the same key always maps to the same partition, as long as the partition count doesn't change.\n\nKey design for real systems:\n\n```\nUser events      \u2192 key = user_id     (all events for a user are ordered)\nPayment events   \u2192 key = order_id    (payment state transitions are ordered)\nIoT sensors      \u2192 key = device_id   (sensor readings arrive in sequence)\nDatabase CDC     \u2192 key = table:pk    (row-level changes stay ordered)\n```\n\n**No key** = round-robin (older clients) or sticky partitioning (Kafka 2.4+ \u2014 batches go to the same partition for efficiency, then rotate). Either way, no ordering guarantee.\n\nThe choice of key is a design decision that directly affects:\n- **Ordering**: only same-key records are ordered\n- **Parallelism**: one key can only be processed by one consumer at a time\n- **Load balance**: if one key generates 80% of traffic, one partition gets 80% of load (the hot partition problem)"
+          },
+          {
+            "type": "step",
+            "title": "The Partition Count Change Problem",
+            "content": "Adding partitions to a topic **breaks existing key-to-partition mappings**. A key that mapped to partition 2 with 6 partitions might map to partition 7 with 12 partitions. For consumers replaying from the beginning, events for the same key will appear in two different partitions \u2014 ordering is broken across the boundary.\n\nBest practices:\n- **Over-provision partitions upfront** \u2014 50-100 partitions for a medium-scale topic is common. You can always have more partitions than consumers (extras queue up), but adding partitions later is painful\n- **Removing partitions is impossible** without recreating the topic\n- If you must add partitions, accept that historical key mappings are broken. New records will be correctly partitioned; old ones won't migrate\n- For topics where ordering is critical across key-space changes, consider using a custom partitioner with a lookup table rather than hash-based assignment"
+          },
+          {
+            "type": "step",
+            "title": "Hot Partitions and Custom Partitioners",
+            "content": "The **hot partition problem** occurs when one key generates disproportionate traffic. In a social media platform, a celebrity user's `user_id` might produce 1000x more events than a regular user \u2014 that single partition becomes the bottleneck.\n\nSolutions:\n- **Compound keys**: `user_id + event_type` \u2014 spreads a single user's events across partitions by type. You lose per-user ordering across event types but gain load balance\n- **Custom partitioner**: implement `Partitioner` interface to route hot keys across multiple partitions intentionally. Your consumer must handle out-of-order processing for those keys\n- **Accept the imbalance**: if the hot partition is still within throughput limits, it's simpler to leave it alone\n\nFor **global ordering** (all messages in sequence across the entire topic), use exactly one partition. This eliminates parallelism entirely \u2014 throughput is limited to a single consumer. Only viable for low-volume topics like configuration changes."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Ordering is per-partition only** \u2014 Kafka makes zero ordering guarantees across partitions. Design your key to match your ordering needs\n- **Same key = same partition** via `murmur2(key) % numPartitions`. Changing partition count breaks this mapping for existing data\n- **Over-provision partitions** (50-100 for medium topics) because adding partitions is disruptive and removing them is impossible\n- **Hot partition problem**: one key with 80% of traffic \u2192 one partition with 80% of load. Fix with compound keys or custom partitioners\n- **Global ordering requires 1 partition** \u2014 eliminates parallelism. Only use for low-volume control topics"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka guarantees ordering **within a partition**, not across partitions. Think of partitions as lanes on a highway \u2014 cars in the same lane arrive in order, but cars in different lanes don't. The message **key** determines the lane: `murmur2(key) % numPartitions` is the default algorithm, so the same key always goes to the same partition.\n\nThis means key design is the critical decision. For a payment system I'd use `order_id` as the key \u2014 all state transitions for one order are ordered. For user events, `user_id`. The key has to match whatever entity needs ordered processing.\n\nThe trap is **changing partition count**. If you go from 6 to 12 partitions, the hash mapping changes and a key that was in partition 2 might now go to partition 7. Historical data doesn't migrate. That's why you over-provision upfront \u2014 50-100 partitions is common even for moderate throughput topics.\n\nIf you need global ordering across ALL messages, you need exactly one partition \u2014 but that means exactly one consumer, which kills parallelism. In practice, per-key ordering is almost always sufficient."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the hot partition problem and how do you solve it?",
+        "How does Kafka handle ordering when you have multiple partitions and a single consumer?",
+        "Explain compacted topics and when you would use them."
+      ],
+      "seo": {
+        "metaTitle": "Kafka Partitioning & Message Ordering | Interview Questions | InterviewExplainer",
+        "metaDescription": "Learn how Kafka partitioning works, how to ensure message ordering with keys, and how to design partition strategies for production systems."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Kafka guarantees ordering within a partition, not across partitions.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Kafka guarantees strict ordering within a single partition \u2014 records are appended in order and consumed in order. Across partitions, there is no ordering guarantee. This is the fundamental constraint that drives all Kafka key design decisions. The partition a record goes to is determined by its key. Same key \u2192 same partition \u2192 ordered processing. No key \u2192 round-robin distribution \u2192 no ordering. This means your key design IS your ordering strategy."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "By default, Kafka uses murmur2(key) % numPartitions to assign records to partitions.",
+              "This is deterministic \u2014 the same key always maps to the same partition, as long as the partition count doesn't change.",
+              "Key design for real systems: `` User events \u2192 key = user_id (all events for a user are ordered) Payment events \u2192 key = order_id (payment state transitions are ordered) IoT sensors \u2192 key = device_id (sensor readings arrive in sequence) Database CDC \u2192 key = table:pk (row-level changes stay ordered) `` No key = round-robin (older clients) or sticky partitioning (Kafka 2.4+ \u2014 batches go to the same partition for efficiency, then rotate).",
+              "Either way, no ordering guarantee.",
+              "The choice of key is a design decision that directly affects: Ordering: only same-key records are ordered Parallelism: one key can only be processed by one consumer at."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Ordering is per-partition only \u2014 Kafka makes zero ordering guarantees across partitions",
+              "Design your key to match your ordering needs Same key = same partition via murmur2(key) % numPartitions",
+              "Changing partition count breaks this mapping for existing data Over-provision partitions (50-100 for medium topics) because adding partitions is disruptive and removing them is impossible Hot partition problem: one key with 80% of traffic \u2192 one partition with 80% of load",
+              "Fix with compound keys or custom partitioners Global ordering requires 1 partition \u2014 eliminates parallelism",
+              "Only use for low-volume control topics"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Assuming Kafka guarantees global ordering across partitions \u2014 it does not"
+          }
+        ],
+        "cap": "In practice, per-key ordering is almost always sufficient.",
+        "familiarity_anchors": [
+          "Kafka",
+          "Messages"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the hot partition problem and how do you solve it?",
+          "How does Kafka handle ordering when you have multiple partitions and a single consumer?",
+          "Explain compacted topics and when you would use them."
+        ]
+      }
+    },
+    {
+      "id": "kafka-exactly-once",
+      "slug": "kafka-exactly-once-semantics",
+      "question": "Explain Kafka's exactly-once semantics and how you would implement it.",
+      "direct_answer": "Kafka achieves exactly-once semantics (EOS) through three layered guarantees: idempotent producers (prevent duplicates from retries), transactional APIs (atomic write across multiple partitions), and transactional consumers (read-process-write atomically). EOS has real overhead \u2014 20-30% throughput reduction \u2014 so only use it where duplicates are genuinely unacceptable, like financial transactions.",
+      "interviewer_intent": {
+        "testing": "Whether you know the full EOS stack, not just that it exists, and understand when the overhead is worth it",
+        "common_mistake": "Thinking acks=all alone gives exactly-once \u2014 it gives at-least-once with durability",
+        "to_stand_out": "Distinguish between producer-side EOS (idempotent producer) and end-to-end EOS (transactions), and name the stream processing frameworks that use it under the hood"
+      },
+      "company_tags": [
+        "stripe",
+        "robinhood",
+        "confluent",
+        "linkedin"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-06",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Layers of Exactly-Once",
+            "content": "Exactly-once semantics (EOS) in Kafka is not a single feature \u2014 it's three layered guarantees working together. **Layer 1**: idempotent producers (prevent duplicates from retries). **Layer 2**: transactional APIs (atomic writes across multiple partitions). **Layer 3**: transactional consumers (`read_committed` isolation). Each layer builds on the previous one.\n\nEOS has real cost \u2014 20-30% throughput reduction. Use it only where duplicates are genuinely unacceptable: financial transactions, inventory updates, billing events. For analytics or logging, at-least-once with idempotent downstream processing is simpler and faster."
+          },
+          {
+            "type": "step",
+            "title": "Layer 1: Idempotent Producer \u2014 Deduplicate Retries",
+            "content": "Enable with `enable.idempotence=true` (default since Kafka 3.0). The broker assigns a **Producer ID (PID)** and tracks the **sequence number** per partition. If the producer retries a send (network timeout, broker restart), the broker recognizes the duplicate via PID + sequence and returns success without writing a second copy.\n\nWithout idempotence, this happens: producer sends record \u2192 broker writes it \u2192 acknowledgment lost in transit \u2192 producer retries \u2192 broker writes a second copy. With idempotence: the retry is detected and discarded.\n\n```java\nProperties props = new Properties();\nprops.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true); // PID + sequence tracking\nprops.put(ProducerConfig.ACKS_CONFIG, \"all\");              // required for idempotence\nprops.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE); // retry until success\n// max.in.flight.requests.per.connection can be up to 5 with idempotence\n// (the broker reorders out-of-sequence requests correctly)\n```\n\nIdempotent producers give you **exactly-once from producer to broker** with negligible overhead. This should be on for every producer."
+          },
+          {
+            "type": "step",
+            "title": "Layer 2: Transactional Producer \u2014 Atomic Multi-Partition Writes",
+            "content": "The idempotent producer handles single-record deduplication. The transactional API handles **multi-partition atomic writes** \u2014 either all records commit or none do.\n\n```java\nprops.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, \"payment-processor-1\");\n// transactional.id must be unique per app instance and stable across restarts\n\nKafkaProducer<String, String> producer = new KafkaProducer<>(props);\nproducer.initTransactions(); // register with the transaction coordinator\n\ntry {\n    producer.beginTransaction();\n    producer.send(new ProducerRecord<>(\"payments\", key, paymentEvent));\n    producer.send(new ProducerRecord<>(\"audit-log\", key, auditEvent));\n    producer.commitTransaction(); // atomic: both or neither\n} catch (Exception e) {\n    producer.abortTransaction();  // roll back \u2014 neither record is visible\n}\n```\n\nThe broker holds records in a \"pending\" state. Consumers with default settings (`isolation.level=read_uncommitted`) see pending records \u2014 only consumers with `read_committed` wait for the commit.\n\n**Zombie fencing**: if a producer with the same `transactional.id` starts (old instance didn't shut down cleanly), the coordinator fences the old producer \u2014 its pending transactions are aborted. This prevents split-brain duplicate writes."
+          },
+          {
+            "type": "step",
+            "title": "Layer 3: The Full Read-Process-Write Pattern",
+            "content": "The complete exactly-once pattern: consume records, process them, produce output, and commit consumer offsets \u2014 all in a single atomic transaction.\n\n```java\nKafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps);\n// consumer: isolation.level = read_committed, enable.auto.commit = false\n\nKafkaProducer<String, String> producer = new KafkaProducer<>(producerProps);\n// producer: transactional.id = \"processor-1\"\n\nproducer.initTransactions();\nconsumer.subscribe(List.of(\"input-topic\"));\n\nwhile (true) {\n    ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));\n    producer.beginTransaction();\n    for (ConsumerRecord<String, String> record : records) {\n        String result = process(record);  // your business logic\n        producer.send(new ProducerRecord<>(\"output-topic\", record.key(), result));\n    }\n    // Atomically commit: output records + consumer offsets in one transaction\n    producer.sendOffsetsToTransaction(\n        currentOffsets(records), consumer.groupMetadata());\n    producer.commitTransaction();\n}\n```\n\nIf the process crashes after `send()` but before `commitTransaction()`, the transaction is aborted on recovery. The consumer offsets aren't committed either, so the records are re-read and reprocessed \u2014 but this time without duplicates because the output from the aborted transaction is never visible to `read_committed` consumers.\n\nKafka Streams and Apache Flink use this pattern internally \u2014 you often get EOS \"for free\" from the framework without writing transactional code yourself."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Idempotent producer** (Layer 1) deduplicates retries via PID + sequence number. Negligible overhead \u2014 should be default for all producers\n- **Transactional producer** (Layer 2) makes multi-partition writes atomic. Requires a stable `transactional.id` per application instance for zombie fencing\n- **read_committed consumers** (Layer 3) only see committed transaction output. Without this, consumers see uncommitted records \u2014 defeating EOS\n- **sendOffsetsToTransaction** is the key method \u2014 it atomically commits consumer offsets and producer output in one transaction\n- **20-30% throughput overhead** is real. Only use EOS where duplicates genuinely matter (payments, inventory). For analytics, at-least-once + idempotent processing is simpler"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Exactly-once in Kafka is built in three layers. The first is the **idempotent producer** \u2014 it assigns a sequence number to each record so the broker can detect and discard retries. This prevents duplicates from producer to broker with almost zero overhead.\n\nThe second layer is the **transactional API**. You call `beginTransaction()`, send to multiple partitions, then `commitTransaction()` \u2014 either all records commit or none do. The broker holds them in pending state until commit. If the producer crashes, pending transactions are aborted.\n\nThe third layer ties it together: the **read-process-write pattern**. You consume records, process them, produce output, and commit consumer offsets all in one atomic transaction via `sendOffsetsToTransaction()`. If the process crashes mid-way, both the output and the offsets are rolled back \u2014 so on recovery, records are re-read and reprocessed without duplicates.\n\nThe practical consideration: EOS costs **20-30% throughput**. I'd only use it for financial transactions or inventory updates. For analytics, at-least-once with idempotent downstream processing is simpler and faster. Kafka Streams gives you EOS essentially for free if you're using it."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is a zombie producer and how does Kafka handle it with fencing?",
+        "How does Kafka Streams implement exactly-once semantics internally?",
+        "What are the limitations of Kafka's exactly-once semantics?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Exactly-Once Semantics Explained | Interview Questions | InterviewExplainer",
+        "metaDescription": "Master Kafka exactly-once semantics with idempotent producers, transactional APIs, and read_committed consumers. Complete guide with code examples for interviews."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Exactly-once in Kafka is built in three layers.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Exactly-once semantics (EOS) in Kafka is not a single feature \u2014 it's three layered guarantees working together. Layer 1: idempotent producers (prevent duplicates from retries). Layer 2: transactional APIs (atomic writes across multiple partitions). Layer 3: transactional consumers (read_committed isolation). Each layer builds on the previous one. EOS has real cost \u2014 20-30% throughput reduction. Use it only where duplicates are genuinely unacceptable: financial transactions, inventory updates, billing events. For analytics or logging, at-least-once with idempotent downstream processing is simpler."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know the full EOS stack, not just that it exists, and understand when the overhead is worth it"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Idempotent producer (Layer 1) deduplicates retries via PID + sequence number",
+              "Negligible overhead \u2014 should be default for all producers Transactional producer (Layer 2) makes multi-partition writes atomic",
+              "Requires a stable transactional",
+              "id per application instance for zombie fencing read_committed consumers (Layer 3) only see committed transaction output",
+              "Without this, consumers see uncommitted records \u2014 defeating EOS sendOffsetsToTransaction is the key method \u2014 it atomically commits consumer offsets and producer output in one transaction 20-30% throughput overhead is real"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Exactly-once semantics (EOS) in Kafka is not a single feature \u2014 it's three layered guarantees working together. Layer 1: idempotent producers (prevent duplicates from retries). Layer 2: transactional APIs (atomic writes across multiple partitions). Layer 3: transactional consumers (read_committed isolation). Each layer builds on the previous one. EOS has real cost \u2014 20-30% throughput reduction. Use it only where duplicates are genuinely unacceptable: financial transactions, inventory updates, billing events. For analytics or logging, at-least-once with idempotent downstream processing is simpler and faster."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking acks=all alone gives exactly-once \u2014 it gives at-least-once with durability"
+            ]
+          }
+        ],
+        "cap": "Kafka Streams gives you EOS essentially for free if you're using it.",
+        "familiarity_anchors": [
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is a zombie producer and how does Kafka handle it with fencing?",
+          "How does Kafka Streams implement exactly-once semantics internally?",
+          "What are the limitations of Kafka's exactly-once semantics?"
+        ]
+      }
+    },
+    {
+      "id": "kafka-retention-compaction",
+      "slug": "kafka-log-retention-vs-compaction",
+      "question": "What is the difference between Kafka log retention and log compaction? When would you use each?",
+      "direct_answer": "Log retention deletes old records after a time period (log.retention.hours, default 7 days) or size limit \u2014 old history is gone. Log compaction keeps only the latest record per key indefinitely, deleting older records with the same key but preserving the most recent state. Use retention for event streams where you only care about recent events. Use compaction for state/changelog topics where you need the current value per key regardless of age \u2014 like a database change log or user preferences topic.",
+      "interviewer_intent": {
+        "testing": "Whether you understand the different use cases and can reason about which fits a given scenario",
+        "common_mistake": "Thinking compaction deletes all but the last record immediately \u2014 compaction runs in the background and there's a lag",
+        "to_stand_out": "Mention that you can combine both: compaction + retention (a compacted topic with time-based cleanup of tombstones)"
+      },
+      "company_tags": [
+        "confluent",
+        "linkedin",
+        "databricks"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-06",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Cleanup Strategies for Different Use Cases",
+            "content": "Kafka stores records in an append-only log on disk. Without cleanup, the log grows forever. Two strategies manage this: **retention** (delete old records after a time/size limit) and **compaction** (keep only the latest record per key, indefinitely). They answer different questions: retention answers \"what happened recently?\" and compaction answers \"what is the current state?\"\n\nYou set the strategy per-topic with `cleanup.policy` \u2014 and you can even combine both."
+          },
+          {
+            "type": "step",
+            "title": "Log Retention: Time-Based or Size-Based Deletion",
+            "content": "**`cleanup.policy=delete`** (the default). Kafka deletes log segments older than `log.retention.hours` (default: 168 hours / 7 days) or when the total log exceeds `log.retention.bytes`. Old data is gone \u2014 no replay possible.\n\nDeletion happens at the **segment** level, not individual records. A segment is a chunk of the log (default 1GB or 7 days, whichever comes first). When the oldest segment passes the retention threshold, the entire segment is deleted.\n\nUse retention for **event streams** where you only care about recent data:\n- Application logs (who needs 6-month-old logs in Kafka?)\n- Click-stream analytics (recent trends, not 2019 data)\n- Metrics pipelines (historical data lives in Prometheus/Grafana, not Kafka)\n- Temporary processing queues (data consumed and done)"
+          },
+          {
+            "type": "step",
+            "title": "Log Compaction: Keep Latest State Per Key",
+            "content": "**`cleanup.policy=compact`**. A background thread periodically scans the log and removes older records that share a key with a newer record. The result: the topic contains exactly one record per key \u2014 the most recent one.\n\nRecords with a **null value** are called **tombstones** \u2014 they signal that a key should be considered deleted. Compaction eventually removes tombstones too (after `delete.retention.ms`, default 24 hours).\n\nUse compaction for **state/changelog topics** where you need current state regardless of age:\n- Database CDC (Change Data Capture) \u2014 new consumers replay just current state, not every historical update\n- User profile/preferences \u2014 current settings, not the full change history\n- Kafka Streams changelog topics \u2014 state store backup and recovery\n- Service configuration \u2014 current config per service key\n\nThe compaction guarantee: at least the **latest value per key** is always retained. Compaction runs in the background, so there's a lag \u2014 older duplicates exist temporarily until the compaction thread processes them."
+          },
+          {
+            "type": "step",
+            "title": "Combining Both and Practical Configuration",
+            "content": "**`cleanup.policy=compact,delete`** \u2014 compaction removes superseded keys, AND time-based retention removes old tombstones and records for deleted keys. This prevents tombstone accumulation in long-lived compacted topics.\n\n```\n# Pure retention (event stream)\ncleanup.policy=delete\nretention.ms=604800000          # 7 days\n\n# Pure compaction (state topic)\ncleanup.policy=compact\nmin.compaction.lag.ms=0         # compact immediately\ndelete.retention.ms=86400000    # keep tombstones for 24h\n\n# Combined (state topic with tombstone cleanup)\ncleanup.policy=compact,delete\nretention.ms=2592000000         # delete records older than 30 days\nmin.compaction.lag.ms=3600000   # don't compact records less than 1 hour old\n```\n\nPractical note: a new consumer group subscribing to a compacted topic gets the compacted state \u2014 it doesn't replay the original full history. This is what makes compacted topics useful as lightweight databases: any new service can \"bootstrap\" its state by consuming the compacted topic from the beginning."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Retention** (`cleanup.policy=delete`) deletes old segments by time or size \u2014 simple, predictable, data is gone permanently\n- **Compaction** (`cleanup.policy=compact`) keeps only the latest record per key \u2014 acts like a key-value store that any new consumer can bootstrap from\n- **Tombstones** (null value) mark a key as deleted in compacted topics. They're kept for `delete.retention.ms` (default 24h) so consumers have time to see the deletion\n- **Combine both** (`compact,delete`) to compact keys AND clean up old tombstones \u2014 prevents unbounded tombstone growth\n- **Compaction is not instant** \u2014 there's a lag between a new record arriving and the old one being removed. Don't rely on compaction for real-time deduplication"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Retention is like a **news feed** \u2014 you keep recent articles and delete old ones after a week. Compaction is like a **database snapshot** \u2014 you keep the latest version of every record, forever, regardless of when it was written.\n\n**Retention** (`cleanup.policy=delete`) is the default. Records are deleted when the log segment is older than `log.retention.hours` or bigger than `log.retention.bytes`. Use it for event streams where only recent data matters: logs, metrics, click-streams.\n\n**Compaction** (`cleanup.policy=compact`) keeps only the most recent record per key. A background thread removes older duplicates. The key use case is CDC or changelog topics \u2014 a new service that spins up can consume the compacted topic from the beginning and get the current state of every entity without replaying years of updates.\n\nYou can also **combine both** \u2014 `cleanup.policy=compact,delete` \u2014 which compacts keys and also removes old tombstones. This is what I use for long-lived state topics to prevent tombstones from accumulating indefinitely."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do tombstone records work in a compacted topic?",
+        "What happens to a consumer group's offsets when records are compacted away?",
+        "How does Kafka Streams use compacted topics for fault tolerance?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Log Retention vs Compaction | Interview Questions | InterviewExplainer",
+        "metaDescription": "Understand the difference between Kafka log retention and log compaction for interviews. Learn when to use each policy and how to combine them."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Retention is like a news feed \u2014 you keep recent articles and delete old ones after a week.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Kafka stores records in an append-only log on disk. Without cleanup, the log grows forever. Two strategies manage this: retention (delete old records after a time/size limit) and compaction (keep only the latest record per key, indefinitely). They answer different questions: retention answers \"what happened recently?\" and compaction answers \"what is the current state?\" You set the strategy per-topic with cleanup.policy \u2014 and you can even combine both."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Retention (cleanup",
+              "policy=delete) deletes old segments by time or size \u2014 simple, predictable, data is gone permanently Compaction (cleanup",
+              "policy=compact) keeps only the latest record per key \u2014 acts like a key-value store that any new consumer can bootstrap from Tombstones (null value) mark a key as deleted in compacted topics",
+              "They're kept for delete",
+              "ms (default 24h) so consumers have time to see the deletion Combine both (compact,delete) to compact keys AND clean up old tombstones \u2014 prevents unbounded tombstone growth Compaction is not instant \u2014 there's a lag between a new record arriving and the old one being removed"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Kafka stores records in an append-only log on disk. Without cleanup, the log grows forever. Two strategies manage this: retention (delete old records after a time/size limit) and compaction (keep only the latest record per key, indefinitely). They answer different questions: retention answers \"what happened recently?\" and compaction answers \"what is the current state?\" You set the strategy per-topic with cleanup.policy \u2014 and you can even combine both."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Kafka stores records in an append-only log on disk. Without cleanup, the log grows forever. Two strategies manage this: retention (delete old records after a time/size limit) and compaction (keep only the latest record per key, indefinitely). They answer different questions: retention answers \"what happened recently?\" and compaction answers \"what is the current state?\" You set the strategy per-topic with."
+          }
+        ],
+        "cap": "This is what I use for long-lived state topics to prevent tombstones from accumulating indefinitely.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do tombstone records work in a compacted topic?",
+          "What happens to a consumer group's offsets when records are compacted away?",
+          "How does Kafka Streams use compacted topics for fault tolerance?"
+        ]
+      }
+    }
+  ]
+}

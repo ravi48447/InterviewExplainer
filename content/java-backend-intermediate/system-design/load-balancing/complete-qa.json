@@ -1,0 +1,151 @@
+{
+  "topic": "Load Balancing",
+  "topicSlug": "load-balancing",
+  "questions": [
+    {
+      "id": "sdf-002",
+      "slug": "load-balancing-strategies",
+      "question": "What are the main load balancing strategies and when would you choose one over another?",
+      "title": "Load Balancing Strategies: Round Robin, Least Connections, Consistent Hashing",
+      "direct_answer": "Pick by traffic shape: **round-robin** for stateless, similar-cost requests; **weighted round-robin** when nodes have different capacity; **least connections** when request duration varies (long-poll, file uploads); **least response time** for latency-sensitive APIs; **consistent hashing** for cache affinity or sticky sessions; **random / power-of-two-choices** for very large fleets where global state is expensive. Layer 4 (TCP) load balancing is faster but blind to HTTP; layer 7 (HTTP) understands paths and headers and enables routing, retries, and TLS termination.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Algorithm vocabulary, trade-offs, L4 vs L7 distinction, and the role of health checks.",
+        "common_mistake": "Defaulting to round-robin everywhere (poor fit for variable-cost requests), or assuming sticky sessions are required for stateful apps (usually a sign the app should be made stateless).",
+        "to_stand_out": "Discuss power-of-two-choices (P2C) as a near-optimal alternative to least-connections at scale, slow-start for new instances, and outlier detection in service mesh proxies."
+      },
+      "company_tags": [
+        "Cloudflare",
+        "Netflix",
+        "Amazon",
+        "Google",
+        "Envoy"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why the Algorithm Matters",
+            "content": "A load balancer's job sounds simple: spread traffic across N backends. But the choice of algorithm controls **tail latency, fairness, and behavior under failure**. The wrong algorithm:\n\n- **Round-robin with variable-cost requests** — one slow request type starves a backend.\n- **Least-connections without slow-start** — a freshly-started backend gets a cold-cache flood.\n- **Sticky sessions on a stateless app** — unbalanced load when one user sends bursts.\n- **Consistent hashing without virtual nodes** — hot keys and uneven load.\n\nThe right algorithm depends on three things: **request cost variance, statefulness, and fleet size**."
+          },
+          {
+            "type": "step",
+            "title": "Round-Robin and Weighted Round-Robin",
+            "content": "**Round-robin (RR):** rotate through backends in order.\n- Pros: trivial to implement, no state needed.\n- Cons: blind to actual load; assumes all backends are identical and all requests are similar cost.\n- Use when: requests are roughly uniform, backends are roughly identical, fleet is small.\n\n**Weighted round-robin (WRR):** each backend has a weight; gets traffic proportional to weight.\n- Pros: handles heterogeneous backends (e.g., bigger instances during a phased upgrade).\n- Cons: still blind to current load; weights are static.\n- Use when: phased rollouts, mixed instance types, A/B testing of capacity.\n\n**Smooth weighted round-robin** (NGINX's variant):\n- Spreads weighted picks evenly over time instead of bursts (e.g., for weights [5,1,1] picks ABCABABA, not AAAAABCC).\n- Better latency distribution under bursty traffic."
+          },
+          {
+            "type": "step",
+            "title": "Least Connections and Least Response Time",
+            "content": "**Least connections:** route to the backend with the fewest active connections.\n- Pros: naturally handles variable-cost requests (long requests → more connections → backend gets less new traffic).\n- Cons: requires per-backend state at the load balancer; doesn't scale to gigantic fleets without sharding LB state.\n- Use when: request duration varies (uploads, long-poll, video streaming), backends are stateless.\n\n**Weighted least connections:** least connections normalized by weight (`connections / weight`).\n- Combines fleet heterogeneity with load awareness.\n\n**Least response time:** route to the backend with lowest exponentially-smoothed average response time.\n- Pros: directly optimizes for what users care about.\n- Cons: requires response-time tracking; slightly slower decision; can ping-pong if measurements are noisy.\n- Use when: latency-sensitive APIs where the LB has good visibility into response times.\n\n**Outlier detection** (Envoy / Istio):\n- Track per-backend error rates and latencies.\n- Eject backends that breach thresholds; reintroduce after cooldown.\n- Layered on top of any base algorithm."
+          },
+          {
+            "type": "step",
+            "title": "Power-of-Two-Choices (P2C) — The Modern Workhorse",
+            "content": "**The problem with least-connections at scale:** maintaining global per-backend state across hundreds of LB instances is expensive and slow to converge. Each LB sees a stale view.\n\n**P2C trick (from queueing theory):**\n1. Pick **two random backends**.\n2. Route to the one with the **fewer active connections** (or lower response time).\n\nResult: load distribution nearly as good as full least-connections, with O(1) decision cost and no need for global state.\n\n**Why it works:** the math says picking the better of two random samples is exponentially better than picking one randomly, and only marginally worse than picking the optimum globally.\n\n**Used by:**\n- HAProxy (`balance leastconn` with sample size).\n- Envoy (default `LEAST_REQUEST` is P2C).\n- Linkerd, Finagle.\n- AWS Application Load Balancer's modern routing.\n\n**Recommended default for L7 load balancing.**"
+          },
+          {
+            "type": "step",
+            "title": "Hash-Based and Consistent Hashing",
+            "content": "**Hash-based:** `backend = hash(key) mod N` where key is client IP, session ID, URL, etc.\n- Same client / same key → same backend.\n- Use when: cache affinity matters; client must hit the same backend.\n- Issue: changing N (adding/removing backends) reshuffles ~all keys.\n\n**Consistent hashing:** see the dedicated consistent-hashing question.\n- Adding/removing backends only moves K/N of keys.\n- Use when: cache-warming matters and the backend set changes (autoscaling, deploys).\n- L7 LB feature: Envoy's `RING_HASH`, NGINX `hash $request_uri consistent`.\n\n**Maglev hashing (Google):** precomputed lookup table; bounded disruption on backend changes; O(1) lookup.\n- Used in Google's L4 Maglev LB and Envoy.\n\n**Bounded-load consistent hashing:** caps per-backend load at `(1 + ε) × average`; spills excess.\n- Combines affinity with hard load guarantees.\n\n**Sticky sessions:** a special case of hash-based balancing on session cookie or IP.\n- Often a smell — indicates the app should be stateless. Use only when:\n  - In-memory session and you can't move to Redis.\n  - WebSocket-style persistent connections.\n  - Migration constraints."
+          },
+          {
+            "type": "step",
+            "title": "Layer 4 vs Layer 7",
+            "content": "**Layer 4 (TCP/UDP):**\n- Load balances based on connection metadata (source IP, port).\n- Doesn't terminate TLS; doesn't understand HTTP.\n- Pros: extremely fast (kernel-level processing in modern LBs); low latency.\n- Cons: blind to HTTP path/headers; can't do per-route routing or retries.\n- Examples: AWS NLB, Google Maglev, IPVS.\n\n**Layer 7 (HTTP/HTTPS):**\n- Understands HTTP requests; routes by path, header, cookie.\n- Terminates TLS; can do retries, timeouts, header manipulation.\n- Pros: smart routing, observability, per-endpoint policy.\n- Cons: more CPU/memory, slightly higher latency.\n- Examples: AWS ALB, Envoy, NGINX, HAProxy.\n\n**Common topology:** L4 in front (NLB at the edge for TLS pass-through and DDoS) → L7 behind (Envoy/NGINX for per-route routing, retries, observability) → backends.\n\n**gRPC:** L4 doesn't load-balance gRPC well because gRPC multiplexes many calls over one TCP connection. Use L7 (Envoy's HTTP/2 awareness) or client-side LB (gRPC's built-in xDS support)."
+          },
+          {
+            "type": "step",
+            "title": "Health Checks and Slow Start",
+            "content": "**Health checks:**\n- **Active:** LB periodically pings backends (`GET /healthz`); ejects unhealthy ones.\n- **Passive (outlier detection):** LB observes failed responses; ejects backends with high error rates.\n- **Best:** both. Active catches degradation; passive catches issues active checks miss (specific endpoints failing).\n\n**Health check intervals:**\n- Too frequent → wasted CPU and noise on backends.\n- Too infrequent → slow ejection of bad backends.\n- 5-15s typical for active; instantaneous for passive.\n\n**Health check semantics:**\n- **Liveness** — process is alive; restart if not.\n- **Readiness** — process can serve traffic right now (warm cache, downstream reachable).\n- LB uses readiness, not liveness.\n\n**Slow start (ramp-up):**\n- Newly-healthy backends receive a slow ramp of traffic over (e.g.) 30 seconds.\n- Avoids cold-cache crash: a fresh JVM with empty caches takes a moment to warm up.\n- Without slow start, P2C / least-connections sends a flood to the new backend.\n- Available in: Envoy, AWS ALB, NGINX Plus."
+          },
+          {
+            "type": "step",
+            "title": "Choosing for Your Use Case",
+            "content": "| Workload | Recommended | Why |\n|---|---|---|\n| Stateless API, uniform requests | Round-robin or P2C | Simplicity; P2C handles spikes |\n| Variable-cost requests (uploads) | Least connections or P2C | Handles long requests naturally |\n| Latency-sensitive (search) | Least response time / P2C | Directly optimizes user-visible latency |\n| Sticky sessions / WebSocket | Consistent hashing on session id | Same connection, same backend |\n| Cache-affinity (per-key cache) | Consistent hashing on key | Maximize cache hit rate |\n| Heterogeneous fleet | Weighted variant of above | Capacity-proportional traffic |\n| Geo-distributed | DNS / Anycast routing first, LB second | Route to nearest region first |\n| gRPC backends | L7 HTTP/2 LB (Envoy) | L4 fails on multiplexed connections |\n| Massive fleet (1000+) | P2C, not least-connections | Avoid global state cost |"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Round-robin** — simple; OK for uniform, stateless workloads.\n- **Least connections** — adapts to variable-cost requests; needs per-backend state.\n- **Power-of-two-choices (P2C)** — modern default for large fleets; near-optimal with O(1) decision.\n- **Consistent hashing** — cache affinity, sticky sessions, key-based routing.\n- **L4** — fast, transport-layer; **L7** — smart, HTTP-aware. Many systems use both.\n- **Health checks** = active (periodic ping) + passive (outlier detection); use readiness, not liveness.\n- **Slow start** for new instances avoids cold-cache crash.\n- **Sticky sessions are often a smell** — indicates app should be stateless."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Match algorithm to traffic shape**\n\n- Stateless, uniform requests — round-robin\n- Heterogeneous backends — weighted round-robin\n- Variable-cost requests (uploads, long-poll) — least connections or P2C\n- Latency-sensitive — least response time or P2C\n- Cache affinity / sticky session — consistent hashing\n- Massive fleets (1000+) — P2C, never global least-connections\n\n**Round-robin and weighted RR**\n\nRR: trivial, no state. Blind to actual load. OK for uniform.\nWRR: handles heterogeneous backends (instance types, phased rollouts). Still blind to current load.\nSmooth WRR (NGINX): spreads picks evenly over time, not in bursts.\n\n**Least connections and least response time**\n\nLeast connections: route to backend with fewest active connections. Naturally handles variable-cost — a backend doing a long upload accumulates connections, gets less new traffic. Needs per-backend state at the LB.\n\nLeast response time: exponentially smoothed average; directly optimizes for user-visible latency. Can ping-pong if noisy.\n\n**Power-of-two-choices — modern workhorse**\n\nProblem with least-connections at scale: global per-backend state across hundreds of LB instances is expensive and stale.\n\nP2C trick: pick two random backends, route to the one with fewer connections. Math from queueing theory says this is exponentially better than random and only marginally worse than full least-connections, with O(1) decision and no global state.\n\nUsed by HAProxy, Envoy default LEAST_REQUEST, Linkerd, Finagle. My default for L7 in modern systems.\n\n**Hash-based and consistent**\n\nHash-based: backend = hash(key) mod N. Same client → same backend. Issue: N changes reshuffle everything.\n\nConsistent hashing: only K/N keys move on backend change. Use for cache affinity that survives autoscaling/deploys. Envoy RING_HASH, NGINX hash consistent.\n\nMaglev: precomputed table, bounded disruption, O(1) lookup. Google's L4 LB.\n\nBounded-load consistent hashing: caps per-backend load at (1+ε) × average; spills excess. Combines affinity with hard load guarantees.\n\nSticky sessions = hash on cookie or IP. Often a smell — the app should be stateless. Use only when in-memory session can't move to Redis, WebSocket, or migration constraints.\n\n**L4 vs L7**\n\nL4 (TCP): connection metadata only, no TLS termination, no HTTP awareness. Extremely fast. AWS NLB, Google Maglev.\n\nL7 (HTTP): understands path, header, cookie. Terminates TLS. Can retry, route, manipulate headers. AWS ALB, Envoy, NGINX, HAProxy.\n\nCommon topology: L4 at edge (TLS pass-through, DDoS) → L7 behind (per-route routing, retries) → backends.\n\ngRPC: L4 doesn't balance well because gRPC multiplexes calls over one TCP connection. Use L7 with HTTP/2 awareness (Envoy) or client-side LB (gRPC's xDS).\n\n**Health checks**\n\n- Active: periodic /healthz probe; ejects unhealthy\n- Passive (outlier detection): observes failed responses; ejects high-error backends\n- Use both — active for degradation, passive for issues active misses\n- Use readiness, not liveness — readiness means 'can serve traffic now'\n- Frequency: 5-15s active typical; instantaneous passive\n\n**Slow start**\n\nFresh backend has empty caches. Without ramp-up, P2C/least-conn sends a flood, cold cache crashes. Slow start ramps traffic over 30s. Envoy, AWS ALB, NGINX Plus support it.\n\n**Recommendation by workload**\n\n- Stateless uniform — round-robin or P2C\n- Variable-cost — least connections or P2C\n- Latency-sensitive — least response time or P2C\n- Cache affinity — consistent hashing\n- Heterogeneous — weighted variant\n- Geo-distributed — DNS/anycast routing first, LB second\n- gRPC — L7 (Envoy)\n- Massive fleets — P2C, never global state\n\n**Recommendation**\n\n**For most modern microservices: L4 at the edge (NLB or similar for TLS pass-through and DDoS), L7 behind it (Envoy or ALB) using P2C as the default algorithm with active + passive health checks and slow-start for new instances. Use consistent hashing only when cache affinity or sticky sessions are genuinely needed. Sticky sessions are usually a sign the app should be stateless — push session state to Redis and use round-robin or P2C instead.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Walk through what happens to a backend with cold caches when it joins a P2C-balanced fleet without slow-start.",
+        "Compare consistent hashing vs Maglev hashing for an L4 load balancer.",
+        "How do you handle gradual rollouts / canary deploys at the load balancer level?",
+        "Design the load balancing for a system that does both REST API and gRPC traffic."
+      ],
+      "seo": {
+        "metaTitle": "Load Balancing Strategies — Round Robin, Least Conn, P2C, Consistent Hashing",
+        "metaDescription": "Load balancing algorithms compared: round-robin, weighted, least connections, least response time, power-of-two-choices, consistent hashing, plus L4 vs L7, health checks, slow start, and how to choose by workload."
+      },
+      "speakable_v2": {
+        "archetype": "E",
+        "pillar": "P06",
+        "hook": "Match algorithm to traffic shape Stateless, uniform requests — round-robin Heterogeneous backends — weighted round-robin Variable-cost requests (uploads, long-poll) — least connections or P2C Latency-sensitive — least response time or P2C Cache affinity / sticky.",
+        "beats": [
+          {
+            "kind": "optimising_for",
+            "layout": "paragraph",
+            "text": "A load balancer's job sounds simple: spread traffic across N backends. But the choice of algorithm controls tail latency, fairness, and behavior under failure. The wrong algorithm: Round-robin with variable-cost requests — one slow request type starves a backend. Least-connections without slow-start — a freshly-started."
+          },
+          {
+            "kind": "options",
+            "layout": "bullets",
+            "items": [
+              "Round-robin — simple; OK for uniform, stateless workloads",
+              "Least connections — adapts to variable-cost requests; needs per-backend state",
+              "Power-of-two-choices (P2C) — modern default for large fleets; near-optimal with O(1) decision",
+              "Consistent hashing — cache affinity, sticky sessions, key-based routing",
+              "L4 — fast, transport-layer; L7 — smart, HTTP-aware"
+            ]
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "bullets",
+            "items": [
+              "A load balancer's job sounds simple: spread traffic across N backends",
+              "But the choice of algorithm controls tail latency, fairness, and behavior under failure",
+              "The wrong algorithm: Round-robin with variable-cost requests — one slow request type starves a backend",
+              "Least-connections without slow-start — a freshly-started backend gets a cold-cache flood",
+              "Sticky sessions on a stateless app — unbalanced load when one user sends bursts"
+            ]
+          },
+          {
+            "kind": "decision",
+            "layout": "paragraph",
+            "text": "Pick by traffic shape: round-robin for stateless, similar-cost requests; weighted round-robin when nodes have different capacity; least connections when request duration varies (long-poll, file uploads); least response time for latency-sensitive APIs; consistent hashing for cache affinity or sticky sessions; random."
+          },
+          {
+            "kind": "rethink_if",
+            "layout": "callout",
+            "text": "Discuss power-of-two-choices (P2C) as a near-optimal alternative to least-connections at scale, slow-start for new instances, and outlier detection in service mesh proxies."
+          }
+        ],
+        "cap": "Sticky sessions are usually a sign the app should be stateless — push session state to Redis and use round-robin or P2C instead.",
+        "familiarity_anchors": [
+          "Layer"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Walk through what happens to a backend with cold caches when it joins a P2C-balanced fleet without slow-start.",
+          "Compare consistent hashing vs Maglev hashing for an L4 load balancer.",
+          "How do you handle gradual rollouts / canary deploys at the load balancer level?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    }
+  ]
+}

@@ -1,0 +1,768 @@
+{
+  "topic": "Bean Lifecycle",
+  "topicSlug": "bean-lifecycle",
+  "questions": [
+    {
+      "id": "sc-005",
+      "slug": "spring-bean-scopes",
+      "question": "What are Spring bean scopes? How do singleton, prototype, request, and session differ?",
+      "title": "Bean Scopes: Singleton vs Prototype vs Request vs Session",
+      "direct_answer": "Spring **scopes control how many instances of a bean exist** and for how long. **Singleton** (the default) — one shared instance per `ApplicationContext`. **Prototype** — a new instance on every injection or `getBean()` call. **Request and Session** scopes (web-only) — one instance per HTTP request or session. The two production traps: **singleton does not mean thread-safe** (one instance shared across threads = race conditions on mutable state), and **Spring does not call `@PreDestroy` on prototype beans** (cleanup is the caller's responsibility). Injecting request-scoped beans into singletons requires a **scoped proxy** (`@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)`).",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of scope selection and awareness of the 'scoped proxy' problem when injecting a short-lived bean into a singleton.",
+        "common_mistake": "Assuming singleton means thread-safe, or not knowing that Spring does NOT manage the destruction lifecycle of prototype beans after creation.",
+        "to_stand_out": "Explain the scoped-proxy pattern (@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)) needed when injecting a request/session-scoped bean into a singleton."
+      },
+      "company_tags": [
+        "Amazon",
+        "Zalando",
+        "Shopify",
+        "Intuit",
+        "Netflix",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Singleton Doesn't Mean Thread-Safe — and Why Prototype Doesn't Mean Disposable",
+            "content": "Spring's default scope is **singleton** — one instance per `ApplicationContext`, shared by every injection point. Most developers stop there and never think about scope again. There are two misconceptions that cause real bugs.\n\n**Singleton does not mean thread-safe.** Spring creates one instance and hands the same reference to every thread.\n- If that bean has mutable state — a field that changes between requests — every concurrent request sees and modifies the same field.\n- Race conditions are invisible until they corrupt data in production.\n\n**Prototype scope creates a new instance every time** — but Spring does not manage the full lifecycle. There's no `@PreDestroy` call, no destruction callback. If a prototype bean opens a database connection, Spring won't close it. Cleanup is the caller's responsibility.\n\nThe web scopes — `request` and `session` — exist for stateful web interactions where state must be isolated per HTTP request or per user session. Injecting a request-scoped bean into a singleton creates a subtle problem that requires **scoped proxies** to solve."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Five Scopes, Two Lifecycles: What Spring Manages and What It Doesn't",
+            "content": "The critical distinction isn't just 'how many instances' — it's what **lifecycle callbacks Spring guarantees** for each scope. Singleton beans get full lifecycle management including destruction. Prototype beans get creation only.\n\n| Scope | Instances | Lifetime | Thread-safe? | @PreDestroy called? | Web required? |\n|---|---|---|---|---|---|\n| singleton | 1 per container | Application lifetime | Not inherently | Yes | No |\n| prototype | 1 per injection/getBean | Until GC | Yes (isolated) | No | No |\n| request | 1 per HTTP request | HTTP request | Yes | Yes | Yes |\n| session | 1 per HTTP session | HTTP session | Same user, different threads | Yes | Yes |\n| application | 1 per ServletContext | App lifetime | Same as singleton | Yes | Yes |\n| websocket | 1 per WebSocket session | WS session | Yes | Yes | Yes |"
+          },
+          {
+            "type": "step",
+            "title": "The Scoped Proxy Problem — Why Request-Scoped Beans Break in Singletons",
+            "content": "The most practical scope problem is injecting a **request-scoped bean into a singleton**. A singleton is created once at startup — long before any HTTP request exists.\n\n**Why it breaks**\n- A singleton holds a direct reference to a request-scoped bean — that reference points to nothing (or a stale instance from a previous request)\n- Spring tries to create the request-scoped bean at startup, outside any request, and throws `BeanCreationException` with the message `'no thread-bound request found'`\n\n**The fix — scoped proxy**\n- Declare `@Scope(value = \"request\", proxyMode = ScopedProxyMode.TARGET_CLASS)`\n- Spring injects a CGLIB proxy instead of the real bean\n- The proxy delegates every method call to the current request's actual instance, looked up from `RequestAttributes` at call time\n\n```java\n@Component\n@Scope(value = \"request\", proxyMode = ScopedProxyMode.TARGET_CLASS)\npublic class RequestContext {\n    private String correlationId;\n}\n\n@Service\npublic class AuditService {\n    private final RequestContext ctx;\n    public AuditService(RequestContext ctx) { this.ctx = ctx; }\n}\n```\n\n**Proxy mode options**\n- `ScopedProxyMode.TARGET_CLASS` uses CGLIB subclass proxy — works for concrete classes\n- `ScopedProxyMode.INTERFACES` uses JDK dynamic proxy — only works if the bean implements an interface\n- Most teams default to `TARGET_CLASS` for flexibility"
+          },
+          {
+            "type": "step",
+            "title": "Custom Scopes, Proxy Internals, and the @RefreshScope Pattern",
+            "content": "Beyond the five built-in scopes, Spring supports **custom scopes** essential for tenant isolation in multi-tenant SaaS applications and batch processing contexts.\n\n**Implementing a custom scope**\n- Register a `Scope` implementation that manages object lifecycle within your custom boundary\n- Typically uses `ThreadLocal` to store scoped instances per thread\n- Register via `beanFactory.registerScope(\"tenant\", new TenantScope())`\n\n```java\npublic class TenantScope implements Scope {\n    private final ThreadLocal<Map<String, Object>> scopedObjects =\n        ThreadLocal.withInitial(HashMap::new);\n\n    @Override\n    public Object get(String name, ObjectFactory<?> factory) {\n        Map<String, Object> scope = scopedObjects.get();\n        return scope.computeIfAbsent(name, k -> factory.getObject());\n    }\n\n    @Override\n    public Object remove(String name) {\n        return scopedObjects.get().remove(name);\n    }\n}\n```\n\n**Scope proxy internals — the per-call cost**\n- Every method call on a scoped proxy involves a scope lookup — roughly 50 nanoseconds overhead\n- For hot paths, cache the result in a local variable rather than calling proxy methods repeatedly\n- The CGLIB proxy is shared across all consumers — only the underlying instance changes per scope boundary\n\n**`@RefreshScope` (Spring Cloud)**\n- Beans annotated with `@RefreshScope` are destroyed and recreated when `/actuator/refresh` is called\n- Enables dynamic configuration updates without restart\n- Caveat: in-flight requests using the old bean instance continue with stale state until completion"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Singleton does not mean thread-safe** — Spring creates one shared instance and gives the same reference to every thread; mutable state in a singleton bean is a race condition.\n- **Prototype: Spring creates but never destroys** — Spring instantiates a new prototype on every injection or `getBean()` call but never calls `@PreDestroy`; resources must be closed by the calling code.\n- **Scoped proxy required for request/session beans in singletons** — a singleton is created at startup before any HTTP request exists; `@Scope(value=\"request\", proxyMode=ScopedProxyMode.TARGET_CLASS)` injects a CGLIB proxy that resolves the actual bean per-request at call time.\n- **`BeanCreationException: no thread-bound request found`** — the startup error when a request-scoped bean is injected into a singleton without `proxyMode`.\n- **`@Scope(\"prototype\")` + `ObjectProvider<T>` for fresh instances in singletons** — injecting a prototype directly into a singleton produces one shared instance; `ObjectProvider.getObject()` creates a fresh prototype on every call.\n- **Custom scopes for tenant isolation** — implement `Scope` interface and register via `beanFactory.registerScope()`; common pattern in multi-tenant SaaS."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring's default scope is singleton — one instance per `ApplicationContext`, shared across all threads. Most developers never change this and assume it means safe. Two misconceptions cause real bugs.\n\n**Singleton**\n- One instance per container, shared across all threads — mutable state in a singleton bean is a race condition waiting to happen\n- Full lifecycle: Spring calls `@PostConstruct` and `@PreDestroy`; the bean lives for the entire application lifetime\n\n**Prototype**\n- New instance every time the bean is injected or `getBean()` is called — isolated, no sharing between threads\n- Spring creates but never destroys prototype beans; `@PreDestroy` is never called; if the prototype holds a database connection or file handle, the calling code must close it\n\n**Request and Session scopes**\n- One instance per HTTP request or per HTTP session — correct for per-user or per-request state\n- Injecting a request-scoped bean into a singleton is the most common scope trap: the singleton is created at startup before any request exists; Spring throws `BeanCreationException: no thread-bound request found`\n- Fix: `@Scope(value=\"request\", proxyMode=ScopedProxyMode.TARGET_CLASS)` — Spring injects a CGLIB proxy; each method call resolves the real request-scoped bean from the current thread\n\nUse singleton for stateless services (the default), prototype when you need isolated mutable state per use, request/session for web-specific state. Never store per-request state in a singleton field."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you inject a prototype-scoped bean into a singleton without getting the same instance every time?",
+        "Why doesn't Spring call @PreDestroy on prototype beans?",
+        "What is ScopedProxyMode.TARGET_CLASS and when would you use it over INTERFACES?",
+        "How does @RefreshScope work and what are its limitations?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Bean Scopes Explained: Singleton, Prototype, Request, Session | Java Guide",
+        "metaDescription": "Master Spring bean scopes — singleton vs prototype vs request vs session — including the scoped proxy pattern for injecting short-lived beans into singletons."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring's default scope is singleton — one instance per ApplicationContext, shared across all threads.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring's default scope is singleton — one instance per ApplicationContext, shared by every injection point. Most developers stop there and never think about scope again. There are two misconceptions that cause real bugs. Singleton does not mean thread-safe. Spring creates one instance and hands the same reference to every thread. If that bean has mutable state — a field that changes between requests — every concurrent request sees and modifies the same field. Race conditions are invisible until they corrupt."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical knowledge of scope selection and awareness of the 'scoped proxy' problem when injecting a short-lived bean into a singleton."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Singleton does not mean thread-safe — Spring creates one shared instance and gives the same reference to every thread; mutable state in a singleton bean is a race condition",
+              "Prototype: Spring creates but never destroys — Spring instantiates a new prototype on every injection or getBean() call but never calls @PreDestroy; resources must be closed by the calling code",
+              "Scoped proxy required for request/session beans in singletons — a singleton is created at startup before any HTTP request exists; @Scope(value=\"request\", proxyMode=ScopedProxyMode",
+              "TARGET_CLASS) injects a CGLIB proxy that resolves the actual bean per-request at call time",
+              "BeanCreationException: no thread-bound request found — the startup error when a request-scoped bean is injected into a singleton without proxyMode"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring's default scope is singleton — one instance per ApplicationContext, shared by every injection point. Most developers stop there and never think about scope again. There are two misconceptions that cause real bugs. Singleton does not mean thread-safe. Spring creates one instance and hands the same reference to every thread. If that bean has mutable state — a field that changes between requests — every concurrent request sees and modifies the same field. Race conditions are invisible until they corrupt data in production. Prototype scope creates a new instance every time — but Spring does not manage the full lifecycle. There's no @PreDestroy call, no destruction callback. If a prototype bean opens a database connection, Spring won't close it. Cleanup."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Assuming singleton means thread-safe, or not knowing that Spring does NOT manage the destruction lifecycle of prototype beans after creation"
+            ]
+          }
+        ],
+        "cap": "Never store per-request state in a singleton field.",
+        "familiarity_anchors": [
+          "Spring",
+          "Singleton",
+          "ApplicationContext"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you inject a prototype-scoped bean into a singleton without getting the same instance every time?",
+          "Why doesn't Spring call @PreDestroy on prototype beans?",
+          "What is ScopedProxyMode.TARGET_CLASS and when would you use it over INTERFACES?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "prototype-in-singleton",
+      "slug": "prototype-in-singleton-problem",
+      "question": "What happens when you inject a prototype-scoped bean into a singleton bean?",
+      "title": "Prototype Bean in Singleton — The Scoping Trap",
+      "direct_answer": "Spring injects the prototype **once** during the singleton's construction, and the singleton holds that same instance forever — the prototype becomes a **de facto singleton**. The fix is to **defer instantiation to the point of use**. The idiomatic Spring 4+ solution is **`ObjectProvider<T>`** — inject `ObjectProvider<MyPrototype>` (singleton-scoped itself) and call `.getObject()` every time you need a fresh instance. Alternatives: **`@Lookup` methods** (Spring generates a CGLIB subclass that overrides the method to fetch from the container), or injecting `ApplicationContext` and calling `getBean(...)` directly (service locator, not recommended). **Not a valid fix**: scoped proxies — those are for request/session scopes that have a well-defined lifecycle, not prototype.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand scope mismatch — prototype inside singleton — and know the correct resolution (ObjectProvider, @Lookup) without resorting to ApplicationContextAware",
+        "common_mistake": "Thinking a scoped proxy fixes prototype-in-singleton; not realizing field-injected prototypes are shared for the singleton's entire lifetime",
+        "to_stand_out": "Compare ObjectProvider, @Lookup, and Provider<T> (JSR-330); explain why scoped proxies don't work for prototype"
+      },
+      "company_tags": [
+        "Amazon",
+        "Pivotal",
+        "Netflix",
+        "Atlassian",
+        "Red Hat",
+        "Google"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Injection That Happens Once When You Expected It to Happen Every Time",
+            "content": "Injecting a prototype-scoped bean into a singleton is one of Spring's most common traps.\n- The developer expects a **fresh instance** on every use — that's why they chose prototype scope.\n- But Spring injects the prototype once during the singleton's construction, and the singleton holds that same instance forever.\n- The prototype becomes a **de facto singleton**, defeating the entire purpose of prototype scope.\n\nThe root cause is **scope mismatch**.\n- Singleton beans are created once and their dependencies are injected once.\n- When a prototype bean is declared as a constructor or field dependency, Spring resolves it during singleton creation, creates one prototype instance, and injects it.\n- From that point on, the singleton holds a fixed reference.\n- No mechanism exists to re-inject the field later.\n\nThis manifests as a **concurrency bug or state leak**.\n- A prototype bean is typically used because it holds per-use state — a request tracker, a parser with internal buffers, a computation context.\n- When it's shared across threads via a singleton, that per-use state is corrupted.\n- Two concurrent requests write to the same object, and the output is a mixture of both.\n\nThe fix is to avoid holding a prototype as a field entirely. Instead, ask Spring for a new instance each time. Spring provides three mechanisms: **`ObjectProvider<T>`**, **`ObjectFactory<T>`**, and **`@Lookup` method injection**. `ObjectProvider` is recommended — type-safe, well-documented, no CGLIB subclassing required."
+          },
+          {
+            "type": "before_code",
+            "title": "Broken — Prototype Injected Once, Shared Across All Calls",
+            "content": "Calling `reset()` doesn't make this safe. Two threads calling `generate()` concurrently both call `reset()` and `loadData()` on the same `context` object, interleaving their data.\n\n```java\n@Service\npublic class ReportService {\n    private final ReportContext context;\n\n    public ReportService(ReportContext context) {\n        this.context = context;\n    }\n\n    public Report generate(ReportRequest request) {\n        context.reset();\n        context.loadData(request);\n        return context.build();\n    }\n}\n```\n\nThe `context` field was injected exactly once at singleton creation time. Every call to `generate()` operates on the same prototype instance — race conditions in single-process, state accumulation in single-threaded use."
+          },
+          {
+            "type": "after_code",
+            "title": "Fixed — Fresh Prototype on Every Call via ObjectProvider",
+            "content": "`ObjectProvider` wraps the bean factory's prototype creation — functionally equivalent to `applicationContext.getBean(ReportContext.class)` but without coupling your code to the `ApplicationContext` API.\n\n```java\n@Service\npublic class ReportService {\n    private final ObjectProvider<ReportContext> contextProvider;\n\n    public ReportService(ObjectProvider<ReportContext> contextProvider) {\n        this.contextProvider = contextProvider;\n    }\n\n    public Report generate(ReportRequest request) {\n        ReportContext context = contextProvider.getObject();\n        context.loadData(request);\n        return context.build();\n    }\n}\n```\n\nEach call to `getObject()` creates a fresh `ReportContext`. No sharing, no reset, no thread-safety concerns. Spring does **not** manage prototype destruction — the instance returned from `getObject()` is yours to manage. If it holds resources (connections, file handles), close them explicitly; `@PreDestroy` is never called."
+          },
+          {
+            "type": "step",
+            "title": "Three Solutions to Scope Mismatch — Trade-offs Compared",
+            "content": "Spring provides three solutions for the prototype-in-singleton problem.\n\n**`ObjectProvider<T>` — recommended**\n- Inject `ObjectProvider<PrototypeBean>` and call `.getObject()` each time you need a new instance\n- The provider itself is singleton-scoped, but each `getObject()` call creates a new prototype\n- Cleanest solution — no AOP proxy, no container coupling, testable without Spring\n- Also supports `getIfAvailable()`, `getIfUnique()`, and stream operations for advanced cases\n\n**Scoped proxy (`@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)`)**\n- Spring wraps the prototype in a CGLIB proxy; every call through the proxy creates a new prototype\n- Singleton receives the proxy instead of a real instance — transparent from its perspective\n- Requires CGLIB bytecode manipulation, adds complexity in stack traces (proxy classes appear in debugging)\n- Useful when you cannot change the singleton class\n\n**`ApplicationContext.getBean()`**\n- Call `getBean(PrototypeBean.class)` each time\n- Works but couples business logic to the Spring container — code smell\n- Acceptable in infrastructure code (factories, adapters) where Spring dependency is already explicit\n\n**`@Lookup` method injection — the legacy alternative**\n- Annotate an abstract method with `@Lookup`; Spring generates a CGLIB subclass that overrides it to return a new prototype on every call\n- No field, no provider dependency, but requires CGLIB and the method must not be `final` or `private`\n\n**When prototype is the wrong design choice**\n- If state is request-specific, use request scope (`@Scope(\"request\")`) in a web application\n- If state is conversation-specific, use session scope\n- If the only reason the bean is a Spring bean is that it has dependencies, consider a factory bean or builder pattern\n- Prototype scope is correct when the bean needs the full Spring lifecycle: `@PostConstruct`, AOP wrapping, `@Autowired` dependencies on the prototype itself"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Prototype injected into singleton becomes a singleton** — Spring injects the prototype exactly once during singleton construction; the singleton holds that same instance forever, defeating prototype scope.\n- **`ObjectProvider<T>` is the clean fix** — inject `ObjectProvider<PrototypeBean>` and call `.getObject()` each time you need a fresh instance; the provider is singleton-scoped, creation happens at call time.\n- **`ApplicationContext.getBean()` works but is a code smell** — coupling business logic to the Spring API is an anti-pattern; use `ObjectProvider` or `@Lookup` instead.\n- **`@Lookup` method injection uses CGLIB** — Spring subclasses the singleton and overrides the annotated abstract method to return a new prototype instance; no field, no provider dependency, but requires CGLIB subclassing.\n- **Spring never calls `@PreDestroy` on prototype instances** — resource cleanup is the caller's responsibility regardless of how the prototype was obtained.\n- **Scoped proxies do not work for prototype scope** — `proxyMode` is for request/session scopes with a well-defined lifecycle boundary; prototype has no boundary."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Injecting a prototype-scoped bean into a singleton is one of Spring's most common traps. The developer expects a fresh instance on every use — that's why they chose prototype. But Spring injects the prototype exactly once during the singleton's construction and never again. The prototype becomes a de facto singleton.\n\n**Why it happens**\n- Singleton beans are created once and their dependencies are injected once\n- When a prototype is a constructor or field dependency of a singleton, Spring resolves it at singleton creation time — one prototype instance, held forever\n- Two concurrent requests share the prototype's mutable state — data corruption that appears intermittently\n\n**The fix: `ObjectProvider`**\n- Inject `ObjectProvider<PrototypeBean>` instead of the bean itself — the provider is singleton-scoped\n- Call `.getObject()` each time you need a fresh instance — Spring creates a new prototype on every call\n- Cleaner than `ApplicationContext.getBean()`, which couples business code to the Spring API\n\n**The `@Lookup` alternative**\n- Annotate an abstract method with `@Lookup` — Spring CGLIB-subclasses the singleton and overrides the method to return a new prototype instance on every call\n\nSpring never calls `@PreDestroy` on prototype beans, regardless of how they were obtained. If the prototype holds resources, the calling code owns cleanup."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why don't scoped proxies work for prototype-scoped beans?",
+        "How does @Lookup generate a subclass, and what are its limitations?",
+        "When would you prefer ObjectProvider over Provider<T> from JSR-330?",
+        "Does Spring call @PreDestroy on prototype beans retrieved via ObjectProvider?"
+      ],
+      "seo": {
+        "metaTitle": "Prototype Bean in Singleton — The Spring Scoping Trap",
+        "metaDescription": "Injecting a prototype bean into a singleton creates a de facto singleton. Fix with ObjectProvider, @Lookup, or Provider<T> for fresh instances."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Injecting a prototype-scoped bean into a singleton is one of Spring's most common traps.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Injecting a prototype-scoped bean into a singleton is one of Spring's most common traps. The developer expects a fresh instance on every use — that's why they chose prototype scope. But Spring injects the prototype once during the singleton's construction, and the singleton holds that same instance forever. The prototype becomes a de facto singleton, defeating the entire purpose of prototype scope. The root cause is scope mismatch. Singleton beans are created once and their dependencies are injected once. When."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand scope mismatch — prototype inside singleton — and know the correct resolution (ObjectProvider, @Lookup) without resorting to ApplicationContextAware"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Prototype injected into singleton becomes a singleton — Spring injects the prototype exactly once during singleton construction; the singleton holds that same instance forever, defeating prototype scope",
+              "ObjectProvider<T> is the clean fix — inject ObjectProvider<PrototypeBean> and call",
+              "getObject() each time you need a fresh instance; the provider is singleton-scoped, creation happens at call time",
+              "ApplicationContext",
+              "getBean() works but is a code smell — coupling business logic to the Spring API is an anti-pattern; use ObjectProvider or @Lookup instead"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Calling reset() doesn't make this safe. Two threads calling generate() concurrently both call reset() and loadData() on the same context object, interleaving their data. ``java @Service public class ReportService { private final ReportContext context; public ReportService(ReportContext context) { this.context = context; } public Report generate(ReportRequest request) { context.reset(); context.loadData(request); return context.build(); } } ` The context field was injected exactly once at singleton creation time. Every call to generate()` operates on the same prototype instance — race conditions in single-process, state accumulation in single-threaded use."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking a scoped proxy fixes prototype-in-singleton",
+              "not realizing field-injected prototypes are shared for the singleton's entire lifetime"
+            ]
+          }
+        ],
+        "cap": "If the prototype holds resources, the calling code owns cleanup.",
+        "familiarity_anchors": [
+          "Spring",
+          "ObjectProvider",
+          "MyPrototype"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why don't scoped proxies work for prototype-scoped beans?",
+          "How does @Lookup generate a subclass, and what are its limitations?",
+          "When would you prefer ObjectProvider over Provider<T> from JSR-330?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-001",
+      "slug": "spring-bean-lifecycle",
+      "question": "Can you walk me through the complete Spring Bean lifecycle from instantiation to destruction?",
+      "title": "Spring Bean Lifecycle",
+      "direct_answer": "A Spring bean follows a precise sequence: **instantiation** (constructor) → **dependency injection** (`@Autowired` fields/setters) → **`*Aware` callbacks** (`BeanNameAware`, `ApplicationContextAware`) → **`BeanPostProcessor.postProcessBeforeInitialization`** → **initialization callbacks** (`@PostConstruct` → `InitializingBean.afterPropertiesSet()` → `@Bean(initMethod)`) → **`BeanPostProcessor.postProcessAfterInitialization`** (where AOP proxies are created) → **bean ready** → **`@PreDestroy`** on context shutdown. Two facts most developers miss: **`@Autowired` fields are null in the constructor body** (field injection fires after construction), and **`@PreDestroy` never runs on prototype beans or on SIGKILL** — only on graceful singleton shutdown.",
+      "layout_type": "lifecycle-timeline",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the container's role and can reason about ordering bugs (e.g., using a dependency before injection is complete).",
+        "common_mistake": "Confusing @PostConstruct with the constructor, or not knowing that InitializingBean.afterPropertiesSet runs before @PostConstruct.",
+        "to_stand_out": "Mention BeanPostProcessor hooks (postProcessBeforeInitialization / postProcessAfterInitialization) and how they power AOP proxying."
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Uber",
+        "Booking.com",
+        "Microsoft",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why the Order of Six Lifecycle Phases Matters — and Where Most Bugs Hide",
+            "content": "The Spring IoC container manages each bean through a **precisely ordered sequence** of callbacks that gives developers hooks at every critical transition. Every annotation-driven feature — `@Autowired`, `@PostConstruct`, `@Transactional`, `@PreDestroy` — fires at a specific point in that sequence.\n\nUnderstanding the order is the difference between debugging a `NullPointerException` for ten minutes and diagnosing it instantly. The same goes for `@Transactional` not working on a self-call, `@PreDestroy` not firing on a prototype bean, or `@PostConstruct` running before a dependency is fully wired.\n\nThe lifecycle has **seven distinct phases**: instantiation, dependency injection, `*Aware` callbacks, `BeanPostProcessor.before`, initialization callbacks, `BeanPostProcessor.after` (where AOP proxies are created), then the bean serves traffic until destruction. The destruction phase runs in **reverse creation order** so beans are destroyed before the beans they depend on."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The Full Lifecycle — Seven Phases from Constructor to @PreDestroy",
+            "content": "The diagram makes two facts visible that prose alone hides: **AOP proxies replace your bean at step 6** (any reference to `this` inside the bean is the un-proxied original — the reason `@Transactional` self-calls don't work), and **`@PreDestroy` only runs on graceful shutdown** — SIGKILL skips destruction entirely.\n\n```mermaid\nflowchart TB\n    Start([\"Container starts\"])\n    Inst[\"1. Instantiation<br/>constructor called\"]\n    Inject[\"2. Dependency Injection<br/>@Autowired fields/setters\"]\n    Aware[\"3. *Aware callbacks<br/>BeanNameAware, ApplicationContextAware\"]\n    Before[\"4. BeanPostProcessor<br/>postProcessBeforeInitialization\"]\n    Init[\"5. Init callbacks<br/>@PostConstruct then afterPropertiesSet then initMethod\"]\n    After[\"6. BeanPostProcessor<br/>postProcessAfterInitialization<br/>AOP proxies created here\"]\n    Use([\"Bean ready<br/>serves requests\"])\n    Destroy[\"7. Destruction<br/>@PreDestroy then DisposableBean<br/>then @Bean destroyMethod\"]\n    Done([\"Context closed\"])\n    Sigkill([\"SIGKILL: skips destruction\"])\n\n    Start --> Inst --> Inject --> Aware --> Before --> Init --> After --> Use\n    Use -- \"context.close() / SIGTERM\" --> Destroy --> Done\n    Use -.-> Sigkill\n```"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 1 & 2 — Instantiation and Injection: Why Constructor Code Can't See @Autowired Fields",
+            "content": "The first two phases happen in quick succession but are **distinct operations** with different timing characteristics.\n\n**Instantiation (Phase 1)**\n- Spring calls the constructor — either the no-arg constructor or the `@Autowired` constructor\n- For constructor injection, dependencies are resolved from the context and passed as arguments\n- Dependencies are available from the first line of the constructor body\n\n**Dependency Injection (Phase 2)**\n- After the constructor returns, `AutowiredAnnotationBeanPostProcessor` runs in the `postProcessProperties` phase\n- Uses reflection to scan for `@Autowired`, `@Value`, and `@Inject` annotations on fields and setters\n- Calls `Field.setAccessible(true)` and writes the resolved bean directly into the field\n- If a required dependency cannot be resolved, the context fails to start\n\n**The crucial timing difference**\n- Field-injected dependencies are **null inside the constructor body** because the post-processor hasn't run yet\n- Reading an `@Autowired` field in a constructor causes `NullPointerException`\n\n```java\n@Component\npublic class ReportService {\n    @Autowired private DataSource dataSource;\n\n    public ReportService() {\n        // dataSource is NULL — injection has not happened yet\n        // dataSource.getConnection(); -> NullPointerException\n    }\n\n    @PostConstruct\n    void init() {\n        dataSource.getConnection();\n    }\n}\n```\n\n**The fix**\n- Use constructor injection — dependencies available from line one\n- Or move initialization logic to `@PostConstruct` — fires after all injection is complete"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 3, 4, 5 — Aware Callbacks, BPP.before, and Init Callbacks in Order",
+            "content": "After dependency injection, three sub-phases run before the bean is considered initialized.\n\n**`*Aware` callbacks (Phase 3)**\n- Spring calls `setBeanName(String)`, `setBeanFactory(BeanFactory)`, `setApplicationContext(ApplicationContext)` if implemented\n- Allows beans to access container metadata directly\n- Modern code prefers constructor-injecting `ApplicationContext` instead of implementing `ApplicationContextAware`\n\n**`BeanPostProcessor.postProcessBeforeInitialization` (Phase 4)**\n- Iterates over all registered `BeanPostProcessor` implementations\n- Each can inspect, modify, or replace the bean before initialization callbacks\n- `CommonAnnotationBeanPostProcessor` registers `@PostConstruct` methods to be invoked next\n\n**Initialization callbacks (Phase 5) — strict order when multiple coexist**\n- `@PostConstruct` fires first — JSR-250 standard, framework-agnostic, recommended for new code\n- `InitializingBean.afterPropertiesSet()` fires second — Spring's older interface approach, avoid in new code\n- `@Bean(initMethod = \"setup\")` fires last — for third-party classes you cannot annotate\n\n```java\n@Component\npublic class CacheWarmer implements InitializingBean {\n    @PostConstruct\n    void postConstruct() { log.info(\"1. @PostConstruct\"); }\n\n    @Override\n    public void afterPropertiesSet() { log.info(\"2. afterPropertiesSet\"); }\n\n    void customInit() { log.info(\"3. initMethod\"); }\n}\n```\n\n**Practical rule**\n- Use `@PostConstruct` for your own classes\n- Use `@Bean(initMethod)` for third-party classes\n- Avoid `InitializingBean` unless extending Spring framework code"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 6 — BeanPostProcessor.after: Where @Transactional and @Cacheable Become Proxies",
+            "content": "After initialization callbacks complete, Spring invokes `BeanPostProcessor.postProcessAfterInitialization`. This is the **most powerful lifecycle extension point** — it can return an entirely different object than the one passed in.\n\n**How proxy creation works**\n- `AbstractAutoProxyCreator` (a `BeanPostProcessor`) detects `@Transactional`, `@Async`, `@Cacheable` annotations\n- Instead of returning the original bean, it returns a **CGLIB or JDK dynamic proxy** wrapping the original\n- The proxy intercepts every external call to manage transactions, caching, async dispatch\n\n**The self-invocation trap**\n- Calling another method on `this` from inside the bean bypasses the proxy entirely\n- The original object handles the call directly — no transaction management, no caching, no aspect\n- The proxy only intercepts calls that come through the **injected reference**, not internal calls\n\n```java\n@Service\npublic class OrderService {\n    public void outer() {\n        this.inner(); // bypasses proxy — no transaction!\n    }\n\n    @Transactional\n    public void inner() { /* ... */ }\n}\n```\n\n**The same mechanism powers**\n- `@Transactional` — transaction interceptor\n- `@Cacheable` — caching interceptor\n- `@Async` — async dispatch interceptor\n- `@Retry`, `@CircuitBreaker` — resilience4j and similar libraries\n\nUnderstanding that these work through post-processing proxies explains most of the 'why doesn't my annotation work?' debugging scenarios."
+          },
+          {
+            "type": "phase",
+            "title": "Phase 7 — Destruction: @PreDestroy Runs for Singletons Only and Only on Graceful Shutdown",
+            "content": "When the `ApplicationContext` shuts down — through `context.close()` or the JVM shutdown hook registered by `SpringApplication` — Spring calls destruction callbacks on **singleton beans in reverse creation order**.\n\n**Destruction callback order (mirrors initialization)**\n- `@PreDestroy` first — JSR-250 standard, recommended\n- `DisposableBean.destroy()` second — Spring's older interface approach\n- `@Bean(destroyMethod = \"cleanup\")` last — for third-party classes\n\n```java\n@Component\npublic class ConnectionPool {\n    private final HikariDataSource ds;\n\n    @PreDestroy\n    void shutdown() {\n        ds.close();\n        log.info(\"Pool closed gracefully\");\n    }\n}\n```\n\n**Reverse order matters**\n- If `OrderService` depends on `PaymentService`, `OrderService` is destroyed first\n- Guarantees `PaymentService` is still functional during `OrderService` cleanup\n- Avoids cascading null references during shutdown\n\n**Two cases where `@PreDestroy` does NOT run**\n- **Prototype beans** — Spring does not track prototype instances after creation; no reference to call destroy on\n- **SIGKILL or `kill -9`** — the JVM dies without executing any shutdown hooks; only SIGTERM, `docker stop`, and Kubernetes graceful termination trigger `@PreDestroy`\n\n**Production consequence**\n- Never store critical state in `@PreDestroy` — persist it during normal operation\n- Use `@PreDestroy` only for releasing local resources the kernel won't clean up: connection pools, thread pools, file locks"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Autowired` fields are null in the constructor** — field injection fires in `postProcessProperties` after construction, not during; use constructor injection or move initialization to `@PostConstruct`.\n- **Initialization callback order: `@PostConstruct` then `afterPropertiesSet()` then `initMethod`** — when a bean implements multiple mechanisms, they fire in this sequence; `@PostConstruct` always runs first.\n- **`BeanPostProcessor.postProcessAfterInitialization` creates proxies** — `@Transactional`, `@Async`, and `@Cacheable` replace the original bean with a CGLIB proxy here; what other beans inject may be a proxy, not the original class.\n- **Self-invocation bypasses the proxy** — `this.method()` from inside the bean hits the original object directly, skipping `@Transactional`, `@Cacheable`, etc.; the proxy only intercepts calls through the injected reference.\n- **`@PreDestroy` is never called on prototype beans** — Spring does not track prototype instances after creation; resource cleanup is the caller's responsibility.\n- **`BeanFactoryPostProcessor` modifies bean definitions; `BeanPostProcessor` modifies bean instances** — `PropertySourcesPlaceholderConfigurer` is a `BeanFactoryPostProcessor`; `AutowiredAnnotationBeanPostProcessor` is a `BeanPostProcessor`.\n- **Destruction runs in reverse creation order** — singletons are destroyed before the beans they depend on, guaranteeing clean shutdown sequencing.\n- **SIGKILL skips `@PreDestroy` entirely** — only SIGTERM and explicit `context.close()` trigger destruction callbacks; never store critical state in `@PreDestroy`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Spring bean lifecycle is a precisely ordered sequence of phases. Every annotation-driven feature — `@Autowired`, `@PostConstruct`, `@Transactional`, `@PreDestroy` — fires at a specific point in that sequence. Knowing the order explains the bugs.\n\n**Instantiation and injection**\n- Constructor injection: dependencies are resolved first, then the constructor runs — the object is fully wired from line one\n- Field/setter injection: the constructor runs first (no-arg), then `AutowiredAnnotationBeanPostProcessor` fires in `postProcessProperties` — `@Autowired` fields are null inside the constructor body\n\n**Initialization callbacks — in this order**\n- `@PostConstruct` fires first — the safe place for startup logic that depends on injected collaborators\n- `InitializingBean.afterPropertiesSet()` fires second — Spring's older interface approach, avoid in new code\n- `@Bean(initMethod)` fires last — for third-party classes you cannot annotate\n\n**`BeanPostProcessor` — where proxies are created**\n- `postProcessAfterInitialization` runs after all callbacks; it can return a different object\n- This is how `@Transactional`, `@Async`, and `@Cacheable` replace the bean with a CGLIB proxy\n- Self-invocation via `this` bypasses the proxy — which is why `@Transactional` on an internal call does not work\n\n**Destruction**\n- `@PreDestroy` runs on singletons in reverse creation order when the context shuts down\n- Prototype beans are handed off and never get `@PreDestroy` — Spring cannot call what it does not track\n- SIGKILL skips destruction entirely — only SIGTERM and explicit `context.close()` trigger callbacks"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens to prototype-scoped beans during destruction — does Spring call @PreDestroy on them?",
+        "How does BeanPostProcessor differ from BeanFactoryPostProcessor?",
+        "Why does calling a @Transactional method via 'this' bypass the transaction?",
+        "What is the difference between @PostConstruct and InitializingBean.afterPropertiesSet?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Bean Lifecycle Explained | Java Intermediate Interview Guide",
+        "metaDescription": "Understand the complete Spring bean lifecycle — instantiation, dependency injection, @PostConstruct, BeanPostProcessor AOP proxy creation, and @PreDestroy — with code examples."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "The Spring bean lifecycle is a precisely ordered sequence of phases.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The Spring IoC container manages each bean through a precisely ordered sequence of callbacks that gives developers hooks at every critical transition. Every annotation-driven feature — @Autowired, @PostConstruct, @Transactional, @PreDestroy — fires at a specific point in that sequence. Understanding the order is the difference between debugging a NullPointerException for ten minutes and diagnosing it instantly. The same goes for @Transactional not working on a self-call, @PreDestroy not firing on a prototype bean, or @PostConstruct running before a dependency is."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the container's role and can reason about ordering bugs (e.g., using a dependency before injection is complete)."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@Autowired fields are null in the constructor — field injection fires in postProcessProperties after construction, not during; use constructor injection or move initialization to @PostConstruct",
+              "Initialization callback order: @PostConstruct then afterPropertiesSet() then initMethod — when a bean implements multiple mechanisms, they fire in this sequence; @PostConstruct always runs first",
+              "BeanPostProcessor",
+              "postProcessAfterInitialization creates proxies — @Transactional, @Async, and @Cacheable replace the original bean with a CGLIB proxy here; what other beans inject may be a proxy, not the original class",
+              "Self-invocation bypasses the proxy — this"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The Spring IoC container manages each bean through a precisely ordered sequence of callbacks that gives developers hooks at every critical transition. Every annotation-driven feature — @Autowired, @PostConstruct, @Transactional, @PreDestroy — fires at a specific point in that sequence. Understanding the order is the difference between debugging a NullPointerException for ten minutes and diagnosing it instantly. The same goes for @Transactional not working on a self-call, @PreDestroy not firing on a prototype bean, or @PostConstruct running before a dependency is fully wired. The lifecycle has seven distinct phases: instantiation, dependency injection, *Aware callbacks, BeanPostProcessor.before, initialization callbacks, BeanPostProcessor.after (where AOP proxies are created), then the bean serves traffic until destruction. The destruction phase runs in reverse creation order so beans are."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing @PostConstruct with the constructor, or not knowing that InitializingBean",
+              "afterPropertiesSet runs before @PostConstruct"
+            ]
+          }
+        ],
+        "cap": "Instantiation and injection Constructor injection: dependencies are resolved first, then the constructor runs — the object is fully wired from line one Field/setter injection: the constructor runs fir",
+        "familiarity_anchors": [
+          "Spring",
+          "Autowired",
+          "Aware"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens to prototype-scoped beans during destruction — does Spring call @PreDestroy on them?",
+          "How does BeanPostProcessor differ from BeanFactoryPostProcessor?",
+          "Why does calling a @Transactional method via 'this' bypass the transaction?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-postconstruct-predestroy",
+      "slug": "postconstruct-predestroy-spring",
+      "question": "How do @PostConstruct and @PreDestroy work — bean initialization and destruction callbacks?",
+      "title": "@PostConstruct and @PreDestroy — Bean Initialization and Destruction Callbacks",
+      "direct_answer": "**`@PostConstruct`** marks a method Spring calls after the bean is fully constructed and all dependencies are injected — the safe place for initialization logic that uses `@Autowired` collaborators (the constructor can't, for field injection). **`@PreDestroy`** marks a method called when the container shuts down — close resources, flush caches, stop schedulers. Callback order on a single bean: `@PostConstruct` → `InitializingBean.afterPropertiesSet()` → custom `@Bean(initMethod=\"...\")`. Destruction mirrors in reverse, in reverse bean-creation order. **Critical gotcha**: `@PreDestroy` never fires on prototype beans — Spring creates them but doesn't track them after creation. In Jakarta EE migration (Spring Boot 3+), imports moved from `javax.annotation` to `jakarta.annotation`.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know why constructors aren't safe for field-injected dependencies, the callback ordering when multiple mechanisms coexist, and the prototype destruction gotcha",
+        "common_mistake": "Using @PostConstruct to initialize state that could go in the constructor; assuming @PreDestroy runs on prototype beans; forgetting the Jakarta migration (javax → jakarta) in Boot 3",
+        "to_stand_out": "Explain when to prefer constructor injection + final fields (eliminates the @PostConstruct need), discuss that @PreDestroy only runs on graceful shutdown (not kill -9), and mention the Boot 3 jakarta.annotation migration"
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Pivotal",
+        "Atlassian",
+        "Microsoft",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why You Can't Use @Autowired Fields in the Constructor — and What @PostConstruct Fixes",
+            "content": "The problem `@PostConstruct` solves is a **timing gap** in the bean lifecycle.\n- When Spring creates a bean, the constructor runs first.\n- If the bean uses field injection, `@Autowired` fields are `null` during the constructor — they haven't been injected yet.\n- Any initialization logic that depends on injected collaborators fails with `NullPointerException`.\n\n`@PostConstruct` marks a method that Spring calls **after dependency injection is complete** but before the bean is put into service. It's the safe place for startup logic: warming caches, validating configuration, opening connections, or registering listeners.\n\n`@PreDestroy` is the mirror — it runs when the `ApplicationContext` shuts down, giving the bean a chance to release resources cleanly. Close connection pools, flush buffers, deregister from external services. Together, these two annotations cover the **initialization and cleanup** that constructors and finalizers can't handle reliably.\n\nThe important caveat is scope. **`@PreDestroy` only runs for singleton beans.** Spring doesn't track prototype instances after creation — there's no shutdown hook, no destruction callback. If a prototype bean acquires resources, the calling code must close them explicitly."
+          },
+          {
+            "type": "step",
+            "title": "The Callback Order — @PostConstruct, InitializingBean, initMethod",
+            "content": "When a bean uses multiple initialization mechanisms, Spring fires them in a **specific order**. Understanding this order matters because it determines which callback sees which state.\n\n**1. `@PostConstruct` fires first**\n- JSR-250 standard annotation — works in any Jakarta EE container, not just Spring\n- Dependencies are fully injected when it runs\n- Recommended for all your own classes\n\n**2. `InitializingBean.afterPropertiesSet()` fires second**\n- Spring's older interface-based approach\n- Couples your code to the Spring API — not recommended for new classes\n- Still appears in Spring's own framework code and legacy applications\n\n**3. `@Bean(initMethod = \"setup\")` fires last**\n- Specified as a string in the bean definition; called via reflection\n- The approach for third-party classes you can't annotate\n\n```java\n@Component\npublic class CacheWarmer implements InitializingBean {\n    @Autowired private ProductRepository repo;\n\n    @PostConstruct\n    void postConstruct() { log.info(\"1. @PostConstruct\"); }\n\n    @Override\n    public void afterPropertiesSet() { log.info(\"2. afterPropertiesSet\"); }\n\n    void customInit() { log.info(\"3. initMethod\"); }\n}\n```\n\n**Practical rule**\n- Use `@PostConstruct` for your own classes\n- Use `@Bean(initMethod)` for third-party beans\n- Avoid `InitializingBean` in new code"
+          },
+          {
+            "type": "step",
+            "title": "@PreDestroy and Graceful Shutdown — What Gets Cleaned Up and What Doesn't",
+            "content": "When `ApplicationContext.close()` is called — either explicitly or through the JVM shutdown hook registered by `SpringApplication` — Spring iterates through all singleton beans in **reverse creation order** and calls their destruction callbacks.\n\n**Destruction sequence (mirrors initialization)**\n- `@PreDestroy` first\n- `DisposableBean.destroy()` second\n- `@Bean(destroyMethod = \"cleanup\")` last\n\n**Reverse order ensures dependency safety**\n- A bean is destroyed before the beans it depends on\n- `OrderService` (depends on `PaymentService`) destroyed first; `PaymentService` still functional during cleanup\n\n```java\n@Component\npublic class MetricsReporter {\n    private ScheduledExecutorService scheduler;\n\n    @PostConstruct\n    void startReporting() {\n        scheduler = Executors.newScheduledThreadPool(1);\n        scheduler.scheduleAtFixedRate(this::report, 0, 30, TimeUnit.SECONDS);\n    }\n\n    @PreDestroy\n    void stopReporting() throws InterruptedException {\n        scheduler.shutdown();\n        scheduler.awaitTermination(5, TimeUnit.SECONDS);\n    }\n}\n```\n\n**The prototype trap**\n- Spring creates prototypes on demand but never tracks them — `@PreDestroy` is never called\n- Switching a singleton to prototype scope without manual cleanup leaks resources silently\n\n**The auto-detected destroyMethod**\n- Beans registered via `@Bean` have implicit `destroyMethod` inferred by looking for `close()` or `shutdown()` methods\n- Set `@Bean(destroyMethod = \"\")` to disable this if auto-detection causes problems"
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes, SIGKILL, and the Jakarta Migration in Boot 3",
+            "content": "Three production behaviors about these callbacks come up in interviews and deserve explicit answers.\n\n**What happens when `@PostConstruct` throws**\n- The bean's creation fails, and the entire `ApplicationContext` refuses to start\n- `ApplicationContext.refresh()` propagates the exception, logs the full chain, and exits\n- By design — a bean that couldn't initialize correctly must not silently become available with partial state\n- Production consequence: keep `@PostConstruct` logic idempotent and failure-aware; avoid blocking network calls without timeouts\n\n**What happens on SIGKILL**\n- Nothing — `@PreDestroy` never runs; the JVM dies without executing any shutdown hooks\n- Spring's graceful shutdown only fires on SIGTERM (Docker `docker stop`, Kubernetes `terminationGracePeriodSeconds`, or explicit `ApplicationContext.close()`)\n- Durable state must be persisted during normal operation, not in `@PreDestroy`\n- `@PreDestroy` is for releasing resources the kernel won't clean up — connection pools, thread pools, scheduled tasks — not for saving critical state\n\n**The Jakarta migration (Spring Boot 3+)**\n- `@PostConstruct` and `@PreDestroy` moved from `javax.annotation` to `jakarta.annotation` as part of the Jakarta EE 9+ namespace change\n- Boot 3: the old `javax.annotation.PostConstruct` is still recognized but deprecated; Spring 6 logs a warning and will eventually drop support\n- New projects on Boot 3+: import from `jakarta.annotation`\n- Migrations: update imports or rely on Spring's automatic handling during the transition window\n\n**Ordering hook: `@DependsOn`**\n- When one bean's initialization must complete before another's (e.g., schema migration before data-access beans), `@DependsOn(\"flywayMigrator\")` forces Spring to create the named bean first\n- Don't use it for normal constructor-injection ordering — Spring handles that automatically via the dependency graph\n- Use it only for runtime dependencies invisible to the compiler, like Flyway running before any repository warms its cache"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@PostConstruct` is the safe place for initialization** — all `@Autowired` dependencies are fully injected when it runs; the constructor is not safe for field-injected deps.\n- **Callback order: `@PostConstruct` then `afterPropertiesSet()` then `initMethod`** — when multiple mechanisms exist on one bean, they fire in this sequence.\n- **`@PostConstruct` throwing aborts context startup** — by design; a bean that couldn't initialize must not become silently available; keep the logic idempotent and failure-aware.\n- **`@PreDestroy` never fires on prototype beans** — Spring does not track prototype instances after creation; switching a singleton to prototype without adding explicit cleanup causes resource leaks.\n- **`@PreDestroy` does not run on SIGKILL** — only on SIGTERM / `ApplicationContext.close()`; never store critical state there, only release local resources.\n- **`@Bean(destroyMethod=\"\")` prevents auto-detected cleanup** — Spring auto-infers `destroyMethod` as `close()` or `shutdown()` for `@Bean` methods; set it to empty string to disable if auto-detection causes problems.\n- **Jakarta migration in Boot 3** — imports moved from `javax.annotation` to `jakarta.annotation`; Spring 6 logs a warning for the old package and will eventually drop it.\n- **`@DependsOn` forces startup order between beans with no constructor link** — use it for runtime dependencies like Flyway before JPA beans; don't use it to work around normal DI ordering.\n- **`@PreDestroy` fires in reverse creation order** — singletons are destroyed before the singletons they depend on, guaranteeing clean shutdown sequencing."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@PostConstruct` and `@PreDestroy` exist because constructors and finalizers cannot reliably handle initialization and cleanup in a dependency-injected world.\n\n**Why the constructor is not enough**\n- With field injection, `@Autowired` fields are null inside the constructor — they have not been injected yet\n- `@PostConstruct` runs after all injection is complete — the correct place to warm caches, validate configuration, open connections\n- Constructor injection with `final` fields often eliminates the need for `@PostConstruct` entirely — dependencies are available from line one\n\n**Callback order when all three exist on one bean**\n- `@PostConstruct` fires first — JSR-250 standard, works in any Jakarta EE container\n- `InitializingBean.afterPropertiesSet()` fires second — Spring's older interface approach; avoid in new code\n- `@Bean(initMethod = \"setup\")` fires last — for third-party classes you cannot annotate\n\n**Failure modes that matter**\n- If `@PostConstruct` throws, the context refuses to start — by design\n- Keep `@PostConstruct` logic idempotent and failure-aware; avoid blocking network calls without timeouts\n\n**`@PreDestroy` — cleanup on shutdown**\n- Runs on singleton beans in reverse creation order when `ApplicationContext.close()` is called (SIGTERM, `docker stop`, Kubernetes graceful termination)\n- Never called on SIGKILL — never store critical state in `@PreDestroy`, only release local resources\n- Never called on prototype beans — switching a singleton to prototype scope without adding explicit cleanup leaks connections and threads silently\n\n**Jakarta migration in Spring Boot 3**\n- Imports moved from `javax.annotation.PostConstruct` to `jakarta.annotation.PostConstruct`\n- For new projects on Boot 3+, use the Jakarta imports\n\n**Ordering when constructor-DI isn't enough**\n- `@DependsOn(\"flywayMigrator\")` forces Spring to create the named bean first — useful for runtime-only dependencies like Flyway before JPA"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is constructor injection with `final` fields often better than @PostConstruct?",
+        "What happens if @PostConstruct throws an exception?",
+        "Why doesn't @PreDestroy run on prototype beans?",
+        "When does @PreDestroy NOT run even for singletons (e.g., SIGKILL)?"
+      ],
+      "seo": {
+        "metaTitle": "@PostConstruct and @PreDestroy — Bean Initialization and Destruction Callbacks",
+        "metaDescription": "@PostConstruct fires after dependency injection for safe initialization. @PreDestroy runs on shutdown. Callback order, prototype gotchas, and Jakarta migration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "@PostConstruct and @PreDestroy exist because constructors and finalizers cannot reliably handle initialization and cleanup in a dependency-injected world.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The problem @PostConstruct solves is a timing gap in the bean lifecycle. When Spring creates a bean, the constructor runs first. If the bean uses field injection, @Autowired fields are null during the constructor — they haven't been injected yet. Any initialization logic that depends on injected collaborators fails with NullPointerException. @PostConstruct marks a method that Spring calls after dependency injection is complete but before the bean is put into service. It's the safe place for startup logic: warming caches."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know why constructors aren't safe for field-injected dependencies, the callback ordering when multiple mechanisms coexist, and the prototype destruction gotcha"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@PostConstruct is the safe place for initialization — all @Autowired dependencies are fully injected when it runs; the constructor is not safe for field-injected deps",
+              "Callback order: @PostConstruct then afterPropertiesSet() then initMethod — when multiple mechanisms exist on one bean, they fire in this sequence",
+              "@PostConstruct throwing aborts context startup — by design; a bean that couldn't initialize must not become silently available; keep the logic idempotent and failure-aware",
+              "@PreDestroy never fires on prototype beans — Spring does not track prototype instances after creation; switching a singleton to prototype without adding explicit cleanup causes resource leaks",
+              "@PreDestroy does not run on SIGKILL — only on SIGTERM / ApplicationContext"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The problem @PostConstruct solves is a timing gap in the bean lifecycle. When Spring creates a bean, the constructor runs first. If the bean uses field injection, @Autowired fields are null during the constructor — they haven't been injected yet. Any initialization logic that depends on injected collaborators fails with NullPointerException. @PostConstruct marks a method that Spring calls after dependency injection is complete but before the bean is put into service. It's the safe place for startup logic: warming caches, validating configuration, opening connections, or registering listeners. @PreDestroy is the mirror — it runs when the ApplicationContext shuts down, giving the bean a chance to release resources cleanly. Close connection pools, flush buffers, deregister from external services. Together, these two."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using @PostConstruct to initialize state that could go in the constructor",
+              "assuming @PreDestroy runs on prototype beans",
+              "forgetting the Jakarta migration (javax → jakarta) in Boot 3"
+            ]
+          }
+        ],
+        "cap": "Why the constructor is not enough With field injection, @Autowired fields are null inside the constructor — they have not been injected yet @PostConstruct runs after all injection is complete — the co",
+        "familiarity_anchors": [
+          "PostConstruct",
+          "Spring",
+          "Autowired"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is constructor injection with `final` fields often better than @PostConstruct?",
+          "What happens if @PostConstruct throws an exception?",
+          "Why doesn't @PreDestroy run on prototype beans?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-lazy-annotation",
+      "slug": "lazy-annotation-spring",
+      "question": "What is @Lazy in Spring and when should you use it for deferred bean initialization?",
+      "title": "@Lazy Annotation — Deferred Bean Initialization",
+      "direct_answer": "**`@Lazy`** defers a bean's creation from container startup to first actual use. Spring still registers the bean definition, but injects a **CGLIB proxy** wherever the bean is a dependency — the real instance is created on the first method call through the proxy. Three legitimate uses: **faster startup** for beans that may not be needed in every run (admin tools, batch jobs), **breaking circular dependencies** (by deferring one side's creation), and **conditional initialization** where the bean might be expensive and only used on some code paths. The cost: **configuration errors surface late** — a misconfigured `@Lazy` bean doesn't fail at startup but on first request, turning a deploy failure into a production incident. Default Spring behavior (eager) is usually better.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know @Lazy defers creation but trades startup safety for startup speed, and whether you can identify its legitimate vs anti-pattern uses",
+        "common_mistake": "Using @Lazy to 'fix' circular dependencies rather than redesigning; thinking @Lazy improves performance in general (it doesn't — it shifts work)",
+        "to_stand_out": "Explain why Spring's default eager mode is a deliberate correctness-over-speed choice; describe how CGLIB proxy interception works for @Lazy"
+      },
+      "company_tags": [
+        "Amazon",
+        "Pivotal",
+        "Google",
+        "Atlassian",
+        "Oracle",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Eager Initialization Is Usually Better — and When @Lazy Actually Helps",
+            "content": "Spring's default behavior is **eager initialization** — all singleton beans are created at startup, before the application handles any requests. This is deliberate: configuration errors, missing dependencies, and circular references surface immediately instead of blowing up on the first user request.\n\n`@Lazy` changes this to **on-demand initialization** — the bean is created the first time it's actually needed.\n- This sounds like an optimization, but it's a trade-off.\n- You gain faster startup at the cost of **deferred failure detection**.\n- A miswired `@Lazy` bean won't throw `NoSuchBeanDefinitionException` at startup — it'll throw it on the first request that triggers its creation.\n\nThe legitimate use cases are narrow: beans that are **expensive to create** and **not always needed** (a reporting engine that's only used on Sundays), beans involved in **circular dependency breaking** (a temporary fix, not a design solution), and beans that depend on **runtime state** not available at startup (request-scoped resources).\n\nFor most applications, the startup time saved by `@Lazy` is measured in milliseconds — not worth the risk of runtime failures."
+          },
+          {
+            "type": "step",
+            "title": "How @Lazy Works — The Proxy That Delays Creation Until First Use",
+            "content": "When you annotate a bean with `@Lazy`, Spring doesn't skip the bean definition — it still registers the bean in the container. What changes is the **instantiation timing**.\n\n**The mechanism**\n- Instead of creating the bean at startup, Spring injects a **CGLIB proxy** wherever the bean is needed\n- The proxy holds a reference to the `BeanFactory` and the target bean's name\n- The first method call on the proxy triggers `BeanFactory.getBean()`, which creates the real bean and caches it\n- All subsequent calls go to the cached instance — no per-call overhead after the first\n\n```java\n@Service\n@Lazy\npublic class ReportEngine {\n    public ReportEngine() {\n        loadHeavyResources();\n    }\n}\n\n@Service\npublic class DashboardService {\n    private final ReportEngine engine;\n\n    public DashboardService(@Lazy ReportEngine engine) {\n        this.engine = engine;\n    }\n\n    public Report generate() {\n        return engine.build();\n    }\n}\n```\n\n**Two placement strategies**\n- `@Lazy` on the bean class — affects all injection points\n- `@Lazy` on a specific injection-point parameter — affects only that consumer; one service might need the bean eagerly while another tolerates lazy initialization\n- Parameter-level placement is more common — it gives fine-grained control"
+          },
+          {
+            "type": "step",
+            "title": "The Circular Dependency Hack — Why @Lazy Masks a Design Problem",
+            "content": "The most common use of `@Lazy` in production codebases is **breaking circular dependencies**. When `ServiceA` depends on `ServiceB` and `ServiceB` depends on `ServiceA`, constructor injection throws `BeanCurrentlyInCreationException`.\n\n**How `@Lazy` breaks the cycle**\n- Adding `@Lazy` to one side creates a proxy that defers creation\n- Spring can finish constructing the eager side without needing the lazy side immediately\n- The lazy side is created later, after the cycle is no longer present\n\n**Why this is a band-aid**\n- The circular dependency is a design smell — two classes that depend on each other usually share a responsibility\n- The annotation hides the problem: code compiles, tests pass, but the design issue remains\n- When someone refactors and removes the `@Lazy` annotation (not knowing it was load-bearing), `BeanCurrentlyInCreationException` returns\n\n**The proper fixes**\n- Extract the shared concern into a third class C that both A and B depend on\n- Use `ApplicationEventPublisher` for decoupled communication — A publishes, B listens\n- Apply interface segregation so each bean depends on a narrow interface, not the full implementation\n\n**When `@Lazy` is acceptable for cycles**\n- Temporary workaround during a refactoring window\n- Always paired with a `// TODO: fix circular dependency` comment\n- Never as a permanent solution"
+          },
+          {
+            "type": "step",
+            "title": "Global Lazy Init, @Lazy on @Configuration, and the @PostConstruct Interaction",
+            "content": "Three secondary aspects of `@Lazy` come up in depth interviews and typically separate surface-level answers from production experience.\n\n**Global lazy initialization: `spring.main.lazy-initialization=true`**\n- Boot 2.2+ property that flips the default for the entire application — every bean becomes lazy unless explicitly annotated `@Lazy(false)`\n- Use case: faster dev-loop startup for large monolithic applications, where restart speed matters more than catching configuration errors at boot\n- In production, leave it off — every configuration issue that used to surface at deploy time now surfaces on the first request that triggers the broken bean\n- Often 30–60% startup time reduction in dev\n\n**`@Lazy` on `@Configuration` vs on `@Bean` vs on the injection point**\n- `@Lazy @Configuration` — every `@Bean` method in that configuration class is lazy by default; the class itself is still loaded eagerly\n- `@Lazy` on a `@Bean` method — only that specific bean is lazy\n- `@Lazy` on an injection-point parameter — the bean may be eager in the container, but **this specific consumer** receives a proxy; other consumers get the real bean directly\n\n**Recommended placement**\n- Prefer injection-point-level `@Lazy` for fine-grained control\n- Avoid class-level `@Lazy` as a blanket optimization — the cost of deferred failure detection compounds across many beans\n\n**Interaction with `@PostConstruct`**\n- A `@Lazy` bean's `@PostConstruct` runs on first use, not at startup\n- Side effects assumed to happen at boot (cache warmup, scheduler registration, health check registration) are deferred — endpoints depending on those side effects fail until the `@Lazy` bean is first accessed\n- The first request to trigger creation pays the full initialization cost, inflating p99 latency on cold-start\n- Use `@Lazy` only when `@PostConstruct` is genuinely fast and has no globally-observable effect"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Lazy` defers creation but not failure detection** — a misconfigured `@Lazy` bean does not fail at startup; it fails on the first request that triggers its creation — a production failure instead of a deployment failure.\n- **Spring injects a CGLIB proxy, not the real bean** — when a dependency is `@Lazy`, the injection point receives a proxy; the real bean is created on the first proxy method call.\n- **Global `spring.main.lazy-initialization=true` speeds dev restart by 30-60%** — but hides every configuration error until first-request time; leave it off in production.\n- **Three placement levels, different scopes** — `@Lazy @Configuration` affects all beans in that config; `@Lazy` on a `@Bean` method affects only that bean; `@Lazy` on an injection point parameter affects only that consumer.\n- **`@Lazy` + `@PostConstruct` defers initialization side effects** — first request pays the full init cost, inflating cold-start p99; use only when `@PostConstruct` is genuinely fast or has no globally-observable effect.\n- **`@Lazy` as a circular dependency fix is a design smell** — it breaks the cycle by deferring one side but hides the SRP violation; the `BeanCurrentlyInCreationException` returns when someone removes the annotation during refactoring.\n- **The legitimate use cases are narrow** — expensive beans only needed occasionally (reporting engines), beans with runtime-state dependencies not available at startup."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring's default behavior is eager initialization — all singleton beans are created at startup before the application handles any request. This is deliberate: configuration errors surface immediately instead of crashing on the first user request. `@Lazy` trades that safety for faster startup.\n\n**What it does**\n- The bean definition is still registered — Spring knows it exists\n- Instead of creating the bean at startup, Spring injects a CGLIB proxy into dependents\n- The real bean is created on the first method call through the proxy\n\n**The trade-off**\n- Faster startup — the expensive bean is not created until needed\n- Deferred failure detection — a misconfigured `@Lazy` bean will not fail startup; it fails on the first request, a production failure instead of a deployment failure\n\n**Three placement levels give three different scopes**\n- `@Lazy` on a `@Configuration` class — every `@Bean` method inside becomes lazy by default\n- `@Lazy` on a single `@Bean` method or class — only that bean is lazy\n- `@Lazy` on an injection-point parameter — one consumer gets a proxy, other consumers still get the real bean eagerly; usually the right one\n\n**Global `spring.main.lazy-initialization=true`**\n- Flips the default for the whole application — every bean lazy unless annotated `@Lazy(false)`\n- Useful for dev-loop restart speed (often 30–60% faster)\n- Never enable in production — every configuration error now surfaces on first request instead of at boot\n\n**Interaction with `@PostConstruct`**\n- A `@Lazy` bean's `@PostConstruct` runs on first use, not at startup\n- Side effects assumed to happen at boot (cache warmup, scheduler registration) are deferred\n- The first request pays full init cost, inflating cold-start p99\n\n**The circular dependency trap**\n- The most common use of `@Lazy` in production is breaking circular dependencies — but it masks the design problem\n- When someone removes the annotation during refactoring, the `BeanCurrentlyInCreationException` returns with no explanation\n- Fix the design instead: extract the shared concern, use events, or apply interface segregation\n\nUse `@Lazy` for genuinely expensive beans that are not always needed, at the injection-point parameter level for fine-grained control. Never use it as a permanent fix for circular dependencies, and never enable global lazy init in production."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does @Lazy's CGLIB proxy differ from @Transactional's proxy?",
+        "What goes wrong when @Lazy is used on a bean with @PostConstruct?",
+        "Why is @Lazy on a @Configuration class (@Lazy @Configuration) different from @Lazy on a @Bean?",
+        "When does @Lazy mask a design problem rather than solve one?"
+      ],
+      "seo": {
+        "metaTitle": "@Lazy Annotation — Deferred Bean Initialization",
+        "metaDescription": "@Lazy defers Spring bean creation until first use. Speeds startup but hides config errors. Proxy mechanics, legitimate uses, and why eager is usually better."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring's default behavior is eager initialization — all singleton beans are created at startup before the application handles any request.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring's default behavior is eager initialization — all singleton beans are created at startup, before the application handles any requests. This is deliberate: configuration errors, missing dependencies, and circular references surface immediately instead of blowing up on the first user request. @Lazy changes this to on-demand initialization — the bean is created the first time it's actually needed. This sounds like an optimization, but it's a trade-off. You gain faster startup at the cost of deferred failure detection. A miswired."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know @Lazy defers creation but trades startup safety for startup speed, and whether you can identify its legitimate vs anti-pattern uses"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@Lazy defers creation but not failure detection — a misconfigured @Lazy bean does not fail at startup; it fails on the first request that triggers its creation — a production failure instead of a deployment failure",
+              "Spring injects a CGLIB proxy, not the real bean — when a dependency is @Lazy, the injection point receives a proxy; the real bean is created on the first proxy method call",
+              "Global spring",
+              "lazy-initialization=true speeds dev restart by 30-60% — but hides every configuration error until first-request time; leave it off in production",
+              "Three placement levels, different scopes — @Lazy @Configuration affects all beans in that config; @Lazy on a @Bean method affects only that bean; @Lazy on an injection point parameter affects only that consumer"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring's default behavior is eager initialization — all singleton beans are created at startup, before the application handles any requests. This is deliberate: configuration errors, missing dependencies, and circular references surface immediately instead of blowing up on the first user request. @Lazy changes this to on-demand initialization — the bean is created the first time it's actually needed. This sounds like an optimization, but it's a trade-off. You gain faster startup at the cost of deferred failure detection. A miswired @Lazy bean won't throw NoSuchBeanDefinitionException at startup — it'll throw it on the first request that triggers its creation. The legitimate use cases are narrow: beans that are expensive to create and not always needed (a reporting engine that's only."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using @Lazy to 'fix' circular dependencies rather than redesigning",
+              "thinking @Lazy improves performance in general (it doesn't — it shifts work)"
+            ]
+          }
+        ],
+        "cap": "Never use it as a permanent fix for circular dependencies, and never enable global lazy init in production.",
+        "familiarity_anchors": [
+          "Spring",
+          "CGLIB",
+          "Three"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does @Lazy's CGLIB proxy differ from @Transactional's proxy?",
+          "What goes wrong when @Lazy is used on a bean with @PostConstruct?",
+          "Why is @Lazy on a @Configuration class (@Lazy @Configuration) different from @Lazy on a @Bean?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-circular-dependency",
+      "slug": "circular-dependency-spring",
+      "question": "How do you detect and fix circular dependencies in Spring?",
+      "title": "Circular Dependencies in Spring — How to Detect and Fix",
+      "direct_answer": "A **circular dependency** is when `A` needs `B` to be constructed and `B` needs `A` — Spring can't resolve which to build first. With **constructor injection**, Spring throws `BeanCurrentlyInCreationException` at startup — fail-fast, clearly names the cycle. With **setter or field injection**, older Spring versions silently worked (creating one first, injecting a partial reference, then finishing). **Spring Boot 2.6+ blocks this by default** — you must explicitly enable `spring.main.allow-circular-references=true` to restore legacy behavior, and the community consensus is: **don't**. The correct fix is **design change**, not a framework escape hatch. Three patterns: **extract** the shared concern into a third class, **replace one direction with events** (`ApplicationEventPublisher`), or **extract an interface**. `@Lazy` is a last-resort band-aid that hides the real issue.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you recognize circular dependencies as a design problem (not a framework bug), know how to fix them properly, and understand the Boot 2.6+ default change",
+        "common_mistake": "Enabling spring.main.allow-circular-references=true as the fix; using @Lazy as a habit rather than a deliberate last resort; not knowing Boot 2.6 changed the default",
+        "to_stand_out": "Describe the Single Responsibility violation at the root of most cycles; propose extract-shared-concern, events, or interface-extraction as proper fixes; mention Spring's early-singleton-reference trick used internally for setter-injection cycles"
+      },
+      "company_tags": [
+        "Amazon",
+        "Pivotal",
+        "Google",
+        "Atlassian",
+        "Shopify",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Circular Dependencies Are a Design Problem, Not a Framework Problem",
+            "content": "A circular dependency means `ServiceA` needs `ServiceB` to be created, and `ServiceB` needs `ServiceA` to be created — a deadlock that Spring can't resolve for constructor injection. The temptation is to find a framework workaround (`@Lazy`, setter injection). The correct response is to **fix the design**.\n\nCircular dependencies almost always signal a **Single Responsibility violation** — two classes that share a concern which should be extracted into a third class. Or they signal **missing abstraction** — the classes should communicate through events or an interface instead of direct references.\n\nSpring's behavior depends on the injection style. **Constructor injection throws `BeanCurrentlyInCreationException` at startup** — fast and visible. Field and setter injection resolve the cycle silently using early references (Spring injects a partially-constructed bean), which can produce subtle runtime bugs.\n\n**Spring Boot 2.6+ made this stricter** by disabling circular dependency resolution by default.\n- Even field-injected cycles now throw at startup unless you explicitly opt in with `spring.main.allow-circular-references=true`.\n- This change reflects the community consensus that circular dependencies should be fixed, not tolerated."
+          },
+          {
+            "type": "step",
+            "title": "The BeanCurrentlyInCreationException — How to Read the Stack Trace",
+            "content": "When Spring detects a circular dependency with constructor injection, the error message names the beans involved.\n\n**The typical message**\n- `'Requested bean is currently in creation: Is there an unresolvable circular reference?'`\n- The stack trace shows the dependency chain: `ServiceA` requires `ServiceB`, which requires `ServiceA` already being created\n- Chains can be longer: A → B → C → A\n\n**The fix starts with understanding why both classes need each other**\n- Pattern 1 — Shared responsibility — `OrderService` calls `InventoryService.reserve()`, and `InventoryService` calls `OrderService.getOrder()`; both handle order-related logic\n- Pattern 2 — Event-worthy interaction — `PaymentService` notifies `NotificationService`, and `NotificationService` queries `PaymentService` for details\n- Pattern 3 — Wide interface — class B only needs one method from A but takes the full dependency\n\n**Reading the stack trace strategy**\n- Identify the cycle members in the exception message\n- Look at why each direction exists — what method each calls on the other\n- Pick the dependency that does the least to extract or invert\n- The shorter side of the dependency is usually the right candidate for refactoring"
+          },
+          {
+            "type": "step",
+            "title": "Three Fixes — Extract, Event, Interface — and Why @Lazy Is the Wrong Answer",
+            "content": "**Fix 1: Extract the shared concern**\n- If A needs B and B needs A, they likely share logic that belongs in a third class C\n- Both A and B depend on C instead of each other\n- Eliminates the cycle entirely and often improves cohesion\n\n**Fix 2: Replace one direction with events**\n- If A needs to notify B but B also needs to query A, replace the notification with a Spring event\n- A publishes, B listens — B can still depend on A for queries (one-directional)\n- A no longer depends on B\n\n```java\n@Service\npublic class PaymentService {\n    private final ApplicationEventPublisher events;\n    public void processPayment(Payment p) {\n        events.publishEvent(new PaymentCompleted(p.getId()));\n    }\n}\n\n@Component\npublic class NotificationListener {\n    @EventListener\n    public void onPayment(PaymentCompleted event) {\n        // notification logic — no dependency on PaymentService\n    }\n}\n```\n\n**Fix 3: Interface segregation**\n- If B only needs one method from A, extract that method into a narrow interface that A implements\n- B depends on the interface, not on A directly\n- Often reveals that B didn't really need 'all of A' — it needed a specific capability\n\n**Why `@Lazy` is the wrong answer**\n- It masks the cycle by deferring creation — the code works, but the design problem remains\n- When someone removes the `@Lazy` annotation during refactoring (not knowing it was load-bearing), `BeanCurrentlyInCreationException` returns\n- Use only as a temporary workaround with a `// TODO: fix circular dependency` comment\n\n**Why `spring.main.allow-circular-references=true` is the wrong answer**\n- Restores legacy silent resolution — partially-constructed beans get injected\n- Subtle runtime bugs replace startup failures\n- The Spring community changed the default for a reason"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Constructor injection fails fast; field injection used to hide cycles** — `BeanCurrentlyInCreationException` at startup for constructor cycles; Spring Boot 2.6+ blocks field/setter injection cycles by default too.\n- **`spring.main.allow-circular-references=true` is the escape hatch, not the fix** — enabling it acknowledges the design problem and defers it; the community consensus is to eliminate circular dependencies, not tolerate them.\n- **Root cause is almost always SRP violation** — two classes that depend on each other share logic that belongs in a third class.\n- **Fix 1: extract the shared concern** — create class C that both A and B depend on instead of depending on each other.\n- **Fix 2: replace one direction with events** — `ApplicationEventPublisher` breaks the mutual dependency; A publishes, B listens, one-way dependency remains.\n- **Fix 3: interface segregation** — if B only needs one method from A, extract it into a narrow interface; B depends on the interface, not on all of A.\n- **`@Lazy` breaks the cycle but hides the problem** — use only as a temporary workaround with a comment explaining why; it causes `BeanCurrentlyInCreationException` to resurface when someone removes it during refactoring."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A circular dependency means `ServiceA` needs `ServiceB` to be created, and `ServiceB` needs `ServiceA` — a deadlock. Spring's response depends on the injection style.\n\n**Constructor injection**\n- Spring detects the deadlock immediately and throws `BeanCurrentlyInCreationException` at startup — a clear failure message naming all beans in the cycle\n- Spring Boot 2.6+ extended this to field and setter injection by default — even those cycles now fail at startup unless you opt in with `spring.main.allow-circular-references=true`\n\n**Why it is a design problem**\n- Circular dependencies almost always signal that two classes share a responsibility that belongs in a third class\n- Or they signal direct coupling where events should decouple the interaction\n\n**The three proper fixes**\n- Extract the shared concern into a class C — both A and B depend on C, not on each other\n- Replace one direction with `ApplicationEventPublisher` — A publishes an event, B listens; one-way dependency remains, the cycle is gone\n- Interface segregation — if B only needs one method from A, extract it into a narrow interface; B depends on the interface, not on all of A\n\n`@Lazy` breaks the cycle by deferring one side but hides the design problem entirely. When someone removes the annotation during refactoring, the `BeanCurrentlyInCreationException` returns with no explanation of why it was there. Use `@Lazy` only as a temporary workaround."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How did Spring resolve setter-injection cycles before Boot 2.6 disabled them by default?",
+        "Why does constructor injection fail at startup while setter injection could succeed?",
+        "What's the difference between using @Lazy and using an interface to break a cycle?",
+        "When is ApplicationEventPublisher the right fix for a would-be circular dependency?"
+      ],
+      "seo": {
+        "metaTitle": "Circular Dependencies in Spring — How to Detect and Fix",
+        "metaDescription": "Circular dependencies signal design problems. Boot 2.6+ blocks them by default. Fix with extract-shared, events, or interface extraction — not @Lazy band-aids."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "A circular dependency means ServiceA needs ServiceB to be created, and ServiceB needs ServiceA — a deadlock.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A circular dependency means ServiceA needs ServiceB to be created, and ServiceB needs ServiceA to be created — a deadlock that Spring can't resolve for constructor injection. The temptation is to find a framework workaround (@Lazy, setter injection). The correct response is to fix the design. Circular dependencies almost always signal a Single Responsibility violation — two classes that share a concern which should be extracted into a third class. Or they signal missing abstraction — the classes should communicate."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you recognize circular dependencies as a design problem (not a framework bug), know how to fix them properly, and understand the Boot 2.6+ default change"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Constructor injection fails fast; field injection used to hide cycles — BeanCurrentlyInCreationException at startup for constructor cycles; Spring Boot 2",
+              "6+ blocks field/setter injection cycles by default too",
+              "allow-circular-references=true is the escape hatch, not the fix — enabling it acknowledges the design problem and defers it; the community consensus is to eliminate circular dependencies, not tolerate them",
+              "Root cause is almost always SRP violation — two classes that depend on each other share logic that belongs in a third class",
+              "Fix 1: extract the shared concern — create class C that both A and B depend on instead of depending on each other"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A circular dependency means ServiceA needs ServiceB to be created, and ServiceB needs ServiceA to be created — a deadlock that Spring can't resolve for constructor injection. The temptation is to find a framework workaround (@Lazy, setter injection). The correct response is to fix the design. Circular dependencies almost always signal a Single Responsibility violation — two classes that share a concern which should be extracted into a third class. Or they signal missing abstraction — the classes should communicate through events or an interface instead of direct references. Spring's behavior depends on the injection style. Constructor injection throws BeanCurrentlyInCreationException at startup — fast and visible. Field and setter injection resolve the cycle silently using early references (Spring injects a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Enabling spring",
+              "allow-circular-references=true as the fix; using @Lazy as a habit rather than a deliberate last resort; not knowing Boot 2",
+              "6 changed the default"
+            ]
+          }
+        ],
+        "cap": "Use @Lazy only as a temporary workaround.",
+        "familiarity_anchors": [
+          "Spring",
+          "BeanCurrentlyInCreationException",
+          "Three"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How did Spring resolve setter-injection cycles before Boot 2.6 disabled them by default?",
+          "Why does constructor injection fail at startup while setter injection could succeed?",
+          "What's the difference between using @Lazy and using an interface to break a cycle?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    }
+  ]
+}

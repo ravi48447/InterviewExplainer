@@ -1,0 +1,133 @@
+{
+  "topic": "Redis & Caching Comparisons",
+  "topicSlug": "comparisons",
+  "questions": [
+    {
+      "id": "rc-cmp-001",
+      "slug": "redis-vs-memcached-vs-caffeine-vs-hazelcast",
+      "question": "Redis vs Memcached vs Caffeine vs Hazelcast — which cache for what?",
+      "title": "Redis vs Memcached vs Caffeine vs Hazelcast",
+      "direct_answer": "Different problems. **Caffeine** is a local, in-process cache for a single JVM — nanosecond access, no network. Use for hot data that each instance can keep independently. **Memcached** is a distributed, in-memory KV store that's simple and fast but feature-thin — just strings, no persistence, no replication, no data structures. **Redis** is Memcached plus everything: rich data types (lists, sets, sorted sets, hashes, streams), persistence, replication, cluster mode, Lua scripting, pub/sub, modules. **Hazelcast** is a distributed data grid with near-caching, compute, and transactions — more than a cache, closer to in-memory computing. **Default choice in 2026: Caffeine for local L1 + Redis for shared L2.** Memcached is niche (legacy or pure KV at massive scale); Hazelcast for enterprises that want compute and cache together.",
+      "layout_type": "comparison-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding cache topologies, Redis feature depth, when each tool fits",
+        "common_mistake": "Treating Redis as just a KV store; missing local+shared two-tier pattern; picking Memcached when Redis features matter",
+        "to_stand_out": "Discuss two-tier caching, cache-aside vs read-through, consistency invalidation, Redis Cluster vs Sentinel, Caffeine sizing with Window TinyLFU"
+      },
+      "company_tags": [
+        "redis",
+        "aws",
+        "twitter",
+        "github",
+        "netflix"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Four Caches, Four Problems",
+            "content": "Caching is not a single problem. Four distinct tools solve four distinct layers:\n\n**Caffeine** — Java in-process cache (successor to Guava Cache). Lives in the JVM heap. Nanosecond access. No network. Window TinyLFU admission policy gives near-optimal hit rate. Perfect for hot data that each service instance can hold (config, feature flags, hot lookup tables, per-request memoization). Limit: every instance has its own copy; no shared state.\n\n**Memcached** — the original distributed in-memory KV. Simple protocol (SET/GET/INCR). Strings only. No persistence, no replication, no data structures. Horizontally scalable via client-side sharding. Operationally trivial. Use when you need pure KV at massive scale and don't need anything Redis offers. Most new systems in 2026 pick Redis instead.\n\n**Redis** — Memcached plus rich data structures plus persistence plus replication plus Cluster plus Lua plus pub/sub plus modules. Strings, lists, hashes, sets, sorted sets, streams, bitmaps, HyperLogLog, geospatial, JSON (module), search (module), time-series (module). Not just a cache — often used as a feature store, rate limiter, session store, leaderboard, queue, pub/sub broker. Single-threaded command execution (fast; predictable; no locks). Redis 7+ adds multithreaded I/O. Default cache in 2026.\n\n**Hazelcast** — distributed in-memory data grid. Near caches + distributed maps + compute + transactions + SQL. Java-first (was IMDG standard). Strong in enterprise Java. Competes with Redis Enterprise, Apache Ignite, Infinispan.\n\n**Two-tier caching is the norm in 2026.**\n- **L1 (in-process)**: Caffeine for per-instance hot data; µs access; no network\n- **L2 (distributed)**: Redis for shared state across instances; ms access; durable\n\nThis reduces Redis traffic 10–50× while keeping shared consistency."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Two-Tier Cache (Caffeine + Redis)",
+            "content": "```mermaid\nflowchart TB\n    Req[Request] --> App[App Instance 1]\n    Req --> App2[App Instance 2]\n    App --> L1a[Caffeine L1<br/>in-heap]\n    App2 --> L1b[Caffeine L1<br/>in-heap]\n    L1a -.miss.-> Redis[(Redis L2<br/>shared)]\n    L1b -.miss.-> Redis\n    Redis -.miss.-> DB[(Postgres)]\n    Redis -.invalidate.-> Pub[Pub/Sub<br/>invalidation events]\n    Pub -.-> L1a\n    Pub -.-> L1b\n    classDef cache1 fill:#fff9c4\n    classDef cache2 fill:#ffe0b2\n    classDef source fill:#90caf9\n    class L1a,L1b cache1\n    class Redis cache2\n    class DB source\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Feature Comparison",
+            "content": "| Feature | Caffeine | Memcached | Redis | Hazelcast |\n|---|---|---|---|---|\n| **Topology** | In-process (JVM) | Distributed | Distributed | Distributed |\n| **Access latency** | ~100ns | ~0.5ms | ~0.5ms | ~0.5–1ms |\n| **Data types** | Object refs (Java) | Strings only | Rich (list, hash, set, sorted set, stream, JSON) | Rich (map, queue, set, list, topic) |\n| **Persistence** | No | No | RDB snapshot + AOF log | Optional (file, MapStore) |\n| **Replication** | No | No | Async/semi-sync | Async/sync |\n| **Clustering** | N/A | Client sharding | Redis Cluster (16384 slots) | Built-in |\n| **Eviction** | Window TinyLFU, size, TTL | LRU | LRU, LFU, TTL per key | LRU, LFU, TTL |\n| **Pub/Sub** | No | No | Yes | Yes |\n| **Scripting** | N/A | No | Lua, Functions | Entry processors, distributed tasks |\n| **Transactions** | No | CAS (limited) | MULTI/EXEC + WATCH | ACID |\n| **Language** | Java only | Any client | Any client | Java primary, other clients |\n| **Memory limit** | Heap | RAM per node | RAM per node | RAM across nodes |\n| **Consistency** | N/A | Single-node per key | Strong per node, async replica | Strong or eventual, configurable |\n| **Typical use** | L1 cache, per-JVM hot data | Legacy KV | L2 cache, feature store, queue, rate-limit | Enterprise grid, cache + compute |\n| **Operational cost** | Trivial | Low | Medium (Cluster, failover) | Medium-high |"
+          },
+          {
+            "type": "step",
+            "title": "Decision Framework",
+            "content": "**Start with the access pattern:**\n\n**Pattern 1: Per-instance hot data** — small, rarely changes, OK if each instance has own copy\n- Examples: feature flags, config, country list, currency rates\n- → **Caffeine** (in-process, zero network)\n\n**Pattern 2: Shared cache across instances** — most web / API caching\n- Examples: user session, product page HTML, computed result reused by all instances\n- → **Redis** (shared, fast, rich features)\n\n**Pattern 3: Both** — hot data needs local speed; invalidation/consistency shared\n- → **Caffeine (L1) + Redis (L2)** with invalidation via Redis pub/sub\n\n**Pattern 4: Pure KV at massive scale, no features needed**\n- → **Memcached** or Redis (Redis usually still wins for familiarity + feature headroom)\n\n**Pattern 5: Enterprise grid with compute and transactions**\n- → **Hazelcast**, **Apache Ignite**, or **Infinispan**\n\n**Redis-specific sub-choices:**\n\n- **Redis Standalone** — single node; backups via RDB/AOF; no HA\n- **Redis Sentinel** — master + replicas + Sentinel processes for failover; single shard\n- **Redis Cluster** — horizontal partitioning across 16384 hash slots; auto failover\n- **Redis Enterprise / ElastiCache Redis / Memorystore / Upstash** — managed offerings\n\n**When to use Redis for non-cache roles:**\n- **Rate limiter**: `INCR` + `EXPIRE`; sliding window via sorted sets\n- **Distributed lock**: `SET NX PX` + Lua for unlock; consider Redlock for multi-node safety\n- **Session store**: hash per session; TTL for expiry\n- **Leaderboard**: sorted set; `ZADD`/`ZREVRANGE`\n- **Queue / stream**: Lists or Streams (richer, with consumer groups)\n- **Pub/Sub**: simple fan-out (not durable; use Streams for durable)\n- **Feature store**: hashes keyed by entity; low-latency reads for ML\n\n**When Caffeine is worth it:**\n- Called very frequently (> 10K calls/sec/instance)\n- Computation is expensive (DB hit, external call)\n- Data has locality / repetition\n- Inconsistency window of seconds to minutes is acceptable\n\n**Caffeine sizing:**\n- Size by entry count (maximumSize) or heap weight (maximumWeight)\n- Start with 10k–100k entries; tune via hit rate metrics\n- TTL (expireAfterWrite) often more useful than LRU alone\n- Use Caffeine's `recordStats()` and expose via Micrometer\n\n**Redis sizing:**\n- Monitor memory; set `maxmemory` + eviction policy (`allkeys-lru`, `volatile-lru`, `allkeys-lfu`)\n- Plan 30–50% headroom for fragmentation, replication buffers\n- Cluster mode for > 100GB working set or > 100K ops/sec per shard\n- Beware big keys (> 1MB) and hot keys (single key with > 10K ops/sec)"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Gotchas",
+            "content": "**Caffeine: stale data per instance.** Each instance independent; invalidation requires pub/sub or short TTL. Acceptable for short-TTL / eventually-consistent data; dangerous for quotas or counters.\n\n**Caffeine heap pressure.** Unbounded or large caches cause GC. Always set `maximumSize` / `maximumWeight`. Monitor with `recordStats()`.\n\n**Memcached feature ceiling.** No persistence; restart = cold cache. No data structures; everything is strings. Client-side sharding = rebalancing pain. In 2026, most new projects pick Redis by default.\n\n**Redis single-threaded per shard.** One expensive command (`KEYS *`, big `SMEMBERS`) blocks everything. Use `SCAN`, avoid big keys, shard hot keys. Redis 7 has multi-threaded I/O but commands still single-threaded.\n\n**Redis persistence trade-offs.**\n- **RDB**: fast restart, point-in-time snapshot; lose recent writes\n- **AOF**: near-durable (fsync every second); slower restart, bigger files\n- For cache, often disable persistence; warm from source on restart\n- For 'database-ish' use, AOF + RDB both\n\n**Redis Cluster complexity.** Multi-key operations limited to same hash slot; `MULTI/EXEC` requires same-slot keys; use hash tags `{user:42}:*`. Client needs to know topology (smart clients).\n\n**Distributed locks are hard.** Single-node `SET NX PX` is safe *within one Redis*. Redlock (multiple masters) adds complexity and is debated (Kleppmann critique). For many apps, DB row lock or advisory lock is simpler.\n\n**Cache invalidation is hard.** The two hard problems in CS. Common patterns:\n- **TTL only** — simplest; stale for TTL window\n- **Write-through** — write to cache + DB; stale risk if cache failure ignored\n- **Cache-aside with explicit invalidate** — on write, delete key; next read misses and reloads\n- **Pub/sub invalidation** — for L1+L2, publish invalidate message; all L1s evict key\n- **Event-driven** — DB CDC → invalidation events\n\n**Thundering herd.** Key expires, 1000 requests hit DB simultaneously. Fix: request coalescing / singleflight (Caffeine does this natively); probabilistic early expiration; mutex per key.\n\n**Redis is not a database.** Tempting because of features, but durability is weaker than Postgres. For durable source of truth, use Redis alongside (not instead of) a real DB. Exceptions: specific high-write workloads (rate limit counters) where loss tolerance exists.\n\n**Hazelcast footprint.** Heavier than Redis; Java-centric; less multi-language support. Strong for Java shops that need grid + compute. Less popular in microservices world; Redis dominates.\n\n**Memcached vs Redis in 2026:**\n- Memcached still shines at ultra-high-throughput pure KV (Facebook scale)\n- For 99% of teams, Redis is better default\n- ElastiCache supports both; Upstash/Memorystore favor Redis\n\n**Cost at scale.**\n- Caffeine: free (just Java heap)\n- Redis (managed): ~$30–150/GB/month depending on provider and tier\n- Memcached (managed): similar to Redis\n- Hazelcast Enterprise: licensed\n\n**Multi-region caching.** Redis Enterprise Active-Active (CRDT-based); local Redis per region + eventual consistency. Writes replicate; latency varies. Complex; only when truly needed.\n\n**Observability signals to watch:**\n- **Hit rate** (L1 and L2 separately)\n- **Latency p50/p99**\n- **Memory used / maxmemory**\n- **Evictions/sec**\n- **Connected clients**\n- **Commands/sec per type**\n- **Replica lag**\n- **Big key / hot key detection**"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Caffeine = local L1** (in-process Java, nanosecond); **Redis = shared L2** (distributed, rich features)\n- **Two-tier (Caffeine + Redis)** is the 2026 default for high-throughput apps\n- **Memcached** is feature-thin; Redis is default for new systems unless pure-KV extreme scale\n- **Redis is more than a cache** — rate limiter, session store, leaderboard, feature store, queue, pub/sub\n- **Redis is single-threaded per shard** — avoid `KEYS *`, big keys, hot keys\n- **Redis Cluster** for > 100GB or > 100K ops/sec per shard; otherwise Sentinel or standalone\n- **Caffeine TinyLFU** admission gives near-optimal hit rate; bound size/TTL\n- **Hazelcast** for enterprise grid with compute; less common in modern microservices\n- **Cache invalidation is hard** — TTL, write-through, pub/sub invalidation, or CDC\n- **Redis is not a durable database** — combine with Postgres/DynamoDB for source of truth"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "These solve different problems.\n\n**Caffeine**\n- In-process Java cache\n- Lives in JVM heap; nanosecond access; no network\n- Window TinyLFU admission policy; near-optimal hit rate\n- Per-instance copy; each instance independent\n- Use for hot data each instance can hold: config, feature flags, hot lookup tables\n\n**Memcached**\n- Original distributed in-memory KV\n- Simple: strings only, no persistence, no replication, no data structures\n- Client-side sharding\n- Horizontally scalable, operationally trivial\n- In 2026, most new systems pick Redis instead\n\n**Redis**\n- Memcached plus everything: rich data structures (list, hash, set, sorted set, stream)\n- Persistence (RDB + AOF), replication, Cluster mode, Lua, pub/sub, modules\n- Single-threaded command execution; fast and predictable\n- Not just a cache: rate limiter, session store, leaderboard, queue, feature store\n- Default in 2026 for distributed cache\n\n**Hazelcast**\n- Distributed in-memory data grid\n- Near caches + distributed maps + compute + transactions + SQL\n- Java-first; strong in enterprise Java\n- Competes with Redis Enterprise, Apache Ignite, Infinispan\n\n**Two-tier caching is the 2026 default**\n- L1 Caffeine: per-instance hot data; microsecond access; no network\n- L2 Redis: shared state across instances; millisecond access; durable\n- Reduces Redis traffic 10 to 50x while keeping shared consistency\n\n**Decision framework**\n- Per-instance hot data, small, rarely changes: Caffeine\n- Shared cache across instances: Redis\n- Both: Caffeine L1 plus Redis L2 with pub/sub invalidation\n- Pure KV at massive scale, no features: Memcached or Redis\n- Enterprise grid with compute: Hazelcast or Ignite\n\n**Redis sub-choices**\n- Standalone: single node, backups, no HA\n- Sentinel: master + replicas + Sentinel failover\n- Cluster: horizontal partition across 16384 hash slots\n- Managed: ElastiCache, Memorystore, Upstash, Redis Enterprise\n\n**When Redis does more than cache**\n- Rate limiter: INCR plus EXPIRE; sliding window via sorted sets\n- Distributed lock: SET NX PX; consider Redlock for multi-node safety\n- Session store: hash per session; TTL\n- Leaderboard: sorted set\n- Queue / stream: Lists or Streams with consumer groups\n- Pub/Sub: fan-out, not durable\n- Feature store: hashes keyed by entity for ML\n\n**Trade-offs and gotchas**\n\n*Caffeine stale data per instance*\n- Each instance independent; invalidation requires pub/sub or short TTL\n- Acceptable for short-TTL data; dangerous for counters or quotas\n\n*Caffeine heap pressure*\n- Always set maximumSize or maximumWeight\n- Monitor with recordStats\n\n*Redis single-threaded per shard*\n- One expensive command (KEYS *, big SMEMBERS) blocks everything\n- Use SCAN, avoid big keys, shard hot keys\n\n*Redis persistence*\n- RDB: fast restart, point-in-time; lose recent writes\n- AOF: near-durable; slower restart, bigger files\n- For cache, often disable persistence; warm from source\n\n*Redis Cluster complexity*\n- Multi-key operations limited to same hash slot\n- Use hash tags like {user:42}:*\n- Client needs topology awareness (smart clients)\n\n*Distributed locks are hard*\n- SET NX PX is safe within one Redis; Redlock is debated\n- DB row lock or advisory lock often simpler\n\n*Cache invalidation is hard*\n- TTL only: simplest; stale for TTL window\n- Write-through: write cache plus DB; stale risk if cache fails\n- Cache-aside with explicit invalidate: on write, delete key\n- Pub/sub invalidation for L1+L2\n- CDC-driven for event-based invalidation\n\n*Thundering herd*\n- Key expires; 1000 requests hit DB\n- Fix: request coalescing / singleflight (Caffeine does this natively)\n- Probabilistic early expiration; mutex per key\n\n*Redis is not a database*\n- Durability weaker than Postgres\n- Use alongside, not instead of, a real DB\n- Exceptions: specific high-write workloads where loss tolerance exists\n\n**Cost at scale**\n- Caffeine: free\n- Redis managed: $30 to 150/GB/month depending on provider\n- Hazelcast Enterprise: licensed\n\n**Observability signals to watch**\n- Hit rate (L1 and L2 separately)\n- Latency p50/p99\n- Memory used / maxmemory\n- Evictions/sec\n- Connected clients\n- Commands/sec per type\n- Replica lag\n- Big key / hot key detection\n\n**The strategic answer**\n- Caffeine is local L1; Redis is shared L2\n- Two-tier is the 2026 default\n- Memcached is feature-thin; Redis wins for new systems\n- Redis is more than a cache: rate limiter, session, leaderboard, queue, feature store\n- Single-threaded per shard; avoid big/hot keys\n- Cache invalidation is genuinely hard; design it carefully\n- Redis is not a durable database; combine with Postgres or DynamoDB"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Caffeine's Window TinyLFU policy work and why is it better than LRU?",
+        "How do you implement pub/sub invalidation between Caffeine L1 and Redis L2?",
+        "When is Redlock appropriate and when is single-node SET NX PX enough?",
+        "How do hash tags work in Redis Cluster and why do they matter?"
+      ],
+      "seo": {
+        "meta_title": "Redis vs Memcached vs Caffeine vs Hazelcast: Cache Selection Guide",
+        "meta_description": "Comprehensive cache comparison: Caffeine local L1, Redis shared L2, Memcached legacy, Hazelcast grid. Two-tier caching, invalidation, sizing.",
+        "keywords": [
+          "redis vs memcached",
+          "caffeine cache",
+          "hazelcast",
+          "two-tier caching",
+          "cache comparison"
+        ],
+        "metaDescription": "Different problems. Caffeine is a local, in-process cache for a single JVM — nanosecond access, no network.",
+        "metaTitle": "Redis vs Memcached vs Caffeine vs Hazelcast"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "These solve different problems.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Caching is not a single problem. Four distinct tools solve four distinct layers: Caffeine — Java in-process cache (successor to Guava Cache). Lives in the JVM heap. Nanosecond access. No network. Window TinyLFU admission policy gives near-optimal hit rate. Perfect for hot data that each service instance can hold (config, feature flags, hot lookup tables, per-request memoization). Limit: every instance has its own copy; no shared state. Memcached — the."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Feature | Caffeine | Memcached | Redis | Hazelcast | |---|---|---|---|---| | Topology | In-process (JVM) | Distributed | Distributed | Distributed | | Access latency | ~100ns | ~0",
+              "5–1ms | | Data types | Object refs (Java) | Strings only | Rich (list, hash, set, sorted set, stream, JSON) | Rich (map, queue, set, list, topic) | | Persistence | No | No | RDB snapshot + AOF log | Optional (file, MapStore) | | Replication | No | No | Async/semi-sync | Async/sync | | Clustering | N/A | Client sharding | Redis Cluster (16384 slots) | Built-in | | Eviction | Window TinyLFU, size, TTL | LRU | LRU, LFU, TTL per key | LRU, LFU, TTL | | Pub/Sub | No | No | Yes | Yes | | Scripting | N/A | No | Lua, Functions | Entry processors, distributed tasks | | Transactions | No | CAS (limited) | MULTI/EXEC + WATCH | ACID | | Language | Java only | Any client | Any client | Java primary, other clients | | Memory limit | Heap | RAM per node | RAM per node | RAM across nodes | | Consistency | N/A | Single-node per key | Strong per node, async replica | Strong or eventual, configurable | | Typical use | L1 cache, per-JVM hot data | Legacy KV | L2 cache, feature store, queue, rate-limit | Enterprise grid, cache + compute | | Operational cost | Trivial | Low | Medium (Cluster, failover) | Medium-high |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Caffeine: stale data per instance. Each instance independent; invalidation requires pub/sub or short TTL. Acceptable for short-TTL / eventually-consistent data; dangerous for quotas or counters. Caffeine heap pressure. Unbounded or large caches cause GC. Always set maximumSize / maximumWeight. Monitor with recordStats(). Memcached feature ceiling. No persistence; restart = cold cache. No data structures; everything is strings. Client-side sharding = rebalancing pain. In 2026, most new projects pick Redis by default. Redis single-threaded per shard. One expensive command (KEYS *, big SMEMBERS) blocks everything. Use SCAN, avoid big keys, shard."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Caching is not a single problem. Four distinct tools solve four distinct layers: Caffeine — Java in-process cache (successor to Guava Cache). Lives in the JVM heap. Nanosecond access. No network. Window TinyLFU admission policy gives near-optimal hit rate. Perfect for hot data that each service instance can hold (config, feature flags, hot lookup tables, per-request memoization). Limit: every instance."
+          }
+        ],
+        "cap": "Caffeine In-process Java cache Lives in JVM heap; nanosecond access; no network Window TinyLFU admission policy; near-optimal hit rate Per-instance copy; each instance independent Use for hot data eac",
+        "familiarity_anchors": [
+          "Different",
+          "Caffeine",
+          "Memcached"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Caffeine's Window TinyLFU policy work and why is it better than LRU?",
+          "How do you implement pub/sub invalidation between Caffeine L1 and Redis L2?",
+          "When is Redlock appropriate and when is single-node SET NX PX enough?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app using Redis for session and cache"
+      }
+    }
+  ]
+}

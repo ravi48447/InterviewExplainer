@@ -1,0 +1,499 @@
+{
+  "topic": "Comparisons",
+  "topicSlug": "comparisons",
+  "questions": [
+    {
+      "id": "sc-cmp-001",
+      "slug": "bean-scopes-singleton-prototype-request-session",
+      "question": "Compare Spring bean scopes (singleton, prototype, request, session, application) and when to use each.",
+      "title": "Spring Bean Scopes: Singleton, Prototype, Request, Session, Application",
+      "direct_answer": "Spring's default is **singleton** — one instance per container, cached and reused. **Prototype** creates a new instance every time it's requested; useful for stateful helpers but Spring does *not* destroy them (you manage lifecycle). **Request**, **session**, and **application** scopes (web only) tie a bean's lifetime to an HTTP request, session, or `ServletContext`. **`@RefreshScope`** (Spring Cloud) re-creates the bean when config changes. **Common pitfalls**: injecting a prototype bean into a singleton freezes it to one instance (use `ObjectProvider<T>`, `@Lookup`, or scoped proxy); stateful singletons cause race conditions; request-scoped beans require an active HTTP request. **Default**: keep beans singleton and stateless; use prototype rarely; avoid session-scope for horizontally scaled apps unless sticky sessions or a shared session store are in place.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of scope trade-offs, prototype injection into singleton pitfall, stateless design",
+        "common_mistake": "Treating singletons as stateful; naive @Autowired of prototype; session-scope in scaled-out apps",
+        "to_stand_out": "Discuss ObjectProvider, @Lookup, scoped proxy modes, @RefreshScope, thread-safety implications"
+      },
+      "company_tags": [
+        "Pivotal",
+        "VMware",
+        "Spotify",
+        "Atlassian",
+        "Amazon",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What Bean Scope Means",
+            "content": "**A bean scope controls how many instances** Spring creates and **how long they live**.\n\n**Spring Core scopes**\n- **`singleton`** (default) — one instance per `ApplicationContext`, shared by all consumers\n- **`prototype`** — a new instance every time the bean is requested (container stops managing it after construction)\n\n**Web-aware scopes** (need a web application context)\n- **`request`** — one instance per HTTP request\n- **`session`** — one instance per HTTP session\n- **`application`** — one per `ServletContext` (effectively singleton lifetime, but tied to web app)\n- **`websocket`** — one per WebSocket session\n\n**Additional**\n- **`@RefreshScope`** (Spring Cloud) — bean recreated when configuration changes\n- **`thread`** — custom scope via `SimpleThreadScope`\n- **Custom scopes** via implementing `Scope`\n\n**Declaring a scope**\n\n```java\n@Component\n@Scope(\"prototype\")\npublic class MyWorker { }\n\n@Component\n@RequestScope\npublic class RequestTracker { }\n\n@Bean\n@Scope(value = \"prototype\")\npublic ThingProcessor thingProcessor() { ... }\n```"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Scope Lifetimes — How Long Each Bean Lives",
+            "content": "The diagram below maps the four most common scopes to their lifetime windows. Notice that **singleton spans the entire application**, **prototype is gone the moment you stop holding it**, and **request/session live only as long as their HTTP artifact**.\n\n```mermaid\nflowchart LR\n    Start([\"Application start\"])\n    Sing[\"Singleton bean<br/>created once at startup<br/>lives until shutdown\"]\n    Stop([\"Application shutdown\"])\n\n    ReqA([\"HTTP request A starts\"])\n    ReqAEnd([\"HTTP request A ends\"])\n    ReqAR[\"Request-scoped bean A<br/>created on first use<br/>destroyed at request end\"]\n    ProtoA[\"Prototype bean #1<br/>new for call site A\"]\n    ProtoB[\"Prototype bean #2<br/>new for call site B\"]\n\n    ReqB([\"HTTP request B starts\"])\n    ReqBEnd([\"HTTP request B ends\"])\n    ReqBR[\"Request-scoped bean B<br/>different instance from A\"]\n\n    Sess([\"Session created\"])\n    SessEnd([\"Session expires\"])\n    SessB[\"Session-scoped bean<br/>shared across all<br/>requests in session\"]\n\n    Start --> Sing --> Stop\n    ReqA --> ReqAR --> ReqAEnd\n    ReqA --> ProtoA\n    ReqA --> ProtoB\n    ReqB --> ReqBR --> ReqBEnd\n    Sess --> SessB --> SessEnd\n    ReqA -.belongs to.-> Sess\n    ReqB -.belongs to.-> Sess\n```\n\n**Reading the diagram**\n- Singleton is created at startup and outlives every request\n- Prototype instances appear at the call site and Spring forgets about them immediately after construction\n- Request-scoped beans are different instances per request; the session-scoped bean is shared across requests within the same session"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Scopes Compared",
+            "content": "The table below maps each scope to its lifetime, thread-safety burden, and the situation it exists to solve.\n\n| Scope | Instances | Lifetime | Thread-safety requirement | Web required | Typical use |\n|---|---|---|---|---|---|\n| **singleton** | 1 per context | Context lifetime | Yes; beans usually stateless | No | Services, repos, config |\n| **prototype** | New per request | Until GC; container doesn't destroy | Caller's problem | No | Stateful workers, one-shot helpers |\n| **request** | 1 per HTTP request | End of request | Per request (usually single thread) | Yes | Request metadata, per-request cache |\n| **session** | 1 per HTTP session | Session timeout | Multi-tab issues | Yes | User preferences, wizard state |\n| **application** | 1 per ServletContext | Application lifetime | Yes | Yes | Similar to singleton for web context |\n| **websocket** | 1 per WS session | WS session | Yes | Yes | WS-specific state |\n| **`@RefreshScope`** | Replaced on refresh | Until next refresh event | Yes | No | Cloud Config live reload |"
+          },
+          {
+            "type": "step",
+            "title": "Prototype Injection into Singleton — The Classic Pitfall",
+            "content": "**The problem**\n\n```java\n@Component @Scope(\"prototype\")\nclass Worker { }\n\n@Service\nclass OrderService {\n    @Autowired Worker worker;\n\n    void handle() {\n        worker.doStuff();\n    }\n}\n```\n\n- `@Autowired` runs at bean construction\n- Singleton `OrderService` gets one `Worker` instance reused forever\n- Defeats prototype behavior\n\n**Fix 1: `ObjectProvider<T>` (recommended)**\n\n```java\n@Service\nclass OrderService {\n    private final ObjectProvider<Worker> workers;\n\n    OrderService(ObjectProvider<Worker> workers) { this.workers = workers; }\n\n    void handle() {\n        Worker worker = workers.getObject();\n        worker.doStuff();\n    }\n}\n```\n\n**Fix 2: `Provider<T>` (JSR-330)**\n\n```java\n@Autowired Provider<Worker> workers;\nWorker w = workers.get();\n```\n\n**Fix 3: `@Lookup` (method injection)**\n\n```java\n@Service\nabstract class OrderService {\n    @Lookup\n    abstract Worker newWorker();\n\n    void handle() { newWorker().doStuff(); }\n}\n```\n\n- Spring subclasses the service and implements `newWorker()` to return a fresh prototype\n- Rare in modern code\n\n**Fix 4: Scoped proxy on the prototype**\n\n```java\n@Component\n@Scope(value = \"prototype\", proxyMode = ScopedProxyMode.TARGET_CLASS)\nclass Worker { }\n```\n\n- Injecting the prototype gives you a proxy; each method call fetches a new underlying instance\n- Works but `ObjectProvider` is usually cleaner\n\n**Same pattern for request/session-scoped beans**\n- Use scoped proxy (`proxyMode = TARGET_CLASS`) when injecting them into singletons\n- The singleton holds a proxy that dispatches to the right per-request / per-session instance"
+          },
+          {
+            "type": "step",
+            "title": "Best Practices and When to Use Each",
+            "content": "**`singleton` (default) — used for ~99% of beans**\n- Services, repositories, controllers, factories, utilities\n- **Must be thread-safe**: keep them stateless; any state must be local to method or synchronized\n- `@ConfigurationProperties` objects are singletons\n- Heavy objects (caches, clients with connection pools) — singleton amortizes cost\n\n**`prototype` — rare, but valid for**\n- Stateful workers that should not be shared across requests\n- One-shot helpers whose state matters (builder patterns)\n- Legacy code that mutates beans\n- **Spring does not call `@PreDestroy` on prototypes** — manage lifecycle yourself\n\n**`request` — per-request state**\n- Request tracing / correlation IDs (though MDC is simpler)\n- Per-request caches (only within one request)\n- Always use `proxyMode = TARGET_CLASS` when injecting into singletons\n\n**`session` — use sparingly**\n- Wizard / multi-step form state\n- Short-term user preferences in session\n- **Avoid in horizontally scaled apps** without sticky sessions or shared session store (Spring Session + Redis)\n- Consider: is session state better stored client-side or in explicit DB?\n\n**`application` / `websocket` — niche web-context scopes**\n\n**`@RefreshScope` (Spring Cloud)**\n- Beans whose behavior depends on external config\n- `/actuator/refresh` triggers recreation\n- Useful for changing feature flags, log levels, rate limits at runtime\n\n**Common pitfalls**\n- **Stateful singleton** — the #1 source of concurrency bugs\n- **Injecting prototype naively** — gets one instance forever\n- **Forgetting `proxyMode`** on web scopes injected into singletons\n- **Session scope in scaled-out apps** without sticky sessions or Spring Session\n- **Long-lived prototype beans** — no lifecycle management means leaks\n- **Custom scopes without registration** — must register with `CustomScopeConfigurer`"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Real-World Patterns",
+            "content": "**When singleton helps:**\n- Stateless services scale horizontally with zero overhead\n- Heavy resources (connection pools, caches) construct once and amortize\n- DI graph wired at startup; no runtime reflection cost\n- Pushes you toward stateless design — the right default for scalability\n\n**When prototype helps:**\n- Genuine per-use mutable state (builder objects, batch processors with internal counters)\n- Avoids accidental sharing of mutable state across threads\n- When method-local `new` would lose Spring features (AOP, injection)\n\n**When request/session scope helps:**\n- Per-request caches that dedupe work within one HTTP cycle\n- Multi-step wizards where state must persist across requests in one session\n- Audit / tracing where carrying state through method params is awkward\n\n**When it hurts:**\n- Stateful singleton — race conditions, lost updates, the #1 production bug\n- Prototype injected without `ObjectProvider` — silently behaves like singleton\n- Session scope in horizontally scaled apps — pod death loses state, breaks load balancing\n- `@RefreshScope` overuse — references in non-refreshable beans go stale\n\n**Watch for:**\n- `SimpleAsyncTaskExecutor` (default for `@Async`) creates unbounded threads — prefer bounded `ThreadPoolTaskExecutor`\n- Mixing scopes in the dependency graph requires correct proxy mode or `ObjectProvider`\n- Session state forces sticky sessions on the load balancer; consider Spring Session + Redis or moving state to a token\n\n**Custom scopes — when justified**\n- Multi-tenant beans (one instance per tenant, evicted when tenant context clears)\n- Feature-flag-scoped beans (different bean per flag value)\n- Implement `Scope`, register with `CustomScopeConfigurer`, then `@Scope(\"tenant\")`\n\n**Strategic take**\n- Default to singleton + stateless; that solves 95% of designs\n- Extract per-request state to DTOs or MDC rather than request-scoped beans\n- Avoid session scope unless you've thought about horizontal scaling\n- Use `ObjectProvider<T>` when you need a fresh non-singleton instance"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Singleton** (default) — one per context; must be stateless / thread-safe; covers ~99% of beans.\n- **Prototype** — fresh instance per request; Spring doesn't manage lifecycle after construction; no `@PreDestroy` callback.\n- **Request / session / application** — web-only; lifetime tied to HTTP artifacts.\n- **Injecting prototype/request into singleton** — use `ObjectProvider<T>`, `@Lookup`, or scoped proxy.\n- **`ScopedProxyMode.TARGET_CLASS`** — CGLIB proxy; `INTERFACES` — JDK proxy.\n- **`@RefreshScope`** — bean recreated on Spring Cloud config refresh; useful for live-reloadable feature flags.\n- **Custom scopes** via `Scope` + `CustomScopeConfigurer` — tenant-scoped, feature-flag-scoped beans.\n- **Pitfalls** — stateful singletons (concurrency bugs), prototype injection freezing, session scope breaking horizontal scale.\n- **Default stance** — singletons + stateless; prototype rarely; session-scope only with sticky sessions or shared store."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring's default is singleton — one instance per container, shared everywhere. Prototype creates a new instance every request. Request, session, and application scopes are web-only and tie the bean's lifetime to HTTP artifacts.\n\n**Spring Core scopes**\n- singleton — one per `ApplicationContext`, shared\n- prototype — new instance every request; Spring stops managing it after construction\n\n**Web-aware scopes**\n- request — one per HTTP request\n- session — one per HTTP session\n- application — one per `ServletContext`\n- websocket — one per WebSocket session\n\n**Additional**\n- `@RefreshScope` (Spring Cloud) — recreated on `/actuator/refresh`\n\n**The classic pitfall — prototype injected into singleton**\n- `@Autowired` runs once at bean construction; the singleton gets one prototype instance forever\n- Fix with `ObjectProvider<T>` (recommended), `@Lookup`, or scoped proxy with `proxyMode = TARGET_CLASS`\n- Same fix needed for request/session-scoped beans injected into singletons\n\n**Best practice by scope**\n- singleton — 99% of beans, must be stateless and thread-safe\n- prototype — rare; only when per-use mutable state is genuine; remember Spring won't run `@PreDestroy`\n- request — per-request caches and tracing; MDC often simpler\n- session — wizards and preferences; avoid in horizontally scaled apps without Spring Session + Redis or sticky sessions\n\n**Strategic take**\n- Default to stateless singletons — that's what makes Spring apps scale horizontally\n- Fighting that default usually means you're storing state in the wrong place"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the pitfall of @Autowired-ing a prototype into a singleton?",
+        "How does ScopedProxyMode.TARGET_CLASS work under the hood?",
+        "Why avoid session scope in horizontally scaled apps?",
+        "How do you implement a custom tenant-scoped bean?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Bean Scopes: Singleton vs Prototype vs Request vs Session",
+        "metaDescription": "Compare Spring bean scopes — singleton, prototype, request, session, application — with pitfalls, ObjectProvider pattern, @RefreshScope, and custom scopes."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring's default is singleton — one instance per container, shared everywhere.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "A bean scope controls how many instances Spring creates and how long they live. Spring Core scopes singleton (default) — one instance per ApplicationContext, shared by all consumers prototype — a new instance every time the bean is requested (container stops managing it after construction) Web-aware scopes (need a web application context) request — one instance per HTTP request session — one instance per HTTP session application — one per."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The table below maps each scope to its lifetime, thread-safety burden, and the situation it exists to solve",
+              "| Scope | Instances | Lifetime | Thread-safety requirement | Web required | Typical use | |---|---|---|---|---|---| | singleton | 1 per context | Context lifetime | Yes; beans usually stateless | No | Services, repos, config | | prototype | New per request | Until GC; container doesn't destroy | Caller's problem | No | Stateful workers, one-shot helpers | | request | 1 per HTTP request | End of request | Per request (usually single thread) | Yes | Request metadata, per-request cache | | session | 1 per HTTP session | Session timeout | Multi-tab issues | Yes | User preferences, wizard state | | application | 1 per ServletContext | Application lifetime | Yes | Yes | Similar to singleton for web context | | websocket | 1 per WS session | WS session | Yes | Yes | WS-specific state | | @RefreshScope | Replaced on refresh | Until next refresh event | Yes | No | Cloud Config live reload |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When singleton helps: Stateless services scale horizontally with zero overhead Heavy resources (connection pools, caches) construct once and amortize DI graph wired at startup; no runtime reflection cost Pushes you toward stateless design — the right default for scalability When prototype helps: Genuine per-use mutable state (builder objects, batch processors with internal counters) Avoids accidental sharing of mutable state across threads When method-local new would lose Spring features (AOP, injection) When request/session scope helps: Per-request caches that dedupe work within one HTTP cycle Multi-step wizards where state must persist across."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "A bean scope controls how many instances Spring creates and how long they live. Spring Core scopes singleton (default) — one instance per ApplicationContext, shared by all consumers prototype — a new instance every time the bean is requested (container stops managing it after construction) Web-aware scopes (need a web application context) request — one instance per HTTP request session."
+          }
+        ],
+        "cap": "Spring Core scopes singleton — one per ApplicationContext, shared prototype — new instance every request; Spring stops managing it after construction Web-aware scopes request — one per HTTP request se",
+        "familiarity_anchors": [
+          "Spring",
+          "Prototype",
+          "Request"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the pitfall of @Autowired-ing a prototype into a singleton?",
+          "How does ScopedProxyMode.TARGET_CLASS work under the hood?",
+          "Why avoid session scope in horizontally scaled apps?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-cmp-002",
+      "slug": "component-vs-bean-annotation",
+      "question": "What is the difference between @Component and @Bean?",
+      "title": "@Component vs @Bean — Two Ways to Register Beans",
+      "direct_answer": "**`@Component`** is a **class-level** annotation discovered by **component scanning** — Spring instantiates the class and manages it as a bean. **`@Bean`** is a **method-level** annotation inside `@Configuration` classes — you write the construction logic explicitly and return the instance Spring should manage. Use `@Component` for classes you own and want to mark as Spring-managed. Use `@Bean` for **third-party classes you don't control** (you can't add `@Component` to `RestTemplate`), for **conditional or parameterized construction**, and when you need **multiple beans of the same type** with different configs. `@Component` is convention-based; `@Bean` is explicit and gives full control over instantiation.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands that @Component and @Bean serve different scenarios — class ownership vs explicit factory method — and when to reach for each.",
+        "common_mistake": "Saying they're interchangeable, or trying to put @Component on a third-party class (you can't modify a class you don't own).",
+        "to_stand_out": "Mention that @Bean methods inside @Configuration classes are CGLIB-proxied so calling one method from another returns the same bean, and that this proxying doesn't apply to @Component classes."
+      },
+      "company_tags": [
+        "Amazon",
+        "Microsoft",
+        "Google",
+        "Pivotal",
+        "Stripe",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Registration Mechanisms — One Implicit, One Explicit",
+            "content": "**`@Component` and `@Bean` both register beans** with the Spring container, but they target different scenarios.\n\n**`@Component` is implicit registration via component scanning**.\n- You annotate a class you own with `@Component` (or one of its specializations: `@Service`, `@Repository`, `@Controller`).\n- When component scan reaches that package, Spring instantiates the class using its constructor and registers the resulting object as a bean.\n- The framework picks the constructor and manages everything.\n\n**`@Bean` is explicit registration via factory method**.\n- You write a method inside a `@Configuration` class, annotate it with `@Bean`, and return the object you want Spring to manage.\n- You control everything: which constructor, what arguments, conditional logic, post-construction setup.\n- The method name becomes the bean ID by default.\n\n**The fundamental decision**: do you own the class? If yes and the construction is straightforward, `@Component`. If no (third-party library), or yes but construction needs logic, `@Bean`."
+          },
+          {
+            "type": "comparison_table",
+            "title": "@Component vs @Bean — Side-by-Side",
+            "content": "Each row maps a real characteristic to how the two annotations behave.\n\n| Aspect | `@Component` | `@Bean` |\n|---|---|---|\n| **Where applied** | Class declaration | Method inside `@Configuration` class |\n| **Discovery** | Component scanning of packages | Explicit method invocation by Spring |\n| **Who calls the constructor** | Spring (using its own DI logic) | You, in the method body |\n| **Class ownership** | Must be your class (need to add annotation) | Works for any class, including third-party |\n| **Construction logic** | Limited to constructor injection | Arbitrary logic — conditionals, builders, factory calls |\n| **Multiple instances of same type** | Awkward (need different classes or qualifiers) | Easy — multiple `@Bean` methods returning same type |\n| **Inter-bean references** | Via `@Autowired` | Method calls (CGLIB-proxied for singleton semantics) |\n| **Bean name default** | Class name camelCased | Method name |\n| **Conditional registration** | `@ConditionalOnX` on the class | `@ConditionalOnX` on the method (more flexible) |\n| **Test override** | Hard — need to exclude from scan | Easy — override the `@Bean` method in a test config |\n\n**The most operationally important row** is *class ownership*. You can't put `@Component` on `RestTemplate` because you don't own its source. That's the most common reason to reach for `@Bean`."
+          },
+          {
+            "type": "step",
+            "title": "When to Use @Component",
+            "content": "**Use `@Component` (or `@Service` / `@Repository` / `@Controller`) when**\n\n- You own the class and can edit its source\n- Construction is straightforward — just inject dependencies via constructor\n- You want one instance with the default name (class name camelCased)\n- The class is part of your application's domain or service layer\n\n**Example — typical service**\n\n```java\n@Service\npublic class OrderService {\n    private final OrderRepository repo;\n    private final PaymentClient payments;\n\n    public OrderService(OrderRepository repo, PaymentClient payments) {\n        this.repo = repo;\n        this.payments = payments;\n    }\n}\n```\n\n**What Spring does**\n- Component scan finds `OrderService` in the package\n- Spring uses its single constructor\n- Resolves `OrderRepository` and `PaymentClient` from the container\n- Registers the new instance as a bean named `orderService`\n\n**`@Component` benefits**\n- **Less boilerplate** — no factory method\n- **Convention** — the class declares its own role\n- **Discoverable** — `grep` for `@Service` finds your business logic\n\n**`@Component` limitations**\n- Can't be applied to classes you don't own (third-party libraries)\n- Limited construction control — Spring picks the constructor and arguments\n- Hard to register multiple instances of the same type without subclassing or qualifiers"
+          },
+          {
+            "type": "step",
+            "title": "When to Use @Bean",
+            "content": "**Use `@Bean` when**\n\n- The class is from a third-party library (you can't add `@Component`)\n- Construction requires logic — builder patterns, conditionals, environment-dependent values\n- You need multiple instances of the same type with different configs\n- You're integrating an existing factory or static method\n- You want explicit control for testability or readability\n\n**Example — third-party class**\n\n```java\n@Configuration\npublic class HttpConfig {\n    @Bean\n    public RestTemplate restTemplate(RestTemplateBuilder builder) {\n        return builder\n            .setConnectTimeout(Duration.ofSeconds(2))\n            .setReadTimeout(Duration.ofSeconds(5))\n            .build();\n    }\n}\n```\n\n- `RestTemplate` is from Spring Web — you can't add `@Component` to it\n- The `@Bean` method gives you explicit timeout and builder control\n\n**Example — multiple beans of same type**\n\n```java\n@Configuration\npublic class DataSourceConfig {\n    @Bean @Primary\n    public DataSource primaryDataSource() {\n        return DataSourceBuilder.create().url(\"jdbc:postgresql://primary/app\").build();\n    }\n\n    @Bean\n    public DataSource readonlyDataSource() {\n        return DataSourceBuilder.create().url(\"jdbc:postgresql://replica/app\").build();\n    }\n}\n```\n\n- Two `DataSource` beans with different configs\n- `@Primary` decides the default; `@Qualifier(\"readonlyDataSource\")` selects the other\n\n**`@Bean` and CGLIB proxying — the inter-method call rule**\n- `@Configuration` classes are subclassed by CGLIB at runtime\n- Calling one `@Bean` method from another (`primaryDataSource()` inside another `@Bean` method) returns the **same singleton instance**, not a new construction\n- This is what allows safe inter-bean wiring through method calls\n- Without `@Configuration` (just `@Component` on the config class), the proxy isn't applied — each method call constructs a fresh instance, breaking singleton semantics"
+          },
+          {
+            "type": "step",
+            "title": "Common Pitfalls and Edge Cases",
+            "content": "**Putting `@Bean` outside a `@Configuration` class**\n- `@Bean` works in `@Component`-annotated classes too, but **without CGLIB proxying**\n- Inter-bean method calls then create new instances each time — silent singleton breakage\n- Always put `@Bean` methods inside `@Configuration` classes unless you specifically don't need inter-method singleton semantics\n\n**Trying to put `@Component` on a third-party class**\n- You'd need to subclass it just to add the annotation — defeats the point\n- Use `@Bean` instead\n\n**Bean name collision**\n- Two `@Bean` methods in different `@Configuration` classes returning the same type with the same method name will conflict\n- `@Component` collisions happen when two classes have the same simple name in different packages\n- Resolve with explicit `name` attribute or `@Qualifier`\n\n**Conditional registration**\n- `@ConditionalOnX` annotations work on both `@Bean` methods and `@Component` classes\n- More common on `@Bean` methods because conditional logic for third-party integration usually belongs in configuration\n\n**Test override**\n- `@Bean` is much easier to override in tests — just declare a `@TestConfiguration` with the same method name and return type\n- `@Component` requires excluding from component scan, which is more involved\n\n**The factory method bridge**\n- For complex object graphs, `@Bean` methods can call helper static methods or builders\n- This separates the configuration concern from the domain logic"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Component` is class-level, scanned**; **`@Bean` is method-level, explicit** — they target different scenarios.\n- **Use `@Component` for your own classes** with straightforward construction — services, repositories, controllers.\n- **Use `@Bean` for third-party classes** — `RestTemplate`, `DataSource`, `ObjectMapper` — you can't add annotations to them.\n- **Use `@Bean` for multiple instances of same type** — two `DataSource` beans with different configs, distinguished by `@Primary` and `@Qualifier`.\n- **`@Configuration` classes are CGLIB-proxied** — calling one `@Bean` method from another returns the same singleton; this doesn't apply to `@Component` classes.\n- **`@Bean` is easier to override in tests** — `@TestConfiguration` with same method name; `@Component` requires excluding from scan.\n- **Conditional registration works on both** — `@ConditionalOnX` on `@Bean` method or `@Component` class; more flexible on `@Bean`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Both `@Component` and `@Bean` register objects with the Spring container, but they solve different problems.\n\n**`@Component` — class-level, scanned**\n- Annotate a class you own; component scan instantiates it and registers it as a bean\n- Specializations: `@Service`, `@Repository`, `@Controller`\n- Best for your own services, repositories, controllers — straightforward construction\n\n**`@Bean` — method-level, explicit**\n- Inside a `@Configuration` class, write a method that returns the object Spring should manage\n- You control everything: constructor choice, arguments, conditional logic\n- Best for third-party classes you don't own (`RestTemplate`, `DataSource`), parameterized construction, and when you need multiple beans of the same type\n\n**The decision rule**\n- Do you own the class? If yes and construction is straightforward, `@Component`\n- If no, or if construction needs logic, `@Bean`\n\n**Subtle but important — CGLIB proxying**\n- `@Configuration` classes are subclassed by CGLIB at runtime\n- Calling one `@Bean` method from another inside the config class returns the same singleton instance — Spring intercepts the call\n- This doesn't happen with `@Component`-annotated classes — inter-method calls construct fresh instances\n- Always put `@Bean` methods inside `@Configuration`, not `@Component`\n\n**Other practical advantages of `@Bean`**\n- Easy to override in tests (`@TestConfiguration` with same method name)\n- Easy to register multiple instances of same type with `@Primary` and `@Qualifier`\n- Conditional registration via `@ConditionalOnX` on the method"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why are @Configuration classes proxied with CGLIB and what does that affect?",
+        "What happens if you put a @Bean method inside a @Component class instead of @Configuration?",
+        "How do @Primary and @Qualifier resolve ambiguity when multiple beans of the same type exist?",
+        "How would you register a third-party class as a Spring bean?"
+      ],
+      "seo": {
+        "metaTitle": "@Component vs @Bean — When to Use Each in Spring",
+        "metaDescription": "@Component scans classes you own; @Bean explicitly defines beans for third-party or parameterized construction. Includes CGLIB proxying behavior and test override patterns."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Both @Component and @Bean register objects with the Spring container, but they solve different problems.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "@Component and @Bean both register beans with the Spring container, but they target different scenarios. @Component is implicit registration via component scanning. You annotate a class you own with @Component (or one of its specializations: @Service, @Repository, @Controller). When component scan reaches that package, Spring instantiates the class using its constructor and registers the resulting object as a bean. The framework picks the constructor and manages everything. @Bean is explicit."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Each row maps a real characteristic to how the two annotations behave",
+              "| Aspect | @Component | @Bean | |---|---|---| | Where applied | Class declaration | Method inside @Configuration class | | Discovery | Component scanning of packages | Explicit method invocation by Spring | | Who calls the constructor | Spring (using its own DI logic) | You, in the method body | | Class ownership | Must be your class (need to add annotation) | Works for any class, including third-party | | Construction logic | Limited to constructor injection | Arbitrary logic — conditionals, builders, factory calls | | Multiple instances of same type | Awkward (need different classes or qualifiers) | Easy — multiple @Bean methods returning same type | | Inter-bean references | Via @Autowired | Method calls (CGLIB-proxied for singleton semantics) | | Bean name default | Class name camelCased | Method name | | Conditional registration | @ConditionalOnX on the class | @ConditionalOnX on the method (more flexible) | | Test override | Hard — need to exclude from scan | Easy — override the @Bean method in a test config | The most operationally important row is class ownership",
+              "You can't put @Component on RestTemplate because you don't own its source",
+              "That's the most common reason to reach for @Bean"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "@Component and @Bean both register beans with the Spring container, but they target different scenarios. @Component is implicit registration via component scanning. You annotate a class you own with @Component (or one of its specializations: @Service, @Repository, @Controller). When component scan reaches that package, Spring instantiates the class using its constructor and registers the resulting object as a bean. The framework picks the constructor and manages everything. @Bean is explicit registration via factory method. You write a method inside a @Configuration class, annotate it with @Bean, and return the object."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "@Component and @Bean both register beans with the Spring container, but they target different scenarios. @Component is implicit registration via component scanning. You annotate a class you own with @Component (or one of its specializations: @Service, @Repository, @Controller). When component scan reaches that package, Spring instantiates the class using its constructor and registers the resulting object as a bean. The."
+          }
+        ],
+        "cap": "@Component — class-level, scanned Annotate a class you own; component scan instantiates it and registers it as a bean Specializations: @Service, @Repository, @Controller Best for your own services, re",
+        "familiarity_anchors": [
+          "Component",
+          "Spring",
+          "Configuration"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why are @Configuration classes proxied with CGLIB and what does that affect?",
+          "What happens if you put a @Bean method inside a @Component class instead of @Configuration?",
+          "How do @Primary and @Qualifier resolve ambiguity when multiple beans of the same type exist?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-cmp-003",
+      "slug": "autowired-vs-inject-vs-resource",
+      "question": "What is the difference between @Autowired, @Inject, and @Resource?",
+      "title": "@Autowired vs @Inject vs @Resource — Three Injection Annotations",
+      "direct_answer": "All three perform **dependency injection** but come from different specifications and use different resolution strategies. **`@Autowired`** (Spring) injects **by type** by default; falls back to name with `@Qualifier`. **`@Inject`** (JSR-330) is the **standard Java DI annotation** — same by-type resolution as `@Autowired` but with no `required=false` option (use `Optional<T>` or `Provider<T>`). **`@Resource`** (JSR-250 / Jakarta) injects **by name first**, then by type — the opposite of `@Autowired`. Use `@Autowired` for Spring-only projects, `@Inject` for portable code that might run on other DI containers, and `@Resource` only when you specifically want name-first resolution (typically for legacy Java EE code).",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows these three annotations exist, understands the type-vs-name resolution difference, and can explain when each is the right choice.",
+        "common_mistake": "Saying they're identical, or not knowing that @Resource resolves by name first while @Autowired resolves by type first.",
+        "to_stand_out": "Mention that constructor injection is recommended over field injection for testability, that @Inject + Provider<T> is the JSR-330 equivalent of ObjectProvider, and that @Resource on the field name is what makes it ambiguity-friendly."
+      },
+      "company_tags": [
+        "Amazon",
+        "Oracle",
+        "IBM",
+        "Pivotal",
+        "Microsoft",
+        "Red Hat"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Annotations, Three Resolution Strategies",
+            "content": "**Spring supports three dependency injection annotations** — each from a different specification and with different resolution semantics.\n\n**`@Autowired`** is **Spring-native** (`org.springframework.beans.factory.annotation`).\n- It resolves dependencies **by type** first; if multiple beans of that type exist, it falls back to matching the field name as a bean name, or you use `@Qualifier` to disambiguate.\n- It supports `required = false` for optional dependencies.\n\n**`@Inject`** is the **JSR-330 standard** (`jakarta.inject.Inject` / `javax.inject.Inject`).\n- It works the same way as `@Autowired` for type-based resolution but is **not Spring-specific** — code using `@Inject` can run on Guice, CDI, Dagger, or any JSR-330-compliant container.\n- It has no `required` flag; use `Optional<T>` or `Provider<T>` for optional or lazy dependencies.\n\n**`@Resource`** is **JSR-250 / Jakarta Annotations** (`jakarta.annotation.Resource`). It resolves **by name first**, falling back to type — the opposite of `@Autowired`. Originally designed for Java EE resource injection (`DataSource`, `EJB`), Spring honors it for parity with the spec.\n\n**The decision rule**: `@Autowired` for Spring-only code, `@Inject` for portability, `@Resource` for name-first resolution or legacy Java EE compatibility."
+          },
+          {
+            "type": "comparison_table",
+            "title": "@Autowired vs @Inject vs @Resource",
+            "content": "Each row maps a real concern to how each annotation handles it.\n\n| Aspect | `@Autowired` | `@Inject` | `@Resource` |\n|---|---|---|---|\n| **Specification** | Spring | JSR-330 (standard Java DI) | JSR-250 / Jakarta Annotations |\n| **Package** | `org.springframework.beans.factory.annotation` | `jakarta.inject` | `jakarta.annotation` |\n| **Resolution order** | By type first, then by name | By type first, then by `@Named` qualifier | By name first, then by type |\n| **Optional dependency** | `required = false` | Wrap in `Optional<T>` or `Provider<T>` | `lookup` attribute or wrap in `Optional<T>` |\n| **Disambiguation** | `@Qualifier(\"name\")` | `@Named(\"name\")` | `name` attribute on `@Resource` |\n| **Portability** | Spring-only | Any JSR-330 container (Spring, Guice, CDI) | Java EE / Jakarta EE compatible |\n| **Constructor injection** | Yes (recommended) | Yes (recommended) | No (field/setter only) |\n| **Static field injection** | No | No | No |\n\n**The most operationally important row** is *resolution order*. `@Autowired` and `@Inject` agree (type first); `@Resource` is the contrarian (name first). This single fact determines which one to use when multiple beans of the same type exist."
+          },
+          {
+            "type": "step",
+            "title": "@Autowired — Spring's Native Choice",
+            "content": "**`@Autowired` is the Spring-native injection annotation** and the one used most often in Spring codebases.\n\n**Resolution algorithm**\n- Match by **type** — find all beans assignable to the field's declared type\n- If exactly one match, inject it\n- If multiple matches, look for a bean whose name matches the field name\n- If still ambiguous, fail unless `@Qualifier(\"specificName\")` is present\n- If zero matches and `required = true` (default), throw `NoSuchBeanDefinitionException`; if `required = false`, leave null\n\n**Constructor injection (recommended)**\n\n```java\n@Service\npublic class OrderService {\n    private final OrderRepository repo;\n\n    public OrderService(OrderRepository repo) {\n        this.repo = repo;\n    }\n}\n```\n\n- Since Spring 4.3, `@Autowired` is **optional on a single constructor**\n- Allows `final` fields — immutable dependencies\n- Best for testability — construct manually with mocks\n\n**Field injection (discouraged but common)**\n\n```java\n@Service\npublic class OrderService {\n    @Autowired\n    private OrderRepository repo;\n}\n```\n\n- Concise but harder to test\n- Can't use `final`\n- Hides dependencies from constructor signature\n\n**Setter injection**\n\n```java\n@Autowired\npublic void setRepo(OrderRepository repo) { this.repo = repo; }\n```\n\n- Useful for optional dependencies and circular reference workarounds\n\n**Optional with `required = false`**\n\n```java\n@Autowired(required = false)\nprivate MetricsCollector metrics;\n```\n\n- Field is null if no matching bean exists; check before use"
+          },
+          {
+            "type": "step",
+            "title": "@Inject — The Portable Standard",
+            "content": "**`@Inject` is the JSR-330 standard** — annotated code can run on any JSR-330-compliant DI container, not just Spring.\n\n**When portability matters**\n- Library code that should work in Spring, Guice, CDI, or Dagger applications\n- Hexagonal architecture where the application core should not depend on a specific framework\n- Open-source modules with multiple consumer ecosystems\n\n**Same syntax as `@Autowired`, different package**\n\n```java\nimport jakarta.inject.Inject;\n\n@Service\npublic class OrderService {\n    private final OrderRepository repo;\n\n    @Inject\n    public OrderService(OrderRepository repo) {\n        this.repo = repo;\n    }\n}\n```\n\n**Disambiguation with `@Named`**\n\n```java\n@Inject\npublic OrderService(@Named(\"primary\") DataSource ds) { }\n```\n\n- JSR-330 equivalent of `@Qualifier`\n- Works the same way at runtime\n\n**Optional and lazy dependencies — no `required` flag**\n- `@Inject Optional<Foo> foo;` — null-safe optional\n- `@Inject Provider<Foo> fooProvider;` — lazy / per-call resolution (JSR-330 equivalent of Spring's `ObjectProvider`)\n\n**Practical guidance**\n- For a Spring-only project, `@Autowired` is more idiomatic\n- For shared library code or portable modules, `@Inject` is the right choice\n- Mixing both in the same class works but is confusing — pick one per project"
+          },
+          {
+            "type": "step",
+            "title": "@Resource — Name-First Resolution",
+            "content": "**`@Resource` is JSR-250 / Jakarta Annotations** — originally designed for Java EE resource injection but recognized by Spring.\n\n**The defining feature: by name first**\n- `@Resource` looks up the bean **by name** before considering type\n- Uses the `name` attribute, then falls back to the field name as the bean name\n- Only if no name match, falls back to type-based resolution\n\n**Example — explicit name**\n\n```java\n@Resource(name = \"primaryDataSource\")\nprivate DataSource dataSource;\n```\n\n- Looks for a bean named `primaryDataSource` regardless of type matches\n\n**Example — implicit name (field name)**\n\n```java\n@Resource\nprivate DataSource readonlyDataSource;\n```\n\n- Looks for a bean named `readonlyDataSource`\n- Matches the field name to the bean name\n- Convenient when bean names align with field names\n\n**When `@Resource` makes sense**\n- Multiple beans of the same type where name-based selection is more readable than `@Qualifier`\n- Legacy Java EE code being migrated to Spring (preserves existing semantics)\n- Strict adherence to Jakarta EE conventions\n\n**Limitations**\n- **No constructor injection** — only field and setter\n- Less popular in modern Spring code; `@Autowired` + `@Qualifier` covers most cases\n- Field injection is harder to test\n\n**Why some teams prefer `@Resource` for `DataSource`-style beans**\n- When you have multiple `DataSource` beans (`primary`, `readonly`, `audit`), naming the field exactly the bean name eliminates the need for separate `@Qualifier` annotations\n- The field name itself documents the dependency"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Autowired` is Spring-native** — resolves **by type**, then falls back to field name; supports `required = false`.\n- **`@Inject` is JSR-330 standard** — same type-first resolution; portable across Spring, Guice, CDI, Dagger; no `required` flag (use `Optional<T>` or `Provider<T>`).\n- **`@Resource` is JSR-250** — resolves **by name first**, then by type; opposite of `@Autowired`; field/setter only, no constructor injection.\n- **`@Qualifier` (Spring) and `@Named` (JSR-330) disambiguate** when multiple beans of the same type exist.\n- **Constructor injection is preferred** for `@Autowired` and `@Inject` — enables `final` fields and easier testing.\n- **Spring 4.3+ makes `@Autowired` optional on a single constructor** — Spring auto-detects and injects.\n- **`@Resource` shines for name-based DataSource selection** — field name matches bean name, no separate qualifier needed.\n- **Avoid mixing `@Autowired` and `@Inject` in the same class** — pick one per project for consistency."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "All three annotations perform dependency injection, but they come from different specifications and resolve dependencies differently.\n\n**`@Autowired` — Spring-native**\n- Resolves by type first; falls back to bean name matching the field name\n- Use `@Qualifier(\"name\")` to disambiguate when multiple beans of the same type exist\n- Supports `required = false` for optional dependencies\n- Constructor injection is preferred — enables `final` fields and easier testing\n- Since Spring 4.3, optional on a single constructor — Spring auto-detects\n\n**`@Inject` — JSR-330 standard**\n- Same type-first resolution as `@Autowired`\n- Portable: works on Spring, Guice, CDI, Dagger — any JSR-330 container\n- Disambiguation via `@Named(\"name\")` instead of `@Qualifier`\n- No `required` flag — use `Optional<T>` for optional, `Provider<T>` for lazy/per-call\n- Best for shared library code or hexagonal architecture\n\n**`@Resource` — JSR-250 / Jakarta**\n- Resolves by name first, then by type — opposite of `@Autowired`\n- Field/setter only — no constructor injection\n- Useful for legacy Java EE code or when name-based DataSource selection is more readable than `@Qualifier`\n- Field name matches bean name implicitly — convenient pattern\n\n**The decision rule**\n- Spring-only project: `@Autowired`\n- Portable library code: `@Inject`\n- Name-first resolution or Java EE migration: `@Resource`\n\nMost modern Spring codebases standardize on `@Autowired` with constructor injection — that's the idiomatic choice."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is constructor injection preferred over field injection?",
+        "What is the JSR-330 equivalent of Spring's @Qualifier?",
+        "How would you inject an optional dependency with @Inject (no required flag)?",
+        "When would you choose @Resource over @Autowired?"
+      ],
+      "seo": {
+        "metaTitle": "@Autowired vs @Inject vs @Resource — Spring DI Annotations Compared",
+        "metaDescription": "Three injection annotations, three resolution strategies. @Autowired (Spring, type-first), @Inject (JSR-330, portable), @Resource (JSR-250, name-first)."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "All three annotations perform dependency injection, but they come from different specifications and resolve dependencies differently.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Spring supports three dependency injection annotations — each from a different specification and with different resolution semantics. @Autowired is Spring-native (org.springframework.beans.factory.annotation). It resolves dependencies by type first; if multiple beans of that type exist, it falls back to matching the field name as a bean name, or you use @Qualifier to disambiguate. It supports required = false for optional dependencies. @Inject is the JSR-330 standard (jakarta.inject.Inject / javax.inject.Inject). It works."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Each row maps a real concern to how each annotation handles it",
+              "| Aspect | @Autowired | @Inject | @Resource | |---|---|---|---| | Specification | Spring | JSR-330 (standard Java DI) | JSR-250 / Jakarta Annotations | | Package | org",
+              "springframework",
+              "annotation | jakarta",
+              "inject | jakarta"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Spring supports three dependency injection annotations — each from a different specification and with different resolution semantics. @Autowired is Spring-native (org.springframework.beans.factory.annotation). It resolves dependencies by type first; if multiple beans of that type exist, it falls back to matching the field name as a bean name, or you use @Qualifier to disambiguate. It supports required = false for optional dependencies. @Inject is the JSR-330 standard (jakarta.inject.Inject / javax.inject.Inject). It works the same way as @Autowired for type-based resolution but is not Spring-specific — code using @Inject can run on Guice."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Spring supports three dependency injection annotations — each from a different specification and with different resolution semantics. @Autowired is Spring-native (org.springframework.beans.factory.annotation). It resolves dependencies by type first; if multiple beans of that type exist, it falls back to matching the field name as a bean name, or you use @Qualifier to disambiguate. It supports required = false for optional dependencies."
+          }
+        ],
+        "cap": "@Autowired — Spring-native Resolves by type first; falls back to bean name matching the field name Use @Qualifier(\"name\") to disambiguate when multiple beans of the same type exist Supports required =",
+        "familiarity_anchors": [
+          "Autowired",
+          "Spring",
+          "Qualifier"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is constructor injection preferred over field injection?",
+          "What is the JSR-330 equivalent of Spring's @Qualifier?",
+          "How would you inject an optional dependency with @Inject (no required flag)?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-cmp-004",
+      "slug": "applicationcontext-vs-beanfactory",
+      "question": "What is the difference between ApplicationContext and BeanFactory?",
+      "title": "ApplicationContext vs BeanFactory — Two Container Interfaces",
+      "direct_answer": "**`BeanFactory`** is the **root container interface** — provides basic bean lookup and lifecycle management. It's lazy: beans are created **on first access**. **`ApplicationContext`** is a **superset of `BeanFactory`** — adds enterprise features: **eager singleton initialization at startup**, **event publishing** (`ApplicationEventPublisher`), **internationalization** (`MessageSource`), **resource loading** (`ResourceLoader`), **environment abstraction**, and **automatic `BeanPostProcessor` and `BeanFactoryPostProcessor` registration**. In modern Spring applications, you almost always use `ApplicationContext` (or its specializations like `AnnotationConfigApplicationContext`). `BeanFactory` is now mostly a **legacy interface** retained for backward compatibility and resource-constrained environments where eager initialization is undesirable.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands that ApplicationContext extends BeanFactory and adds enterprise features, and knows about eager vs lazy initialization differences.",
+        "common_mistake": "Saying they're unrelated, or not knowing ApplicationContext is a superset of BeanFactory with significant additional capabilities.",
+        "to_stand_out": "Mention that ApplicationContext eagerly initializes singletons at startup (fail-fast), automatically detects and registers BeanPostProcessor/BeanFactoryPostProcessor instances, and publishes ContextRefreshedEvent."
+      },
+      "company_tags": [
+        "Pivotal",
+        "VMware",
+        "Amazon",
+        "Microsoft",
+        "Google",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Interfaces, One Inheritance",
+            "content": "**`BeanFactory` is the root interface** of Spring's IoC container.\n- Provides the absolute minimum: register bean definitions, look up beans by name or type, manage their lifecycle.\n- **Lazy by design** — beans are instantiated only when first requested via `getBean()`.\n\n**`ApplicationContext` extends `BeanFactory`** and layers on enterprise features:\n- Eagerly initializes all singleton beans at startup — fail-fast on misconfiguration.\n- Automatically registers `BeanPostProcessor` and `BeanFactoryPostProcessor` instances.\n- Publishes lifecycle events (`ContextRefreshedEvent`, `ContextClosedEvent`).\n- Supports internationalization via `MessageSource`.\n- Loads resources from classpath / file / URL via `ResourceLoader`.\n- Provides environment abstraction — `Environment`, profiles, property sources.\n\n**The practical reality**: in 99% of Spring applications you use `ApplicationContext` — typically `AnnotationConfigApplicationContext` or Spring Boot's `AnnotationConfigServletWebServerApplicationContext`.\n- `BeanFactory` is mostly a **legacy abstraction** retained for backward compatibility.\n- Reach for it directly only in resource-constrained scenarios (Android, embedded systems) where lazy initialization matters, or when writing custom container infrastructure."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Inheritance and Capability — How ApplicationContext Builds on BeanFactory",
+            "content": "The diagram shows the interface hierarchy and what each level adds. `ApplicationContext` is `BeanFactory` plus six enterprise capabilities.\n\n```mermaid\nflowchart TB\n    BF[\"BeanFactory<br/>basic container interface\"]\n    BFCap[\"Capabilities:<br/>getBean()<br/>containsBean()<br/>isSingleton()<br/>lazy lookup\"]\n    AC[\"ApplicationContext<br/>extends BeanFactory\"]\n    ACCap[\"Adds:<br/>eager singleton init<br/>ApplicationEventPublisher<br/>MessageSource (i18n)<br/>ResourceLoader<br/>EnvironmentCapable<br/>auto BeanPostProcessor registration\"]\n\n    AnnotCtx[\"AnnotationConfigApplicationContext\"]\n    XmlCtx[\"ClassPathXmlApplicationContext\"]\n    WebCtx[\"AnnotationConfigServletWebServerApplicationContext<br/>(Spring Boot)\"]\n\n    BF --> BFCap\n    BF --> AC\n    AC --> ACCap\n    AC --> AnnotCtx\n    AC --> XmlCtx\n    AC --> WebCtx\n```\n\n**What the diagram makes visible**\n- `ApplicationContext` is `BeanFactory` plus enterprise features\n- The concrete implementations (`AnnotationConfigApplicationContext`, etc.) all implement `ApplicationContext`\n- Spring Boot uses a specialized web variant that adds embedded servlet container support"
+          },
+          {
+            "type": "comparison_table",
+            "title": "ApplicationContext vs BeanFactory — Feature Matrix",
+            "content": "Each row maps a capability to whether it's available in each interface.\n\n| Feature | `BeanFactory` | `ApplicationContext` |\n|---|---|---|\n| **Bean lookup (`getBean()`)** | Yes | Yes (inherited) |\n| **Lazy initialization** | Yes (default) | Optional (eager by default) |\n| **Eager singleton init at startup** | No | Yes (fail-fast) |\n| **Automatic `BeanPostProcessor` registration** | No (manual) | Yes |\n| **Automatic `BeanFactoryPostProcessor` registration** | No (manual) | Yes |\n| **Event publishing (`ApplicationEventPublisher`)** | No | Yes |\n| **Internationalization (`MessageSource`)** | No | Yes |\n| **Resource loading (`ResourceLoader`)** | No | Yes (classpath, file, URL) |\n| **Environment abstraction (`Environment`)** | No | Yes (profiles, property sources) |\n| **AOP support (`@AspectJ` autoproxy)** | No (manual setup) | Yes (auto via post-processor) |\n| **Common implementation** | `XmlBeanFactory` (deprecated) | `AnnotationConfigApplicationContext`, `ClassPathXmlApplicationContext` |\n\n**The critical row** is *eager singleton init at startup*. `BeanFactory` waits until you call `getBean()` to construct a bean — silent failures hide until first use. `ApplicationContext` constructs every singleton at startup, surfacing misconfiguration immediately. This is why production Spring apps overwhelmingly use `ApplicationContext`."
+          },
+          {
+            "type": "step",
+            "title": "Eager vs Lazy Initialization — The Defining Behavioral Difference",
+            "content": "**`BeanFactory` is lazy by default**\n- Beans are constructed only when first requested via `getBean()`\n- Misconfiguration (wrong constructor args, missing dependencies) doesn't surface until that bean is actually used\n- A typo in a `@Value` injection might survive deployment and only fail at runtime when the bean is needed\n\n**`ApplicationContext` is eager by default for singletons**\n- Every singleton bean is constructed at startup (during `refresh()`)\n- Misconfiguration fails fast — the application doesn't start, so you find errors before serving traffic\n- This is the **fail-fast principle** in action\n\n**Why eager is the right default for production**\n- Errors found at startup, not in production traffic\n- Health checks accurately reflect application readiness\n- Connection pools, caches, and singletons that have construction cost amortize before the first request\n\n**When lazy initialization is still useful**\n- Heavy beans only some deployments use (e.g., a feature-flagged integration)\n- Annotate individual beans with `@Lazy` to defer construction\n- Spring Boot 2.2+ supports `spring.main.lazy-initialization=true` to make all beans lazy globally — useful for fast development restarts but not recommended for production\n\n**Example — lazy on a specific bean**\n\n```java\n@Bean\n@Lazy\npublic ExpensiveReportingService reportingService() {\n    return new ExpensiveReportingService();\n}\n```\n\n- Bean constructed only when first injected/requested\n- Other beans that depend on it get a proxy until needed"
+          },
+          {
+            "type": "step",
+            "title": "Other Enterprise Features ApplicationContext Adds",
+            "content": "**Automatic `BeanPostProcessor` registration**\n- `BeanPostProcessor` instances are how Spring AOP, `@Autowired` injection, and many extensions work\n- `BeanFactory` doesn't auto-detect them — you must register manually with `addBeanPostProcessor()`\n- `ApplicationContext` automatically detects every `BeanPostProcessor` bean and applies it to all subsequent bean creations\n- Same for `BeanFactoryPostProcessor` (operates on bean definitions before instantiation)\n\n**Event publishing (`ApplicationEventPublisher`)**\n- `ApplicationContext` implements `ApplicationEventPublisher`\n- `publishEvent(event)` notifies all `@EventListener`-annotated methods and `ApplicationListener` beans\n- `BeanFactory` has no event support — Spring Events don't work without `ApplicationContext`\n\n**Internationalization (`MessageSource`)**\n- `ApplicationContext` exposes `getMessage(code, args, locale)` for resolving locale-specific messages\n- Backed by `ResourceBundleMessageSource` or `ReloadableResourceBundleMessageSource`\n- `BeanFactory` has no concept of i18n\n\n**Resource loading (`ResourceLoader`)**\n- `ApplicationContext` is a `ResourceLoader` — `getResource(\"classpath:config.properties\")` returns a `Resource`\n- Supports `classpath:`, `file:`, `http:` prefixes\n- Used internally by `@PropertySource`, `@ImportResource`\n\n**Environment abstraction (`Environment`)**\n- Profiles: `getActiveProfiles()`, `getDefaultProfiles()`\n- Property sources: `getProperty(\"key\")` reads from `application.properties`, env vars, system properties\n- Foundation for `@Profile`, `@ConfigurationProperties`, `@Value` resolution\n\n**Lifecycle events**\n- `ContextRefreshedEvent` fires when context is initialized\n- `ContextClosedEvent` fires before shutdown\n- `BeanFactory` has no lifecycle event mechanism"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ApplicationContext` extends `BeanFactory`** — superset relationship; not a competitor.\n- **`BeanFactory` is lazy** — beans constructed on first `getBean()`; misconfiguration surfaces at runtime.\n- **`ApplicationContext` is eager for singletons** — all singletons constructed at startup; fail-fast on misconfiguration.\n- **Auto-registration of post-processors** — `ApplicationContext` detects `BeanPostProcessor` and `BeanFactoryPostProcessor` automatically; `BeanFactory` requires manual registration.\n- **Event publishing only in `ApplicationContext`** — `ApplicationEventPublisher`, `@EventListener`, lifecycle events all require `ApplicationContext`.\n- **Resource loading and i18n** — `ResourceLoader`, `MessageSource`, `Environment` are `ApplicationContext` features.\n- **Use `@Lazy` on individual beans** to defer construction even within `ApplicationContext`.\n- **`BeanFactory` is largely legacy** — almost every modern Spring app uses `ApplicationContext` (via `AnnotationConfigApplicationContext` or Spring Boot's web variant).\n- **`spring.main.lazy-initialization=true`** (Spring Boot 2.2+) — global lazy init for fast dev restarts; not recommended for production."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`ApplicationContext` extends `BeanFactory`. They're not alternatives — they're a superset/subset relationship. The difference is what each adds beyond basic bean lookup.\n\n**`BeanFactory` — the root container**\n- Provides basic bean lookup, registration, and lifecycle\n- Lazy by default — beans constructed on first `getBean()`\n- No event publishing, no i18n, no resource loading, no environment abstraction\n- Mostly legacy now — retained for backward compatibility and resource-constrained scenarios\n\n**`ApplicationContext` — the enterprise container**\n- Superset of `BeanFactory`\n- Eager singleton init at startup — fail-fast on misconfiguration\n- Auto-registers `BeanPostProcessor` and `BeanFactoryPostProcessor` (this is how AOP, `@Autowired`, and most extensions work)\n- Event publishing via `ApplicationEventPublisher` and `@EventListener`\n- Internationalization via `MessageSource`\n- Resource loading via `ResourceLoader` (`classpath:`, `file:`, `http:`)\n- Environment abstraction with profiles and property sources\n- Lifecycle events: `ContextRefreshedEvent`, `ContextClosedEvent`\n\n**The defining behavioral difference**\n- `BeanFactory` lazy initialization — misconfiguration hides until first use\n- `ApplicationContext` eager singleton init — misconfiguration surfaces at startup, fail-fast\n- This is why production Spring apps overwhelmingly use `ApplicationContext`\n\n**Practical guidance**\n- In modern Spring, you almost always use `ApplicationContext` — typically `AnnotationConfigApplicationContext` or, in Spring Boot, `AnnotationConfigServletWebServerApplicationContext`\n- Use `@Lazy` on individual beans if you need to defer construction\n- `BeanFactory` is for the rare resource-constrained scenario; production apps use `ApplicationContext`"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is eager singleton initialization considered fail-fast?",
+        "What is a BeanPostProcessor and how does ApplicationContext auto-register it?",
+        "How would you make all beans lazy in a Spring Boot application, and why is it not recommended for production?",
+        "What is the difference between ContextRefreshedEvent and ContextStartedEvent?"
+      ],
+      "seo": {
+        "metaTitle": "ApplicationContext vs BeanFactory — Spring Container Interfaces Compared",
+        "metaDescription": "ApplicationContext extends BeanFactory with eager singleton init, event publishing, MessageSource, ResourceLoader, and Environment. BeanFactory is now legacy."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "ApplicationContext extends BeanFactory.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "BeanFactory is the root interface of Spring's IoC container. Provides the absolute minimum: register bean definitions, look up beans by name or type, manage their lifecycle. Lazy by design — beans are instantiated only when first requested via getBean(). ApplicationContext extends BeanFactory and layers on enterprise features: Eagerly initializes all singleton beans at startup — fail-fast on misconfiguration. Automatically registers BeanPostProcessor and BeanFactoryPostProcessor instances. Publishes lifecycle events (ContextRefreshedEvent, ContextClosedEvent). Supports."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Each row maps a capability to whether it's available in each interface",
+              "| Feature | BeanFactory | ApplicationContext | |---|---|---| | Bean lookup (getBean()) | Yes | Yes (inherited) | | Lazy initialization | Yes (default) | Optional (eager by default) | | Eager singleton init at startup | No | Yes (fail-fast) | | Automatic BeanPostProcessor registration | No (manual) | Yes | | Automatic BeanFactoryPostProcessor registration | No (manual) | Yes | | Event publishing (ApplicationEventPublisher) | No | Yes | | Internationalization (MessageSource) | No | Yes | | Resource loading (ResourceLoader) | No | Yes (classpath, file, URL) | | Environment abstraction (Environment) | No | Yes (profiles, property sources) | | AOP support (@AspectJ autoproxy) | No (manual setup) | Yes (auto via post-processor) | | Common implementation | XmlBeanFactory (deprecated) | AnnotationConfigApplicationContext, ClassPathXmlApplicationContext | The critical row is eager singleton init at startup",
+              "BeanFactory waits until you call getBean() to construct a bean — silent failures hide until first use",
+              "ApplicationContext constructs every singleton at startup, surfacing misconfiguration immediately",
+              "This is why production Spring apps overwhelmingly use ApplicationContext"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "BeanFactory is the root interface of Spring's IoC container. Provides the absolute minimum: register bean definitions, look up beans by name or type, manage their lifecycle. Lazy by design — beans are instantiated only when first requested via getBean(). ApplicationContext extends BeanFactory and layers on enterprise features: Eagerly initializes all singleton beans at startup — fail-fast on misconfiguration. Automatically registers BeanPostProcessor and BeanFactoryPostProcessor instances. Publishes lifecycle events (ContextRefreshedEvent, ContextClosedEvent). Supports internationalization via MessageSource. Loads resources from classpath / file / URL via ResourceLoader. Provides environment abstraction — Environment, profiles, property."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "BeanFactory is the root interface of Spring's IoC container. Provides the absolute minimum: register bean definitions, look up beans by name or type, manage their lifecycle. Lazy by design — beans are instantiated only when first requested via getBean(). ApplicationContext extends BeanFactory and layers on enterprise features: Eagerly initializes all singleton beans at startup — fail-fast on misconfiguration. Automatically registers."
+          }
+        ],
+        "cap": "BeanFactory — the root container Provides basic bean lookup, registration, and lifecycle Lazy by default — beans constructed on first getBean() No event publishing, no i18n, no resource loading, no en",
+        "familiarity_anchors": [
+          "BeanFactory",
+          "ApplicationContext",
+          "ApplicationEventPublisher"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is eager singleton initialization considered fail-fast?",
+          "What is a BeanPostProcessor and how does ApplicationContext auto-register it?",
+          "How would you make all beans lazy in a Spring Boot application, and why is it not recommended for production?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    }
+  ]
+}

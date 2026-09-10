@@ -1,0 +1,19 @@
+"""go-batch5-fixup.py — the inherit-question deep (the empty 4th element)."""
+
+INHERIT_DEEP = """Receivers sit between functions and types: a func with a receiver parameter is still a func — the receiver is sugar for an implicit first argument passed by value or by pointer, exactly like any other parameter. Method call u.Greet() compiles to a function call Greet(u) — the method expression User.Greet and the method value u.Greet make this equivalence explicit and usable. That is the whole mechanism — no vtable, no class metadata, no self type; just a function whose first parameter has special call syntax.
+
+Contrast with virtual dispatch: a C++ method call through a pointer consults the object's vtable — the OBJECT's runtime type picks the implementation. Go's u.Greet() consults u's STATIC type's method set — compile-time, inlinable. The one Go construct with a table is the interface value: boxing copies (type, value) into the interface's two-word representation, and the interface's itable (built per interface-concrete pair at first assignment, cached) maps method names to function pointers. That itable is Go's vtable — but it belongs to the INTERFACE mechanism, not to receivers or embedding.
+
+Embedding promotion is a compile-time rewrite: a.Greet() becomes a.User.Greet() — the wrapper forwards to the inner's method with the INNER as receiver. No dispatch decision happens. Interface satisfaction-through-promotion is the same rewrite applied to the method-set computation: the outer's method set gains a wrapper whose implementation is the inner's method.
+
+The composition payoff: a change to User.Greet affects every embedder identically — as a change to a function they call, visible and versioned — never as a surprise override of hidden behavior. Fragile-base bugs require a dispatch layer that can diverge from what the author sees; Go has none. The cost is explicitness: when you WANT Admin-specific Greet, you write it, and the two methods coexist without ambiguity about which runs when — the receiver type decides, always."""
+
+RECEIVER_IFACE_DEEP = """The method-set rule is arbitrary-looking until you trace the addressability reasoning, and the follow-up: WHY does u.Inc() compile when u is a variable, if Inc is not in User's method set? Because the CALL rule and the METHOD SET rule are different rules.
+
+Call rule: for an addressable value u, u.Inc() is shorthand for (&u).Inc() — the compiler takes the address, the method set of *User applies. For a NON-addressable value (map lookup result, function return, struct field of a non-addressable), the shorthand cannot exist — no address exists — so the call is a compile error.
+
+Method-set rule (interface satisfaction): does NOT apply call-site shorthands. An interface holding a User value has the User's method set — Greet, no Inc — regardless of where the value came from. This is why storing User values in a []Greeter works while []Incrementer rejects them: the method set is a property of the TYPE, frozen at the value's creation, not enhanced by the context of use.
+
+The map-element proof that the two rules diverge: m[k].Inc() — m[k] is readable but not addressable (map internals move elements) — the call rule cannot apply its shorthand — compile error with the message 'cannot call pointer method on U' — the method set was never the issue; the address was.
+
+The design coherence: Go wanted pointer receivers to be a real semantic statement (mutation capability) without making interfaces unpredictable. Method sets make interface satisfaction decidable from types alone; call shorthand keeps the ergonomics; addressability defines exactly where the shorthand may fire. Three rules, one coherent system — and interviewers probe exactly the seams (map elements, temporaries) where the rules must be applied separately."""

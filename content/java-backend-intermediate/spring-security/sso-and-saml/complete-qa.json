@@ -1,0 +1,277 @@
+{
+  "topic": "SSO and SAML",
+  "topicSlug": "sso-and-saml",
+  "questions": [
+    {
+      "id": "ss-sso-001",
+      "slug": "sso-saml-oidc-enterprise-integration",
+      "question": "How do you implement enterprise SSO (SAML and OIDC) in a Spring Boot app, and what are the common pitfalls?",
+      "title": "Enterprise SSO: SAML 2.0 and OIDC Integration",
+      "direct_answer": "For SSO in Spring Boot you pick between **OIDC** (`spring-boot-starter-oauth2-client`) — modern JSON-based, mobile-friendly — and **SAML 2.0** (`spring-security-saml2-service-provider`) — XML-based, required by many enterprise IdPs. Both follow the same conceptual flow: **redirect to IdP -> authenticate -> signed assertion/token returned -> app validates and creates local session**. Configuration involves registering with the IdP (client ID/secret for OIDC; metadata XML + signing keys for SAML), mapping IdP claims/attributes to roles, **JIT user provisioning**, and **Single Logout (SLO)**. Common pitfalls: **redirect URI mismatch**, **signature validation**, **clock skew**, **claim mapping**, **cert rotation**. **Modern B2B default**: OIDC primary, SAML fallback for enterprise mandate.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of enterprise SSO flows, SAML vs OIDC trade-offs, JIT provisioning, SLO",
+        "common_mistake": "Treating SSO as one protocol; missing signature/cert validation; not handling cert rotation",
+        "to_stand_out": "Discuss multi-tenant SSO, dynamic registration, JIT provisioning, SLO complexity, Azure AD / Okta specifics"
+      },
+      "company_tags": [
+        "okta",
+        "azure",
+        "auth0",
+        "keycloak",
+        "workos"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Enterprise SSO Landscape",
+            "content": "**Enterprise SSO**: user logs into central IdP once, gains access to many apps without re-authenticating. Two protocols dominate.\n\n**OIDC (OpenID Connect)** — OAuth2 + identity layer. JSON tokens (JWT ID + access). Modern, mobile-friendly, smaller messages. Supported by Okta, Auth0, Azure AD, Google Workspace, AWS Cognito, Keycloak.\n\n**SAML 2.0** — XML assertions signed by IdP. Older (2005) but **entrenched in enterprise**. ADFS, Azure AD (SAML mode), Okta, Ping, Shibboleth. Required by banks, governments, healthcare, large corporates.\n\n**Spring Boot starters:**\n- **OIDC**: `spring-boot-starter-oauth2-client` (login initiation + token handling)\n- **SAML**: `spring-security-saml2-service-provider` (as Service Provider)\n\n**Choosing:**\n- **OIDC first** if IdP supports it (Okta, Auth0, Azure AD, Cognito all do)\n- **SAML** if customer mandates or IdP is SAML-only (legacy ADFS, government)\n- **Both** if you sell B2B SaaS — different customers, different IdPs"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "SAML 2.0 SP-Initiated SSO Flow",
+            "content": "```mermaid\nsequenceDiagram\n    participant User as \"User Browser\"\n    participant SP as \"Service Provider (Spring Boot app)\"\n    participant IdP as \"Identity Provider (Okta, ADFS, Azure AD)\"\n\n    User->>SP: \"GET /protected (no session)\"\n    SP->>SP: \"Build AuthnRequest XML, generate RelayState (random opaque value)\"\n    SP-->>User: \"302 redirect to IdP SSO URL with SAMLRequest base64 deflated and RelayState\"\n    User->>IdP: \"GET /sso/saml with SAMLRequest and RelayState\"\n    IdP->>User: \"Login form (or SSO if existing IdP session)\"\n    User->>IdP: \"Submit credentials and MFA\"\n    IdP->>IdP: \"Build SAMLResponse with signed Assertion (XML signature, NotBefore NotOnOrAfter, AudienceRestriction, AttributeStatement)\"\n    IdP-->>User: \"HTML auto-POST form to SP ACS URL with SAMLResponse and RelayState\"\n    User->>SP: \"POST /login/saml2/sso/registrationId with SAMLResponse and RelayState\"\n    SP->>SP: \"Verify XML signature with IdP cert, check Issuer Audience NotBefore NotOnOrAfter, validate InResponseTo matches AuthnRequest, parse AttributeStatement\"\n    SP->>SP: \"Map attributes to authorities (groups -> ROLE_*), JIT provision user if first login\"\n    SP->>SP: \"Create local HTTP session, store SecurityContext\"\n    SP-->>User: \"302 redirect to original RelayState target (/protected)\"\n    User->>SP: \"GET /protected with JSESSIONID cookie\"\n    SP-->>User: \"200 protected resource\"\n```"
+          },
+          {
+            "type": "step",
+            "title": "OIDC Configuration in Spring Boot",
+            "content": "**Dependencies:**\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-oauth2-client</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-security</artifactId>\n</dependency>\n```\n\n**`application.yml`:**\n\n```yaml\nspring:\n  security:\n    oauth2:\n      client:\n        registration:\n          okta:\n            client-id: ${OKTA_CLIENT_ID}\n            client-secret: ${OKTA_CLIENT_SECRET}\n            scope: openid, profile, email\n            redirect-uri: \"{baseUrl}/login/oauth2/code/{registrationId}\"\n            client-authentication-method: client_secret_basic\n        provider:\n          okta:\n            issuer-uri: https://example.okta.com/oauth2/default\n```\n\n**Spring auto-configures with discovery** — reads `.well-known/openid-configuration`.\n\n**Security config:**\n\n```java\n@Configuration\n@EnableWebSecurity\npublic class SSoConfig {\n\n    @Bean\n    SecurityFilterChain chain(HttpSecurity http) throws Exception {\n        return http\n            .authorizeHttpRequests(a -> a\n                .requestMatchers(\"/\", \"/error\").permitAll()\n                .anyRequest().authenticated())\n            .oauth2Login(oauth -> oauth\n                .userInfoEndpoint(u -> u.userAuthoritiesMapper(authoritiesMapper()))\n                .defaultSuccessUrl(\"/home\", true))\n            .logout(l -> l\n                .logoutSuccessHandler(oidcLogoutSuccessHandler())\n                .invalidateHttpSession(true))\n            .build();\n    }\n\n    GrantedAuthoritiesMapper authoritiesMapper() {\n        return (authorities) -> {\n            Set<GrantedAuthority> mapped = new HashSet<>();\n            authorities.forEach(auth -> {\n                if (auth instanceof OidcUserAuthority oidc) {\n                    List<String> groups = oidc.getIdToken().getClaimAsStringList(\"groups\");\n                    if (groups != null)\n                        groups.forEach(g -> mapped.add(\n                            new SimpleGrantedAuthority(\"ROLE_\" + g.toUpperCase())));\n                }\n            });\n            return mapped;\n        };\n    }\n\n    @Bean\n    LogoutSuccessHandler oidcLogoutSuccessHandler() {\n        OidcClientInitiatedLogoutSuccessHandler handler =\n            new OidcClientInitiatedLogoutSuccessHandler(clientRegistrationRepository);\n        handler.setPostLogoutRedirectUri(\"{baseUrl}\");\n        return handler;\n    }\n}\n```\n\n**Accessing user info in controller:**\n\n```java\n@GetMapping(\"/home\")\npublic String home(@AuthenticationPrincipal OidcUser user, Model m) {\n    m.addAttribute(\"email\", user.getEmail());\n    m.addAttribute(\"name\", user.getFullName());\n    m.addAttribute(\"groups\", user.getClaimAsStringList(\"groups\"));\n    return \"home\";\n}\n```\n\n**PKCE highlights:**\n- Automatic in Spring Security 6 with `client-authentication-method: none` (public client)\n- Confidential clients: secure by default flow\n\n**JIT provisioning (first-time login):**\n\n```java\n@Component\npublic class UserProvisioner implements AuthenticationSuccessHandler {\n    private final UserRepository repo;\n\n    @Override\n    public void onAuthenticationSuccess(HttpServletRequest req, HttpServletResponse res,\n                                         Authentication auth) throws IOException {\n        OidcUser user = (OidcUser) auth.getPrincipal();\n        repo.findByEmail(user.getEmail())\n            .orElseGet(() -> repo.save(new AppUser(\n                user.getEmail(), user.getFullName(),\n                parseRolesFromClaims(user))));\n        res.sendRedirect(\"/home\");\n    }\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "SAML 2.0 Configuration",
+            "content": "**Dependencies:**\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-security</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.springframework.security</groupId>\n    <artifactId>spring-security-saml2-service-provider</artifactId>\n</dependency>\n```\n\n**`application.yml` with metadata:**\n\n```yaml\nspring:\n  security:\n    saml2:\n      relyingparty:\n        registration:\n          okta:\n            identityprovider:\n              entity-id: http://www.okta.com/exkxxxx\n              verification:\n                credentials:\n                  - certificate-location: classpath:okta.cert\n              singlesignon:\n                url: https://example.okta.com/app/xxxx/sso/saml\n                binding: POST\n                sign-request: true\n              singlelogout:\n                url: https://example.okta.com/app/xxxx/slo/saml\n                response-url: \"{baseUrl}/logout/saml2/slo\"\n                binding: POST\n            entity-id: \"{baseUrl}/saml2/service-provider-metadata/{registrationId}\"\n            assertingparty:\n              metadata-uri: https://example.okta.com/app/xxxx/sso/saml/metadata\n            signing:\n              credentials:\n                - private-key-location: classpath:sp.key\n                  certificate-location: classpath:sp.cert\n```\n\n**`metadata-uri` is the simplest** — Spring fetches IdP metadata automatically.\n\n**Security config:**\n\n```java\n@Configuration\n@EnableWebSecurity\npublic class SamlConfig {\n\n    @Bean\n    SecurityFilterChain chain(HttpSecurity http) throws Exception {\n        return http\n            .authorizeHttpRequests(a -> a\n                .requestMatchers(\"/\", \"/error\", \"/saml2/**\", \"/login/**\").permitAll()\n                .anyRequest().authenticated())\n            .saml2Login(saml -> saml\n                .defaultSuccessUrl(\"/home\", true))\n            .saml2Logout(Customizer.withDefaults())\n            .build();\n    }\n}\n```\n\n**Accessing user in controller:**\n\n```java\n@GetMapping(\"/home\")\npublic String home(@AuthenticationPrincipal Saml2AuthenticatedPrincipal principal, Model m) {\n    m.addAttribute(\"email\", principal.getFirstAttribute(\"email\"));\n    m.addAttribute(\"groups\", principal.getAttribute(\"groups\"));\n    return \"home\";\n}\n```\n\n**Attribute-to-authority mapping:**\n\n```java\n@Bean\nOpenSaml4AuthenticationProvider samlProvider() {\n    OpenSaml4AuthenticationProvider p = new OpenSaml4AuthenticationProvider();\n    p.setResponseAuthenticationConverter(responseToken -> {\n        Saml2Authentication auth = OpenSaml4AuthenticationProvider\n            .createDefaultResponseAuthenticationConverter().convert(responseToken);\n        Saml2AuthenticatedPrincipal principal =\n            (Saml2AuthenticatedPrincipal) auth.getPrincipal();\n        List<String> roles = principal.getAttribute(\"groups\");\n        Collection<SimpleGrantedAuthority> authorities = roles == null ? List.of() :\n            roles.stream().map(r -> new SimpleGrantedAuthority(\"ROLE_\" + r)).toList();\n        return new Saml2Authentication(principal, auth.getSaml2Response(), authorities);\n    });\n    return p;\n}\n```\n\n**Cert rotation:** configure multiple `verification.credentials` entries; rotate by adding new, verifying, then removing old."
+          },
+          {
+            "type": "step",
+            "title": "Multi-Tenant SSO and Common Patterns",
+            "content": "**B2B SaaS with per-customer IdP — resolve tenant from subdomain or email domain, route to right registration:**\n\n```java\n@Bean\nInMemoryClientRegistrationRepository clientRegs(ClientRegistrationLoader loader) {\n    return new InMemoryClientRegistrationRepository(loader.loadAll());\n}\n\n@Bean\nSecurityFilterChain chain(HttpSecurity http) throws Exception {\n    return http\n        .oauth2Login(o -> o.loginPage(\"/login/tenant\"))\n        .build();\n}\n```\n\n**For dynamic / many tenants** — implement custom `ClientRegistrationRepository` that reads from DB.\n\n**SAML multi-tenant:** custom `RelyingPartyRegistrationRepository` sourced from DB, keyed by tenant.\n\n**User attribute mapping contract — agree per IdP:**\n- **User identifier** — `email` or `sub`\n- **Display name** — `name`, `givenName`+`familyName`, `displayName`\n- **Role/group** — varies (`groups`, `roles`, `memberOf`); map named groups to internal roles\n- **Custom claims** — department, tenant, etc.\n\n**Single Logout (SLO):**\n- **OIDC** — `OidcClientInitiatedLogoutSuccessHandler` redirects to IdP's `end_session_endpoint`\n- **SAML** — `saml2Logout()` handles SP-initiated and IdP-initiated SLO\n- Both: app destroys local session; IdP signs out user from other apps\n\n**JIT provisioning rules:**\n- First login: create local user with IdP-provided attributes\n- Subsequent logins: update attributes if changed\n- Conflicts: existing local user with same email + different subject ID\n- Use **federated ID (issuer + subject)** as primary key, not just email\n\n**Session semantics:**\n- After SSO: local HTTP session (if MVC)\n- SSO = one-time auth; session lifetime is yours\n- Re-authenticate with IdP periodically (silent renewal) or require re-login after X hours\n\n**Combining SSO with local accounts:**\n- Some users SSO; others local password\n- Multiple `AuthenticationProvider`s\n- Common pattern: SSO-only for enterprise; local for freemium"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Pitfalls, Security, Testing, Observability",
+            "content": "**When OIDC helps:**\n- Mobile + SPA support out of the box\n- JSON tokens, smaller messages\n- PKCE, refresh rotation standard\n- Modern IdPs all support it\n\n**When SAML is required:**\n- Enterprise customer mandate\n- Legacy ADFS, government, healthcare\n- Established compliance frameworks expect SAML\n\n**When it hurts:**\n- Hand-parsing XML in SAML -> signature wrapping attacks\n- Missing PKCE for public clients -> code interception\n- Email-as-identifier -> user identity loss when emails change\n- Hard-coded certs without rotation -> auth breaks at cert expiry\n\n**Watch for (common pitfalls):**\n- **Redirect URI mismatch** — exact scheme/host/port/path; trust `X-Forwarded-Proto` behind LB\n- **Clock skew** — SAML `NotBefore`/`NotOnOrAfter`, JWT `nbf`/`exp`; NTP + tolerance\n- **Signature validation failure** — wrong cert/algorithm/expired; check logs; rotate proactively\n- **Cert rotation** — `metadata-uri` where possible; multiple `verification.credentials`\n- **Claim mapping confusion** — version contract; log available claims in dev\n- **Missing PKCE on public clients** — mobile/SPA must use\n- **XML signature wrapping (SAML)** — use Spring's library; never hand-parse XML\n- **Missing `state` (OIDC)** — CSRF during callback; Spring auto-generates; don't disable\n- **Logout local-only** — user re-authenticates with one click; implement SLO for compliance\n- **Email as identifier** — emails change; use federated ID (issuer+subject)\n- **`SameSite=Strict` cookie** — breaks SSO callback POST; use `Lax` or `None+Secure`\n- **IdP-initiated SSO without `RelayState`** — app doesn't know where to land; SP-initiated preferred\n\n**Testing:**\n- Unit test claim mapping with mock `OidcUser` / `Saml2AuthenticatedPrincipal`\n- Integration with Keycloak Testcontainers (real OIDC flow)\n- SAML: Keycloak in SAML mode or Shibboleth\n- Contract tests with IdP team on claim schema\n\n**Observability:**\n- Log `AuthenticationSuccessEvent`, `AbstractAuthenticationFailureEvent`\n- Log failed cert validation, assertion expiration\n- Metric: `auth.attempts{result, reason}`\n- Alert on failure spikes (IdP outage, cert expired)\n- Audit trail (who, when, where, IdP) for compliance\n\n**Security hardening:**\n- HTTPS only + HSTS\n- `SameSite=Lax` cookies (or `None+Secure` for cross-domain)\n- Content Security Policy\n- Session ID rotation on login (fixation defense)\n- Idle + absolute session timeout\n- Rate-limit login attempts at SP layer\n\n**Debug tips:**\n- `logging.level.org.springframework.security=DEBUG`\n- SAML tracer browser extension (Firefox)\n- oauthdebugger.com for OIDC URL generation\n- Keycloak local as generic IdP for dev"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **OIDC vs SAML** — OIDC modern JSON (mobile-friendly); SAML XML enterprise (legacy, still required).\n- **Spring Boot OIDC** — `spring-boot-starter-oauth2-client` + `oauth2Login()` DSL.\n- **Spring Boot SAML** — `spring-security-saml2-service-provider` + `saml2Login()` DSL.\n- **PKCE** for public clients in OIDC; automatic in Spring Security 6.\n- **JIT provisioning** on first login; map IdP claims to local user + roles.\n- **Single Logout (SLO)** for compliance — OIDC `end_session_endpoint`, SAML SLO.\n- **Multi-tenant SSO** — custom `ClientRegistrationRepository` / `RelyingPartyRegistrationRepository` sourced from DB.\n- **Cert rotation** — `metadata-uri` where possible; maintain multiple `verification.credentials`.\n- **Pitfalls** — redirect URI, clock skew, signature errors, claim mapping, `SameSite` cookies."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**OIDC vs SAML quick framing**\n- OIDC: modern JSON-based, mobile-friendly, primary choice for new integrations\n- SAML: XML-based, enterprise-required (banks, gov, healthcare); fallback for B2B\n- Both: redirect to IdP -> auth -> signed response -> local session\n\n**OIDC in Spring Boot**\n- `spring-boot-starter-oauth2-client`\n- `application.yml`: `spring.security.oauth2.client.registration.<id>` + `provider.<id>.issuer-uri`\n- `oauth2Login(...)` DSL, `userInfoEndpoint.userAuthoritiesMapper` for role mapping\n- `OidcClientInitiatedLogoutSuccessHandler` for SLO\n- `@AuthenticationPrincipal OidcUser` in controllers\n- PKCE automatic with `client-authentication-method=none`\n\n**SAML 2.0 in Spring Boot**\n- `spring-security-saml2-service-provider`\n- `spring.security.saml2.relyingparty.registration.<id>` with `assertingparty.metadata-uri`\n- `saml2Login()` and `saml2Logout()` DSL\n- `OpenSaml4AuthenticationProvider` with `setResponseAuthenticationConverter` for attribute mapping\n- Cert rotation via multiple `verification.credentials`\n\n**Multi-tenant**\n- Resolve tenant from subdomain or email domain\n- Custom repository sourced from DB\n\n**JIT provisioning**\n- First login -> create local user from IdP attributes\n- Use federated ID (issuer + subject), not just email\n\n**Common pitfalls**\n- Redirect URI mismatch (exact match required)\n- Clock skew on assertion validity\n- Cert rotation breaking auth\n- Claim mapping silently dropping roles\n- SameSite=Strict breaking callback POST\n- Logout only local without SLO -> one-click re-login\n\n**2026 default**\n- OIDC primary, SAML on enterprise request\n- Use IdP aggregator (Auth0, WorkOS) for many customer IdPs"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle certificate rotation for 100 customer SAML integrations?",
+        "What is Just-in-Time provisioning and how do you implement it?",
+        "Walk through implementing Single Logout for OIDC and SAML",
+        "How do you support multi-tenant SSO where each customer has their own IdP?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot SSO — SAML 2.0 and OIDC Enterprise Integration",
+        "metaDescription": "Implement enterprise SSO in Spring Boot: OIDC configuration, SAML 2.0 setup, JIT provisioning, multi-tenant, Single Logout, and common pitfalls."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "OIDC vs SAML quick framing OIDC: modern JSON-based, mobile-friendly, primary choice for new integrations SAML: XML-based, enterprise-required (banks, gov, healthcare); fallback for B2B Both: redirect",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Enterprise SSO: user logs into central IdP once, gains access to many apps without re-authenticating. Two protocols dominate. OIDC (OpenID Connect) — OAuth2 + identity layer. JSON tokens (JWT ID + access). Modern, mobile-friendly, smaller messages. Supported by Okta, Auth0, Azure AD, Google Workspace, AWS Cognito, Keycloak. SAML 2.0 — XML assertions signed by IdP. Older (2005) but entrenched in enterprise. ADFS, Azure AD (SAML mode), Okta, Ping, Shibboleth. Required by banks, governments, healthcare, large corporates. Spring Boot starters: OIDC."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of enterprise SSO flows, SAML vs OIDC trade-offs, JIT provisioning, SLO"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "OIDC vs SAML — OIDC modern JSON (mobile-friendly); SAML XML enterprise (legacy, still required)",
+              "Spring Boot OIDC — spring-boot-starter-oauth2-client + oauth2Login() DSL",
+              "Spring Boot SAML — spring-security-saml2-service-provider + saml2Login() DSL",
+              "PKCE for public clients in OIDC; automatic in Spring Security 6",
+              "JIT provisioning on first login; map IdP claims to local user + roles"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Enterprise SSO: user logs into central IdP once, gains access to many apps without re-authenticating. Two protocols dominate. OIDC (OpenID Connect) — OAuth2 + identity layer. JSON tokens (JWT ID + access). Modern, mobile-friendly, smaller messages. Supported by Okta, Auth0, Azure AD, Google Workspace, AWS Cognito, Keycloak. SAML 2.0 — XML assertions signed by IdP. Older (2005) but entrenched in enterprise. ADFS, Azure AD (SAML mode), Okta, Ping, Shibboleth. Required by banks, governments, healthcare, large corporates. Spring Boot starters: OIDC: spring-boot-starter-oauth2-client (login initiation + token handling) SAML: spring-security-saml2-service-provider (as Service Provider) Choosing: OIDC first if IdP supports it (Okta, Auth0, Azure AD, Cognito all do) SAML if customer mandates or IdP is SAML-only (legacy ADFS, government) Both if you sell."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Treating SSO as one protocol",
+              "missing signature/cert validation",
+              "not handling cert rotation"
+            ]
+          }
+        ],
+        "cap": "OIDC vs SAML quick framing OIDC: modern JSON-based, mobile-friendly, primary choice for new integrations SAML: XML-based, enterprise-required (banks, gov, healthcare); fallback for B2B Both: redirect",
+        "familiarity_anchors": [
+          "Spring",
+          "Configuration",
+          "Single"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle certificate rotation for 100 customer SAML integrations?",
+          "What is Just-in-Time provisioning and how do you implement it?",
+          "Walk through implementing Single Logout for OIDC and SAML"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JWT-based authentication"
+      }
+    },
+    {
+      "id": "ss-sso-002",
+      "slug": "saml-vs-oidc-decision-and-spring-saml2-relyingparty",
+      "question": "How do you decide between SAML and OIDC, and how do you wire up Spring Security's saml2 RelyingPartyRegistration end-to-end?",
+      "title": "SAML vs OIDC Decision and Spring Security saml2 RelyingPartyRegistration",
+      "direct_answer": "**Decision rule**: prefer **OIDC** for new integrations (modern JSON, PKCE, mobile/SPA support); choose **SAML** when the customer's IdP only speaks SAML or compliance/procurement mandates it. In Spring Security 6, SAML 2.0 SP support is built into **`spring-security-saml2-service-provider`** and centers on **`RelyingPartyRegistration`** — it holds the SP entity ID, the ACS (assertion consumer) and SLO URLs, the SP signing/decryption keys, and the **`AssertingPartyDetails`** (IdP entity ID, SSO/SLO URLs, verification certs). You enable it with **`http.saml2Login()`** and **`http.saml2Logout()`**, store registrations in a **`RelyingPartyRegistrationRepository`** (in-memory or DB-backed for multi-tenant), and customize attribute-to-authority mapping via **`OpenSaml4AuthenticationProvider.setResponseAuthenticationConverter`**.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can both reason about protocol choice and walk through the SP-side wiring in Spring Security 6.",
+        "common_mistake": "Treating SAML as legacy and ignoring it; or wiring SAML without understanding RelyingPartyRegistration, ACS URL, or signature verification.",
+        "to_stand_out": "Discuss DB-backed RelyingPartyRegistrationRepository for multi-tenant, encrypted assertions, NameID format selection, and the OpenSAML4 customization hook."
+      },
+      "company_tags": [
+        "okta",
+        "azure",
+        "ping",
+        "shibboleth",
+        "workos"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "When to Choose SAML vs OIDC",
+            "content": "**OIDC and SAML solve the same problem** — federated authentication — but they're shaped by different eras.\n- **OIDC**\n- is OAuth2 + identity layer with JSON tokens; small messages, mobile-friendly, simple JWKS for keys, automatic PKCE for public clients.\n- **SAML 2.0**.\n- is XML assertions signed and optionally encrypted with X.509 certs; verbose, browser-only (no native mobile flow), but **deeply entrenched in enterprise**.\n\n**Default rule:** prefer OIDC for new integrations; fall back to SAML when customer requires it. In B2B SaaS, support both — large enterprise tenants will mandate SAML even when OIDC is available, often for compliance / procurement reasons rather than technical ones.\n\n**Spring Security 6 makes both first-class:**\n- **OIDC** via `spring-boot-starter-oauth2-client` and `http.oauth2Login()`\n- **SAML 2.0** via `spring-security-saml2-service-provider` and `http.saml2Login()`\n\nThe SAML side centers on **`RelyingPartyRegistration`** — a single immutable object describing one SP-IdP relationship. For multi-tenant apps, you have many registrations and resolve at runtime via the registration ID embedded in the URL (`/login/saml2/sso/{registrationId}`)."
+          },
+          {
+            "type": "comparison_table",
+            "title": "SAML vs OIDC: Decision Matrix",
+            "content": "Use this table to drive the choice in interviews and design docs.\n\n| Aspect | SAML 2.0 | OIDC |\n|---|---|---|\n| **Era / wire format** | 2005, XML, signed + optionally encrypted | 2014, JSON (JWT), signed |\n| **Token size** | KB-sized assertions | Compact JWTs (~1-2 KB) |\n| **Mobile / native apps** | Awkward (browser POST) | First-class (PKCE) |\n| **SPA support** | Possible but ugly | First-class with PKCE |\n| **Discovery** | XML metadata | `.well-known/openid-configuration` |\n| **Key rotation** | X.509 cert rotation, manual or via metadata refresh | JWKS endpoint, automatic |\n| **Encryption** | Encrypted assertions standard | Tokens not normally encrypted (TLS for transport) |\n| **Standard library** | OpenSAML, Spring Security saml2 | Many; Spring Security oauth2-client |\n| **Common IdPs** | ADFS, Azure AD (SAML mode), Okta, Ping, Shibboleth | Okta, Auth0, Azure AD (OIDC mode), Google, Cognito, Keycloak |\n| **Use SAML when** | Customer mandate, legacy ADFS, gov/healthcare | Rarely the right new choice |\n| **Use OIDC when** | New integrations, mobile/SPA, modern IdP | Default for greenfield |\n\n**Rule of thumb:**\n- **Greenfield + you control IdP** -> OIDC\n- **B2B SaaS, customer brings IdP** -> support both; OIDC primary\n- **Compliance-bound (HIPAA, FedRAMP) or government** -> SAML often required\n- **Mobile-first** -> OIDC + PKCE, SAML is painful"
+          },
+          {
+            "type": "step",
+            "title": "RelyingPartyRegistration Anatomy",
+            "content": "**A `RelyingPartyRegistration` carries everything Spring needs to talk to one IdP:**\n\n```java\nRelyingPartyRegistration registration = RelyingPartyRegistrations\n    .fromMetadataLocation(\"https://idp.example.com/metadata\")\n    .registrationId(\"okta\")\n    .entityId(\"{baseUrl}/saml2/service-provider-metadata/{registrationId}\")\n    .assertionConsumerServiceLocation(\"{baseUrl}/login/saml2/sso/{registrationId}\")\n    .singleLogoutServiceLocation(\"{baseUrl}/logout/saml2/slo\")\n    .signingX509Credentials(c -> c.add(spSigningCredential()))\n    .decryptionX509Credentials(c -> c.add(spDecryptionCredential()))\n    .build();\n```\n\n**The pieces, explained:**\n- **`registrationId`** — opaque ID embedded in URLs (`/login/saml2/sso/<registrationId>`); chooses which registration handles the response\n- **`entityId`** — the SP's SAML identity; placed in `<saml2:Issuer>` of `AuthnRequest`\n- **`assertionConsumerServiceLocation` (ACS)** — where IdP POSTs the SAMLResponse; must match what's registered with IdP\n- **`singleLogoutServiceLocation`** — endpoint for SP-initiated and IdP-initiated SLO\n- **`signingX509Credentials`** — SP private key + cert for signing AuthnRequest and LogoutRequest\n- **`decryptionX509Credentials`** — SP private key for decrypting encrypted assertions\n- **`AssertingPartyDetails`** (loaded from IdP metadata) — IdP entity ID, SSO/SLO URLs, verification certs\n\n**Property-driven equivalent (Spring Boot):**\n\n```yaml\nspring:\n  security:\n    saml2:\n      relyingparty:\n        registration:\n          okta:\n            entity-id: \"{baseUrl}/saml2/service-provider-metadata/{registrationId}\"\n            signing:\n              credentials:\n                - private-key-location: classpath:sp.key\n                  certificate-location: classpath:sp.cert\n            decryption:\n              credentials:\n                - private-key-location: classpath:sp.key\n                  certificate-location: classpath:sp.cert\n            assertingparty:\n              metadata-uri: https://idp.example.com/metadata\n```\n\n**Spring Boot auto-creates a `RelyingPartyRegistrationRepository`** from these properties.\n\n**SP metadata exposed automatically:**\n- `GET /saml2/service-provider-metadata/{registrationId}` returns XML metadata for the SP\n- Hand this to your IdP admin to register the SP — no manual XML authoring"
+          },
+          {
+            "type": "step",
+            "title": "Wiring saml2Login, saml2Logout, and Custom Auth Mapping",
+            "content": "**SecurityFilterChain wiring:**\n\n```java\n@Configuration\n@EnableWebSecurity\npublic class SamlConfig {\n\n    @Bean\n    SecurityFilterChain chain(HttpSecurity http,\n                              OpenSaml4AuthenticationProvider provider) throws Exception {\n        return http\n            .authorizeHttpRequests(a -> a\n                .requestMatchers(\"/\", \"/error\", \"/saml2/**\", \"/login/**\").permitAll()\n                .anyRequest().authenticated())\n            .saml2Login(saml -> saml\n                .authenticationManager(new ProviderManager(provider))\n                .defaultSuccessUrl(\"/home\", true))\n            .saml2Logout(Customizer.withDefaults())\n            .saml2Metadata(Customizer.withDefaults())\n            .build();\n    }\n\n    @Bean\n    OpenSaml4AuthenticationProvider samlProvider() {\n        OpenSaml4AuthenticationProvider provider = new OpenSaml4AuthenticationProvider();\n        provider.setResponseAuthenticationConverter(token -> {\n            Saml2Authentication base = OpenSaml4AuthenticationProvider\n                .createDefaultResponseAuthenticationConverter().convert(token);\n            Saml2AuthenticatedPrincipal principal =\n                (Saml2AuthenticatedPrincipal) base.getPrincipal();\n            List<String> groups = principal.getAttribute(\"groups\");\n            Collection<SimpleGrantedAuthority> authorities = groups == null ? List.of() :\n                groups.stream()\n                    .map(g -> new SimpleGrantedAuthority(\"ROLE_\" + g.toUpperCase()))\n                    .toList();\n            return new Saml2Authentication(principal, base.getSaml2Response(), authorities);\n        });\n        return provider;\n    }\n}\n```\n\n**Endpoints that Spring Security exposes automatically:**\n- **`GET /saml2/authenticate/{registrationId}`** — initiates SP-initiated SSO; redirects user to IdP SSO URL with `AuthnRequest`\n- **`POST /login/saml2/sso/{registrationId}`** — ACS endpoint; receives `SAMLResponse`, validates, creates session\n- **`POST /logout/saml2/slo`** — SP-initiated and IdP-initiated SLO\n- **`GET /saml2/service-provider-metadata/{registrationId}`** — SP metadata XML for IdP onboarding\n\n**Login link from your app:**\n\n```html\n<a href=\"/saml2/authenticate/okta\">Login with Okta SSO</a>\n```\n\n**Custom claim/attribute mapping happens in `setResponseAuthenticationConverter`:**\n- Default converter creates `Saml2Authentication` with empty authorities\n- Override to read `groups`, `roles`, or any custom `AttributeStatement`\n- Trust model: signature already validated by `OpenSaml4AuthenticationProvider` before converter runs"
+          },
+          {
+            "type": "step",
+            "title": "Multi-Tenant SAML and DB-Backed Registrations",
+            "content": "**For B2B SaaS with many customer IdPs, you cannot list every IdP in `application.yml`. Implement a custom repository.**\n\n**DB-backed `RelyingPartyRegistrationRepository`:**\n\n```java\n@Component\npublic class TenantRelyingPartyRegistrationRepository\n        implements RelyingPartyRegistrationRepository {\n\n    private final TenantRepository tenantRepo;\n    private final ConcurrentMap<String, RelyingPartyRegistration> cache =\n        new ConcurrentHashMap<>();\n\n    @Override\n    public RelyingPartyRegistration findByRegistrationId(String registrationId) {\n        return cache.computeIfAbsent(registrationId, id ->\n            tenantRepo.findByRegistrationId(id)\n                .map(this::buildRegistration)\n                .orElse(null));\n    }\n\n    private RelyingPartyRegistration buildRegistration(TenantConfig t) {\n        return RelyingPartyRegistrations\n            .fromMetadataLocation(t.idpMetadataUri())\n            .registrationId(t.registrationId())\n            .entityId(\"{baseUrl}/saml2/service-provider-metadata/{registrationId}\")\n            .assertionConsumerServiceLocation(\n                \"{baseUrl}/login/saml2/sso/{registrationId}\")\n            .signingX509Credentials(c -> c.add(spSigningCredential()))\n            .decryptionX509Credentials(c -> c.add(spDecryptionCredential()))\n            .build();\n    }\n}\n```\n\n**Tenant resolution — three common patterns:**\n- **Subdomain**: `acme.app.com` -> registrationId `acme`\n- **Email domain**: user enters email; lookup `tenant_domains` table; redirect to right registrationId\n- **Tenant query param**: `/login?tenant=acme` -> redirect to `/saml2/authenticate/acme`\n\n**Cache invalidation on tenant config changes:**\n- Refresh endpoint that calls `cache.invalidate(registrationId)`\n- Or short TTL + lazy refresh on next request\n\n**Encrypted assertions:**\n- Some IdPs encrypt the entire assertion (additional confidentiality on top of TLS)\n- SP needs `decryptionX509Credentials` configured\n- `OpenSaml4AuthenticationProvider` decrypts automatically if credentials are present\n\n**NameID format selection (less common, IdP-specific):**\n- `urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress` — most common\n- `urn:oasis:names:tc:SAML:2.0:nameid-format:persistent` — opaque stable ID\n- Configure on `AssertingPartyDetails` if IdP requires explicit format\n\n**Production checklist:**\n- Use `metadata-uri` so cert rotations propagate automatically\n- Multiple `verification.credentials` during cert rotation windows\n- Encrypted assertions for PHI/PII data flows\n- Federated ID = `(issuer, NameID)` as user primary key, not email\n- SP-initiated SSO over IdP-initiated when possible (RelayState carries return URL)"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "SAML in Spring: Helps, Hurts, Watch For",
+            "content": "**When Spring Security saml2 helps:**\n- First-class SAML 2.0 SP without OpenSAML boilerplate\n- Auto-generated SP metadata endpoint\n- Built-in SLO and SP-initiated SSO\n- Property-driven config for simple cases; programmatic for multi-tenant\n\n**When SAML hurts overall:**\n- XML wire format is verbose; payloads can exceed 50 KB\n- Browser-POST binding makes mobile/native UX awkward\n- Cert rotation is a recurring operational task\n- IdP-initiated SSO without RelayState leaves no return URL\n\n**Watch for:**\n- **ACS URL mismatch** — must be exactly what's registered with IdP (scheme, host, port, path)\n- **Behind load balancer** — set `server.forward-headers-strategy=framework` so `{baseUrl}` reflects external URL\n- **Clock skew** — `NotBefore`/`NotOnOrAfter` reject with seconds of drift; sync NTP\n- **Cert expiry** — IdP cert silently rotated; signature validation breaks; alerts on expiry windows\n- **Encrypted assertions** — SP decryption credential mandatory; missing -> assertion unreadable\n- **`@AuthenticationPrincipal` type confusion** — use `Saml2AuthenticatedPrincipal`, not OIDC `OidcUser`\n- **Email change** — using email as primary key breaks identity continuity; use federated ID `(issuer, NameID)`\n- **`SameSite=Strict` cookie** — breaks IdP POST callback; use `Lax`\n- **Hand-parsed XML** — signature wrapping attacks; always use Spring's library\n- **Single registration in `application.yml`** — fine for one IdP; explodes at multi-tenant scale; switch to DB-backed repo early\n- **`saml2Logout`** with no IdP-side configuration — local logout works; IdP session persists; one-click re-login"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Choose OIDC for new integrations**, SAML when customer/IdP requires it.\n- **`RelyingPartyRegistration`** is the central object — entity ID, ACS, SLO, SP keys, IdP details.\n- **`spring.security.saml2.relyingparty.registration.*`** auto-creates a registration; `assertingparty.metadata-uri` is simplest.\n- **`http.saml2Login()` + `saml2Logout()` + `saml2Metadata()`** wires the endpoints (`/login/saml2/sso/{id}`, `/logout/saml2/slo`, `/saml2/service-provider-metadata/{id}`).\n- **`OpenSaml4AuthenticationProvider.setResponseAuthenticationConverter`** is where you map SAML attributes to `GrantedAuthority`.\n- **Multi-tenant** — implement custom `RelyingPartyRegistrationRepository`; resolve tenant from subdomain/email/query.\n- **Cert rotation** — prefer `metadata-uri`; multiple `verification.credentials` during rotation windows.\n- **Use federated ID `(issuer, NameID)`** as user primary key; emails change."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Decision rule**\n- OIDC for new integrations: modern JSON, PKCE, mobile-friendly\n- SAML when customer mandates it (enterprise, gov, healthcare)\n- B2B SaaS: support both; OIDC primary, SAML fallback\n\n**SAML in Spring 6: starter and DSL**\n- `spring-security-saml2-service-provider`\n- `http.saml2Login()` + `saml2Logout()` + `saml2Metadata()`\n\n**RelyingPartyRegistration anatomy**\n- `registrationId` — opaque ID in URLs\n- `entityId` — SP's SAML identity\n- ACS URL — `/login/saml2/sso/{registrationId}` where IdP POSTs response\n- SLO URL — `/logout/saml2/slo`\n- SP signing + decryption keys\n- AssertingPartyDetails from IdP metadata\n\n**Property-driven config**\n- `spring.security.saml2.relyingparty.registration.<id>` with `assertingparty.metadata-uri`\n- Spring auto-creates `RelyingPartyRegistrationRepository`\n- SP metadata XML at `/saml2/service-provider-metadata/{id}`\n\n**Auto endpoints**\n- `GET /saml2/authenticate/{id}` initiates SP-initiated SSO\n- `POST /login/saml2/sso/{id}` is the ACS\n- `POST /logout/saml2/slo` for SLO\n\n**Custom attribute -> authority**\n- `OpenSaml4AuthenticationProvider.setResponseAuthenticationConverter`\n- Read `groups` attribute, map to `ROLE_*`\n\n**Multi-tenant**\n- Custom `RelyingPartyRegistrationRepository` reading from DB\n- Resolve tenant from subdomain or email domain\n- Cache registrations; invalidate on config changes\n\n**Production care**\n- Cert rotation via `metadata-uri`; multiple verification credentials during overlap\n- Federated ID `(issuer, NameID)` as user primary key, not email\n- `SameSite=Lax` for callback POST\n- Encrypted assertions for sensitive data\n- IdP cert expiry alerting"
+          }
+        ]
+      },
+      "followup_questions": [
+        "When would you choose SAML over OIDC for a new integration?",
+        "How do you store and resolve RelyingPartyRegistration for hundreds of tenants?",
+        "How do encrypted SAML assertions work and when do you need them?",
+        "What is the difference between SP-initiated and IdP-initiated SSO?"
+      ],
+      "seo": {
+        "metaTitle": "SAML vs OIDC Decision and Spring Security saml2 RelyingPartyRegistration",
+        "metaDescription": "Pick SAML or OIDC, then wire Spring Security 6 saml2 with RelyingPartyRegistration, ACS URL, SP keys, multi-tenant DB-backed registrations, and attribute mapping."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Decision rule OIDC for new integrations: modern JSON, PKCE, mobile-friendly SAML when customer mandates it (enterprise, gov, healthcare) B2B SaaS: support both; OIDC primary, SAML fallback SAML in Spr",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "OIDC and SAML solve the same problem — federated authentication — but they're shaped by different eras. OIDC is OAuth2 + identity layer with JSON tokens; small messages, mobile-friendly, simple JWKS for keys, automatic PKCE for public clients. SAML 2.0. is XML assertions signed and optionally encrypted with X.509 certs; verbose, browser-only (no native mobile flow), but deeply entrenched in enterprise. Default rule: prefer OIDC for new integrations; fall back to SAML when customer requires it. In B2B SaaS, support."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate can both reason about protocol choice and walk through the SP-side wiring in Spring Security 6."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Choose OIDC for new integrations, SAML when customer/IdP requires it",
+              "RelyingPartyRegistration is the central object — entity ID, ACS, SLO, SP keys, IdP details",
+              "relyingparty",
+              "registration",
+              "* auto-creates a registration; assertingparty"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "OIDC and SAML solve the same problem — federated authentication — but they're shaped by different eras. OIDC is OAuth2 + identity layer with JSON tokens; small messages, mobile-friendly, simple JWKS for keys, automatic PKCE for public clients. SAML 2.0. is XML assertions signed and optionally encrypted with X.509 certs; verbose, browser-only (no native mobile flow), but deeply entrenched in enterprise. Default rule: prefer OIDC for new integrations; fall back to SAML when customer requires it. In B2B SaaS, support both — large enterprise tenants will mandate SAML even when OIDC is available, often for compliance / procurement reasons rather than technical ones. Spring Security 6 makes both first-class: OIDC via spring-boot-starter-oauth2-client and http.oauth2Login() SAML 2.0 via spring-security-saml2-service-provider and http.saml2Login()."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Treating SAML as legacy and ignoring it",
+              "or wiring SAML without understanding RelyingPartyRegistration, ACS URL, or signature verification"
+            ]
+          }
+        ],
+        "cap": "Decision rule OIDC for new integrations: modern JSON, PKCE, mobile-friendly SAML when customer mandates it (enterprise, gov, healthcare) B2B SaaS: support both; OIDC primary, SAML fallback SAML in Spr",
+        "familiarity_anchors": [
+          "Decision",
+          "Spring",
+          "Security"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When would you choose SAML over OIDC for a new integration?",
+          "How do you store and resolve RelyingPartyRegistration for hundreds of tenants?",
+          "How do encrypted SAML assertions work and when do you need them?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JWT-based authentication"
+      }
+    }
+  ]
+}

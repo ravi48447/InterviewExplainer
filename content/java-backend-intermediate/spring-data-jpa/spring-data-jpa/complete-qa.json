@@ -1,0 +1,258 @@
+{
+  "topic": "Spring Data JPA",
+  "topicSlug": "spring-data-jpa",
+  "questions": [
+    {
+      "id": "sdj-fund-001",
+      "slug": "spring-data-jpa-repository-derived-queries-specifications",
+      "question": "How do Spring Data JPA repositories work, and how do you use derived queries, @Query, and Specifications effectively?",
+      "title": "Spring Data JPA — Repositories, Derived Queries, @Query, Specifications",
+      "direct_answer": "**Spring Data JPA generates repository implementations at startup** by scanning interfaces extending `Repository<T, ID>` (typically `JpaRepository<T, ID>`) and creating proxy implementations backed by **`SimpleJpaRepository`**. You get CRUD, `Pageable`, and `Sort` for free. Custom methods come from three places: **(1) derived queries** (`findByStatusAndCreatedAtAfter(...)` parsed from method name); **(2) `@Query(\"JPQL\" or \"native\")`** for explicit queries; **(3) `Specification<T>`** (with `JpaSpecificationExecutor`) for dynamic predicates. Use **DTO/interface projections** to avoid loading full entities, **`@EntityGraph`** to kill N+1, and **`@Modifying`** for bulk UPDATE/DELETE. Gotchas: derived queries explode beyond 3-4 parameters, `Page<T>` runs an extra `COUNT` (use `Slice<T>` for large datasets), and native queries skip JPQL features and lose pagination unless you supply `countQuery`.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "critical",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Real Spring Data JPA usage; custom queries; dynamic queries; projections",
+        "common_mistake": "Derived query method-name explosion; fetching full entity when only columns needed; forgetting `@Modifying` on UPDATE/DELETE",
+        "to_stand_out": "Discuss `Specification`, Query By Example, interface vs class projections, `Page` vs `Slice` performance, and Hibernate 6 enhancements"
+      },
+      "company_tags": [
+        "Spring",
+        "Hibernate",
+        "Atlassian",
+        "Salesforce",
+        "Stripe",
+        "Booking.com"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How Spring Data JPA Magic Works",
+            "content": "**You declare an interface:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> { }\n```\n\n**At startup**, Spring scans for these interfaces and generates proxy implementations backed by `SimpleJpaRepository`. You get for free: `save`, `saveAll`, `findById`, `findAll`, `count`, `delete`, `deleteById`, `Page<T> findAll(Pageable)`, plus `Sort` support.\n\n**Three custom-query mechanisms:**\n- **Derived queries** parsed from the method name (`findByStatus`, `countByCustomerId`).\n- **`@Query`** annotation for explicit JPQL or native SQL.\n- **`Specification<T>`** (with `JpaSpecificationExecutor`) for dynamic queries built programmatically.\n\n**Other features worth knowing:**\n- **Query By Example (QBE)** — match by example prototype.\n- **Interface-based projections** — lightweight DTOs without `SELECT NEW`.\n- **Entity graphs** — declarative fetch plans (`@EntityGraph`).\n- **Auditing** — `@CreatedDate`, `@LastModifiedBy` via `@EnableJpaAuditing`.\n- **`@Modifying`** for UPDATE/DELETE queries."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "How Repository Methods Get Executed",
+            "content": "From the call site to the database — what Spring Data does on your behalf.",
+            "mermaid": "flowchart TB\n    call[\"orderRepo.findByX(...)\"] --> proxy[\"Spring-generated proxy\"]\n    proxy --> check{\"How to implement?\"}\n    check -- \"@Query annotation\" --> jpql[\"JPQL parsed by Hibernate\"]\n    check -- \"derived method name\" --> parse[\"Parse method name -> JPQL\"]\n    check -- \"JpaSpecificationExecutor\" --> spec[\"Build Predicate via Specification + CriteriaBuilder\"]\n    check -- \"QBE\" --> qbe[\"Build query from example entity\"]\n    jpql --> em[\"EntityManager.createQuery\"]\n    parse --> em\n    spec --> em\n    qbe --> em\n    em --> hib[\"Hibernate Session\"]\n    hib --> sql[\"SQL + bind parameters\"]\n    sql --> db[(\"Database\")]"
+          },
+          {
+            "type": "step",
+            "title": "Derived Queries — Power and Limits",
+            "content": "**Method-name syntax rules:**\n- Start with `findBy`, `readBy`, `queryBy`, `getBy`, `countBy`, `existsBy`, `deleteBy`.\n- Combine with `And`, `Or`.\n- Operators: `Between`, `LessThan`, `GreaterThan`, `GreaterThanEqual`, `IsNull`, `Like`, `StartingWith`, `Containing`, `In`, `NotIn`, `True`, `False`, `IgnoreCase`.\n- Modifiers: `OrderByXxxAsc/Desc`, `Distinct`, `First`, `Top<N>`.\n\n**Example collection:**\n\n```java\nList<Order> findByStatus(OrderStatus status);\nList<Order> findByStatusIn(Collection<OrderStatus> statuses);\nList<Order> findByCustomerIdAndStatusAndAmountGreaterThan(\n    Long cid, OrderStatus s, BigDecimal minAmount);\nList<Order> findTop10ByCustomerIdOrderByCreatedAtDesc(Long cid);\nOptional<Order> findFirstByOrderByCreatedAtDesc();\nPage<Order> findByStatus(OrderStatus s, Pageable p);\nSlice<Order> findByStatusOrderByCreatedAtDesc(OrderStatus s, Pageable p);\nStream<Order> findByStatusOrderByCreatedAt(OrderStatus s);\n```\n\n**When to stop using derived queries:**\n- Method name exceeds 3-4 parameters.\n- Optional filters (some null, some not).\n- Joins across multiple entities.\n- Aggregations / calculations.\n- Complex OR logic.\n\n**Page vs Slice vs List performance:**\n- **`Page<T>`** runs the data query + extra `count(*)` — expensive on huge tables.\n- **`Slice<T>`** fetches one extra row to decide `hasNext()` — cheaper.\n- **`List<T>`** for full unpaged results — only for small result sets.\n- **Cursor-based pagination** (`WHERE id > :lastId ORDER BY id LIMIT N`) for huge tables."
+          },
+          {
+            "type": "step",
+            "title": "@Query, Projections, and @Modifying",
+            "content": "**`@Query` JPQL:**\n\n```java\n@Query(\"SELECT o FROM Order o JOIN FETCH o.customer WHERE o.status = :status\")\nList<Order> findByStatusWithCustomer(@Param(\"status\") OrderStatus status);\n```\n\n- Named parameters preferred over positional `?1` — readable, refactor-friendly.\n\n**`@Query` native SQL with pagination:**\n\n```java\n@Query(value = \"SELECT * FROM orders WHERE customer_id = ?1 AND created_at > ?2\",\n       countQuery = \"SELECT count(*) FROM orders WHERE customer_id = ?1 AND created_at > ?2\",\n       nativeQuery = true)\nPage<Order> findRecentByCustomer(Long cid, Instant since, Pageable pageable);\n```\n\n- Native bypasses JPQL translation; pagination requires explicit `countQuery`.\n\n**Constructor expression for DTO projection:**\n\n```java\npublic record OrderSummary(Long id, String status, BigDecimal total) {}\n\n@Query(\"SELECT new com.acme.OrderSummary(o.id, o.status, SUM(oi.price)) \"\n     + \"FROM Order o JOIN o.items oi \"\n     + \"WHERE o.createdAt > :since GROUP BY o.id, o.status\")\nList<OrderSummary> summarizeSince(Instant since);\n```\n\n**Interface-based projection:**\n\n```java\npublic interface OrderSummaryView {\n    Long getId();\n    String getStatus();\n    BigDecimal getTotal();\n}\n\n@Query(\"SELECT o.id AS id, o.status AS status, SUM(oi.price) AS total \"\n     + \"FROM Order o JOIN o.items oi GROUP BY o.id, o.status\")\nList<OrderSummaryView> summariesAsInterface();\n```\n\n**Dynamic projection:**\n\n```java\n<T> List<T> findByStatus(OrderStatus status, Class<T> type);\n\nList<OrderSummaryView> views = repo.findByStatus(PAID, OrderSummaryView.class);\nList<Order> entities = repo.findByStatus(PAID, Order.class);\n```\n\n**`@Modifying` for UPDATE/DELETE:**\n\n```java\n@Modifying(clearAutomatically = true, flushAutomatically = true)\n@Query(\"UPDATE Order o SET o.status = 'ARCHIVED' WHERE o.createdAt < :cutoff\")\nint archiveOld(Instant cutoff);\n```\n\n- `clearAutomatically` clears L1 after.\n- `flushAutomatically` flushes pending writes before.\n- Returns `int`/`long` rows affected; `void` works too."
+          },
+          {
+            "type": "step",
+            "title": "Specifications and Entity Graphs for Dynamic and Eager Loading",
+            "content": "**Specification for optional filters:**\n\n```java\npublic class OrderSpecs {\n    public static Specification<Order> hasCustomer(Long id) {\n        return (root, q, cb) -> id == null ? null : cb.equal(root.get(\"customerId\"), id);\n    }\n    public static Specification<Order> hasStatus(OrderStatus s) {\n        return (root, q, cb) -> s == null ? null : cb.equal(root.get(\"status\"), s);\n    }\n    public static Specification<Order> createdBetween(Instant from, Instant to) {\n        return (root, q, cb) -> {\n            if (from == null && to == null) return null;\n            if (from == null) return cb.lessThanOrEqualTo(root.get(\"createdAt\"), to);\n            if (to == null)   return cb.greaterThanOrEqualTo(root.get(\"createdAt\"), from);\n            return cb.between(root.get(\"createdAt\"), from, to);\n        };\n    }\n}\n\npublic Page<Order> search(Long cid, OrderStatus s, Instant from, Instant to, Pageable p) {\n    Specification<Order> spec = Specification\n        .where(OrderSpecs.hasCustomer(cid))\n        .and(OrderSpecs.hasStatus(s))\n        .and(OrderSpecs.createdBetween(from, to));\n    return orderRepo.findAll(spec, p);\n}\n```\n\n- Returning `null` from a Specification means 'no contribution to WHERE' — perfect for optional filters.\n\n**Query By Example:**\n\n```java\nOrder probe = new Order();\nprobe.setStatus(OrderStatus.PAID);\nprobe.setCustomerId(42L);\nExample<Order> example = Example.of(probe,\n    ExampleMatcher.matchingAll().withIgnorePaths(\"id\", \"amount\"));\nList<Order> results = orderRepo.findAll(example);\n```\n\n- Convenient for simple searches; weaker than Specifications for complex OR / comparisons.\n\n**Entity graphs:**\n\n```java\n@Entity\n@NamedEntityGraph(name = \"Order.withItems\",\n    attributeNodes = @NamedAttributeNode(\"items\"))\npublic class Order { ... }\n\n@EntityGraph(\"Order.withItems\")\nList<Order> findByStatus(OrderStatus s);\n```\n\n- Declarative fetch plans without writing JPQL.\n- Combines beautifully with derived queries — zero JPQL needed."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Auditing, Transactions, Pitfalls, and Best Practices",
+            "content": "**When derived queries help:**\n- Up to 3-4 parameters, names stay readable.\n- Compile-time safety against entity field renames (Spring fails at startup).\n\n**When derived queries hurt:**\n- Optional filters -> switch to Specifications.\n- Complex joins / aggregates -> switch to `@Query`.\n- Many parameters -> method names become unreadable.\n\n**Auditing setup:**\n\n```java\n@EntityListeners(AuditingEntityListener.class)\n@MappedSuperclass\npublic abstract class BaseEntity {\n    @CreatedDate Instant createdAt;\n    @LastModifiedDate Instant updatedAt;\n    @CreatedBy String createdBy;\n    @LastModifiedBy String modifiedBy;\n    @Version Long version;\n}\n\n@EnableJpaAuditing\npublic class JpaConfig {\n    @Bean AuditorAware<String> auditorAware() {\n        return () -> Optional.of(SecurityContextHolder.getContext()\n            .getAuthentication().getName());\n    }\n}\n```\n\n**Transactions:**\n- Repository methods are transactional by default for writes.\n- Reads wrapped in `@Transactional(readOnly = true)` internally where supported.\n- Compose at service layer around multiple repository calls.\n- Avoid annotating entity classes or private methods.\n\n**Watch for — common pitfalls:**\n- **N+1** with derived queries + lazy associations -> `@EntityGraph`, `JOIN FETCH`, or DTO projections.\n- **`LazyInitializationException`** — accessing lazy collection outside transaction; use entity graph or DTO.\n- **`save()` semantics** — actually does `persist` or `merge` depending on ID; use `em.persist`/`em.merge` directly when semantics matter.\n- **`Page` runs COUNT** — slow on huge tables; use `Slice` or cursor-based pagination.\n- **`@Modifying` forgotten** — UPDATE/DELETE `@Query` throws `InvalidDataAccessApiUsageException`.\n- **Native queries lose Pageable support** unless you supply `countQuery`.\n- **Returning entities from controllers** leaks schema; use DTOs.\n- **`nativeQuery = true`** bypasses JPQL parsing, loses type checking, breaks portability.\n\n**Testing:**\n- `@DataJpaTest` + `@Autowired TestEntityManager` for repository tests.\n- Testcontainers + `@AutoConfigureTestDatabase(replace = NONE)` for real-DB integration tests.\n- `@DynamicPropertySource` registers DB URL from the container.\n\n**Observability:**\n- `logging.level.org.hibernate.SQL=DEBUG`.\n- `hibernate.format_sql=true`, `hibernate.highlight_sql=true` (dev only).\n- `datasource-proxy` or `p6spy` for query timing with stack traces.\n- Micrometer: `hibernate.sessions.open`, `jpa.query.duration`.\n\n**Hibernate 6 / Spring Data JPA 3.x updates:**\n- Stricter JPQL parser (catches previously tolerated bugs).\n- `Stream<Entity>` for streaming queries.\n- Improved `CriteriaBuilder` ergonomics.\n- Native UUID type support.\n- Window functions in JPQL.\n- Better batch / streaming."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`extends JpaRepository<T, ID>`** = CRUD + `Pageable` + `Sort` for free.\n- **Derived queries** for short, static method names; switch to `@Query` or `Specification` past 3-4 parameters.\n- **`@Query(JPQL)`** preferred; `nativeQuery = true` for DB-specific SQL.\n- **`Specification<T>`** + `JpaSpecificationExecutor` for dynamic optional filters.\n- **Projections** — `SELECT new ...` constructor expressions or interface-based.\n- **`@Modifying`** required on UPDATE/DELETE `@Query`.\n- **`Page` runs COUNT** — use `Slice` or cursor pagination for large tables.\n- **`@EntityGraph` + `JOIN FETCH`** kill N+1.\n- **Auditing** via `AuditingEntityListener` + `@EnableJpaAuditing`.\n- **Read services** — `@Transactional(readOnly = true)`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Data JPA generates implementations of your repository interfaces at startup. You extend `JpaRepository<T, ID>` and get CRUD for free; custom methods come from three mechanisms.\n\n**The three mechanisms:**\n- **Derived queries** parsed from the method name (`findByStatusAndCreatedAtAfter`)\n- **`@Query`** annotation with JPQL or native SQL\n- **`Specification<T>`** with `JpaSpecificationExecutor` for dynamic predicates\n\n**When to stop using derived queries:**\n- Method name > 3-4 parameters\n- Optional filters\n- Aggregations\n- Complex OR logic\n\n**Page vs Slice:**\n- `Page<T>` runs `count(*)` for total pages — slow on huge tables\n- `Slice<T>` skips the count — uses 'fetch one extra to know hasNext'\n- For very large tables: cursor-based pagination\n\n**Projections** avoid loading full entities — interface (closed: only declared columns; open: full entity + SpEL) or class-based with `SELECT new`.\n\n**`@Modifying`** required on UPDATE/DELETE `@Query`; `clearAutomatically=true` and `flushAutomatically=true` keep the persistence context consistent.\n\n**N+1**: prevent with `@EntityGraph`, `JOIN FETCH`, or DTO projections.\n\n**Auditing**: `@EnableJpaAuditing`, `@EntityListeners(AuditingEntityListener.class)` on a `@MappedSuperclass` with `@CreatedDate`, `@LastModifiedDate`, `@CreatedBy`, `@LastModifiedBy`."
+          }
+        ]
+      },
+      "followup_questions": [
+        "When should you switch from derived queries to `@Query` or `Specification`?",
+        "How do interface projections compare to constructor expressions in terms of generated SQL?",
+        "What is the difference between `Page` and `Slice` performance-wise?",
+        "How do you eliminate N+1 problems with `@EntityGraph`?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data JPA — Repositories, Derived Queries, @Query, Specifications",
+        "metaDescription": "How Spring Data JPA repositories work, derived queries, @Query, Specifications, projections, entity graphs, @Modifying, auditing, and Hibernate 6 enhancements."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring Data JPA generates implementations of your repository interfaces at startup.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "You declare an interface: ``java public interface OrderRepository extends JpaRepository<Order, Long> { } ` At startup, Spring scans for these interfaces and generates proxy implementations backed by SimpleJpaRepository. You get for free: save, saveAll, findById, findAll, count, delete, deleteById, Page<T> findAll(Pageable), plus Sort support. Three custom-query mechanisms: Derived queries parsed from the method name (findByStatus, countByCustomerId). @Query annotation for explicit JPQL or native SQL. Specification<T> (with JpaSpecificationExecutor) for dynamic queries."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "When derived queries help: Up to 3-4 parameters, names stay readable",
+              "Compile-time safety against entity field renames (Spring fails at startup)",
+              "When derived queries hurt: Optional filters -> switch to Specifications",
+              "Complex joins / aggregates -> switch to @Query",
+              "Many parameters -> method names become unreadable"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When derived queries help: Up to 3-4 parameters, names stay readable. Compile-time safety against entity field renames (Spring fails at startup). When derived queries hurt: Optional filters -> switch to Specifications. Complex joins / aggregates -> switch to @Query. Many parameters -> method names become unreadable. Auditing setup: ``java @EntityListeners(AuditingEntityListener.class) @MappedSuperclass public abstract class BaseEntity { @CreatedDate Instant createdAt; @LastModifiedDate Instant updatedAt; @CreatedBy String createdBy; @LastModifiedBy String modifiedBy; @Version Long version; } @EnableJpaAuditing public class JpaConfig { @Bean AuditorAware<String> auditorAware() { return () -> Optional.of(SecurityContextHolder.getContext() .getAuthentication().getName()); } } ` Transactions."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "You declare an interface: ``java public interface OrderRepository extends JpaRepository<Order, Long> { } ` At startup, Spring scans for these interfaces and generates proxy implementations backed by SimpleJpaRepository. You get for free: save, saveAll, findById, findAll, count, delete, deleteById, Page<T> findAll(Pageable), plus Sort support. Three custom-query mechanisms: Derived queries parsed from the method name (findByStatus, countByCustomerId). @Query annotation for explicit."
+          }
+        ],
+        "cap": "Auditing: @EnableJpaAuditing, @EntityListeners(AuditingEntityListener.class) on a @MappedSuperclass with @CreatedDate, @LastModifiedDate, @CreatedBy, @LastModifiedBy.",
+        "familiarity_anchors": [
+          "Spring",
+          "Repository",
+          "JpaRepository"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When should you switch from derived queries to `@Query` or `Specification`?",
+          "How do interface projections compare to constructor expressions in terms of generated SQL?",
+          "What is the difference between `Page` and `Slice` performance-wise?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "sdj-002",
+      "slug": "jparepository-vs-crudrepository-vs-pagingandsortingrepository",
+      "title": "JpaRepository vs CrudRepository vs PagingAndSortingRepository",
+      "question": "What is the difference between `JpaRepository`, `CrudRepository`, and `PagingAndSortingRepository`, and which should you extend?",
+      "direct_answer": "Spring Data defines a hierarchy of repository interfaces — pick the one whose contract matches your need. **`Repository<T, ID>`** is the empty marker interface enabling Spring Data scanning. **`CrudRepository<T, ID>`** adds CRUD methods (`save`, `findById`, `findAll`, `delete`). **`PagingAndSortingRepository<T, ID>`** (since Spring Data 3 it is **separate** from `CrudRepository`) adds `findAll(Pageable)` and `findAll(Sort)`. **`JpaRepository<T, ID>`** combines CRUD + paging + JPA-specific methods (`flush()`, `saveAllAndFlush()`, `getReferenceById()`, `deleteAllInBatch()`). For most JPA apps, **extend `JpaRepository`**. Extend `CrudRepository` (with separate `PagingAndSortingRepository` if needed) when you want a smaller surface area, persistence-tech portability, or do not need JPA-specific methods.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the Spring Data interface hierarchy and chooses deliberately rather than always extending JpaRepository",
+        "common_mistake": "Extending JpaRepository everywhere without realizing it exposes JPA-specific operations and ties the repository contract to JPA forever",
+        "to_stand_out": "Mention the Spring Data 3 split (PagingAndSortingRepository no longer extends CrudRepository), and explain when `getReferenceById` (lazy proxy) beats `findById`"
+      },
+      "company_tags": [
+        "Spring",
+        "VMware",
+        "Atlassian",
+        "Salesforce",
+        "Adyen",
+        "Wise"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Repository Hierarchy — Pick the Smallest Surface That Meets the Need",
+            "content": "Spring Data ships a layered hierarchy of repository interfaces. Each layer adds capability and exposes more methods. **Picking deliberately matters** because the interface you extend becomes part of your service contract — every method you inherit is publicly callable.\n\n**The hierarchy (Spring Data 3+):**\n- **`Repository<T, ID>`** — empty marker; activates Spring Data infrastructure.\n- **`CrudRepository<T, ID>`** — `save`, `saveAll`, `findById`, `existsById`, `findAll`, `findAllById`, `count`, `deleteById`, `delete`, `deleteAllById`, `deleteAll`.\n- **`ListCrudRepository<T, ID>`** (Spring Data 3) — same as `CrudRepository` but methods return `List<T>` instead of `Iterable<T>`.\n- **`PagingAndSortingRepository<T, ID>`** — `findAll(Sort)`, `findAll(Pageable)`. **No longer extends `CrudRepository` in Spring Data 3.**\n- **`JpaRepository<T, ID>`** — combines `ListCrudRepository` + `ListPagingAndSortingRepository` + JPA-specific methods (`flush`, `saveAndFlush`, `saveAllAndFlush`, `getReferenceById`, `deleteAllInBatch`, `deleteInBatch`).\n\n**For most JPA apps**, extending `JpaRepository` is the pragmatic default."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Methods and Capabilities — What Each Interface Adds",
+            "content": "Quick reference for what each level provides.\n\n| Interface | CRUD | Pagination/Sort | JPA-specific (flush, batch, getReference) | Returns |\n|---|---|---|---|---|\n| `Repository<T, ID>` | No | No | No | (marker only) |\n| `CrudRepository<T, ID>` | Yes | No | No | `Iterable<T>` |\n| `ListCrudRepository<T, ID>` | Yes | No | No | `List<T>` |\n| `PagingAndSortingRepository<T, ID>` | No (Spring Data 3) | Yes | No | `Page<T>` / `Iterable<T>` |\n| `ListPagingAndSortingRepository<T, ID>` | No | Yes | No | `Page<T>` / `List<T>` |\n| `JpaRepository<T, ID>` | Yes | Yes | Yes | `List<T>` |\n\n**Spring Data 3 breaking change:**\n- In Spring Data 2.x, `PagingAndSortingRepository` extended `CrudRepository` — getting paging meant getting CRUD too.\n- In Spring Data 3.x, **the inheritance was removed** so you can choose paging without CRUD or vice versa.\n- Most apps still want both — extend `JpaRepository` (or compose `ListCrudRepository` + `ListPagingAndSortingRepository`)."
+          },
+          {
+            "type": "step",
+            "title": "JPA-Specific Methods Worth Knowing on `JpaRepository`",
+            "content": "**`flush()`:**\n- Forces the persistence context to write pending changes to the database.\n- Use before reading values that depend on triggers or sequences.\n\n**`saveAndFlush(entity)`:**\n- Saves and immediately flushes.\n- Useful when subsequent code needs the database-side state in the same transaction.\n\n**`saveAllAndFlush(entities)`:**\n- Bulk save followed by flush.\n- For batch use cases that need committed state visible immediately.\n\n**`deleteAllInBatch()` / `deleteInBatch(entities)`:**\n- Issues a single `DELETE` statement instead of N per-entity deletes.\n- Bypasses cascading and lifecycle callbacks.\n- For raw bulk cleanup; do not use when cascades or callbacks must fire.\n\n**`getReferenceById(id)`:**\n- Returns a Hibernate proxy without hitting the database.\n- Useful for setting an FK without loading the parent entity.\n  ```java\n  Customer ref = customerRepo.getReferenceById(42L);\n  Order o = new Order();\n  o.setCustomer(ref);\n  orderRepo.save(o);\n  ```\n- Throws `EntityNotFoundException` lazily on first attribute access.\n- Avoids an unnecessary SELECT when you only need to satisfy a foreign key.\n\n**`getOne(id)` (deprecated)** — same intent as `getReferenceById`; use the new name."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Choose Each Interface",
+            "content": "**When `JpaRepository` helps:**\n- Standard JPA app; you want CRUD + paging + flush + batch in one place.\n- Team is committed to JPA; portability is not a concern.\n- Simplest path; fewest decisions.\n\n**When `JpaRepository` hurts:**\n- Library / framework code that should not impose JPA on consumers.\n- Repository contract intentionally narrow (only `findById` + `save`).\n- You want to swap to Spring Data Mongo / R2DBC / Cassandra later.\n\n**When `CrudRepository` (or `ListCrudRepository`) helps:**\n- Persistence-technology-neutral contracts.\n- You explicitly do NOT want batch/flush leaking into the API.\n- Microservice with one tiny aggregate root.\n\n**When `CrudRepository` hurts:**\n- You need pagination (Spring Data 3 — must add `PagingAndSortingRepository` separately).\n- You need flush, batch, or `getReferenceById`.\n\n**When `PagingAndSortingRepository` helps (alone):**\n- Read-only repository with pagination/sort but no mutations.\n- Reporting-style repositories.\n\n**Watch for:**\n- Every method inherited is part of your repository's public API. Consumers can call `deleteAll()` on a `JpaRepository` — sometimes a foot-gun.\n- Restrict surface area with the `@RepositoryRestResource(exported = false)` (Spring Data REST) or by extending only `Repository<T, ID>` and re-declaring the methods you actually want.\n- `getReferenceById` returns a proxy — accessing fields outside a transaction throws `LazyInitializationException`.\n- `deleteAllInBatch()` skips cascade and `@PreRemove` — dangerous on entities with related data."
+          },
+          {
+            "type": "code_example",
+            "title": "Choosing the Right Interface in Practice",
+            "content": "**Standard repository — extends `JpaRepository`:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    List<Order> findByStatus(OrderStatus status);\n}\n```\n\n**Narrow API — only what you want exposed:**\n\n```java\npublic interface OrderLookup extends Repository<Order, Long> {\n    Optional<Order> findById(Long id);\n    Order save(Order order);\n}\n```\n\nNo `deleteAll()`, no `findAll()` — callers cannot misuse the repository.\n\n**Read-only paging repository:**\n\n```java\npublic interface OrderReportRepository\n        extends ListPagingAndSortingRepository<Order, Long> {\n    Page<Order> findByCreatedAtBetween(Instant from, Instant to, Pageable page);\n}\n```\n\nNo writes possible.\n\n**Persistence-neutral domain repository:**\n\n```java\npublic interface CustomerRepository extends ListCrudRepository<Customer, UUID> {\n    Optional<Customer> findByEmail(String email);\n}\n```\n\nCan later swap from JPA to MongoDB / R2DBC by changing only the implementation tech."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Repository<T, ID>`** is the empty marker; pick a smaller surface by extending it directly and re-declaring methods.\n- **`CrudRepository`** adds basic CRUD with `Iterable<T>`; **`ListCrudRepository`** returns `List<T>`.\n- **`PagingAndSortingRepository`** in Spring Data 3 no longer extends `CrudRepository` — choose explicitly.\n- **`JpaRepository`** = CRUD + paging + JPA-specific (`flush`, batch, `getReferenceById`).\n- **`getReferenceById`** returns a proxy — useful for FK assignment without an extra SELECT.\n- **`deleteAllInBatch`** issues a single DELETE — skips cascade and callbacks.\n- **Choose deliberately** — every inherited method becomes part of your public API."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Data ships a hierarchy of repository interfaces.\n\n**The hierarchy:**\n- `Repository<T, ID>` — empty marker; activates Spring Data\n- `CrudRepository<T, ID>` — basic CRUD\n- `ListCrudRepository<T, ID>` — same but returns `List` instead of `Iterable`\n- `PagingAndSortingRepository<T, ID>` — paging and sorting; in Spring Data 3 it is separate from CrudRepository\n- `JpaRepository<T, ID>` — combines CRUD + paging + JPA-specific (`flush`, `saveAndFlush`, `getReferenceById`, `deleteAllInBatch`)\n\n**Which to extend:**\n- Standard JPA app -> `JpaRepository`\n- Library code or persistence-tech neutral -> `CrudRepository` / `ListCrudRepository`\n- Read-only repository with paging -> `PagingAndSortingRepository`\n- Maximum control over the API surface -> extend `Repository<T, ID>` directly and re-declare the methods you want\n\n**JPA-specific methods worth mentioning:**\n- `getReferenceById` — returns a Hibernate proxy; useful for setting a FK without loading the parent\n- `saveAndFlush` — forces immediate flush; useful when subsequent code needs DB-side state\n- `deleteAllInBatch` — single DELETE; skips cascade and callbacks; raw bulk cleanup\n\n**Spring Data 3 change:** `PagingAndSortingRepository` no longer extends `CrudRepository` — you can choose paging without CRUD, useful for read-only repositories."
+          }
+        ]
+      },
+      "followup_questions": [
+        "When would you use `getReferenceById` instead of `findById`?",
+        "What is the difference between `deleteAll()` and `deleteAllInBatch()`?",
+        "How do you restrict the public API of a repository so consumers cannot call `deleteAll`?",
+        "Why did Spring Data 3 split `PagingAndSortingRepository` from `CrudRepository`?"
+      ],
+      "seo": {
+        "metaTitle": "JpaRepository vs CrudRepository vs PagingAndSortingRepository",
+        "metaDescription": "Spring Data repository hierarchy explained — when to extend JpaRepository, CrudRepository, ListCrudRepository, or PagingAndSortingRepository in Spring Data 3."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring Data ships a hierarchy of repository interfaces.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Spring Data ships a layered hierarchy of repository interfaces. Each layer adds capability and exposes more methods. Picking deliberately matters because the interface you extend becomes part of your service contract — every method you inherit is publicly callable. The hierarchy (Spring Data 3+): Repository<T, ID> — empty marker; activates Spring Data infrastructure. CrudRepository<T, ID> — save, saveAll, findById, existsById, findAll, findAllById, count, deleteById, delete, deleteAllById, deleteAll. ListCrudRepository<T, ID> (Spring."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Quick reference for what each level provides",
+              "| Interface | CRUD | Pagination/Sort | JPA-specific (flush, batch, getReference) | Returns | |---|---|---|---|---| | Repository<T, ID> | No | No | No | (marker only) | | CrudRepository<T, ID> | Yes | No | No | Iterable<T> | | ListCrudRepository<T, ID> | Yes | No | No | List<T> | | PagingAndSortingRepository<T, ID> | No (Spring Data 3) | Yes | No | Page<T> / Iterable<T> | | ListPagingAndSortingRepository<T, ID> | No | Yes | No | Page<T> / List<T> | | JpaRepository<T, ID> | Yes | Yes | Yes | List<T> | Spring Data 3 breaking change: In Spring Data 2",
+              "x, PagingAndSortingRepository extended CrudRepository — getting paging meant getting CRUD too",
+              "In Spring Data 3",
+              "x, the inheritance was removed so you can choose paging without CRUD or vice versa"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When JpaRepository helps: Standard JPA app; you want CRUD + paging + flush + batch in one place. Team is committed to JPA; portability is not a concern. Simplest path; fewest decisions. When JpaRepository hurts: Library / framework code that should not impose JPA on consumers. Repository contract intentionally narrow (only findById + save). You want to swap to Spring Data Mongo / R2DBC / Cassandra later. When CrudRepository (or ListCrudRepository) helps: Persistence-technology-neutral contracts. You explicitly do NOT want batch/flush leaking into the API. Microservice with one tiny aggregate root."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Standard repository — extends JpaRepository: ``java public interface OrderRepository extends JpaRepository<Order, Long> { List<Order> findByStatus(OrderStatus status); } ` Narrow API — only what you want exposed: `java public interface OrderLookup extends Repository<Order, Long> { Optional<Order> findById(Long id); Order save(Order order); } ` No deleteAll(), no findAll() — callers cannot misuse the repository. Read-only paging repository: `java public interface OrderReportRepository extends."
+          }
+        ],
+        "cap": "The hierarchy: Repository<T, ID> — empty marker; activates Spring Data CrudRepository<T, ID> — basic CRUD ListCrudRepository<T, ID> — same but returns List instead of Iterable PagingAndSortingReposito",
+        "familiarity_anchors": [
+          "Spring",
+          "Repository",
+          "CrudRepository"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When would you use `getReferenceById` instead of `findById`?",
+          "What is the difference between `deleteAll()` and `deleteAllInBatch()`?",
+          "How do you restrict the public API of a repository so consumers cannot call `deleteAll`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

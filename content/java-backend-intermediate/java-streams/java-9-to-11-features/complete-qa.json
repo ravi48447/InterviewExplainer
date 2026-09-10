@@ -1,0 +1,556 @@
+{
+  "topic": "Java 9 To 11 Features",
+  "topicSlug": "java-9-to-11-features",
+  "questions": [
+    {
+      "id": "java-9-module-system-jpms",
+      "slug": "java-9-module-system-jpms",
+      "question": "What is the Java 9 Module System (JPMS)? Why was it introduced and what are the migration challenges?",
+      "title": "Java 9 Module System (JPMS) — Motivation, `module-info.java`, and Migration",
+      "direct_answer": "The **Java Platform Module System (JPMS)**, delivered in **Java 9 via JEP 261/376**, adds a **module layer above packages** that controls which classes are **exported** to other modules and which other modules are **required**. Each module declares its contract in **`module-info.java`** at the module root, using keywords like `module`, `exports`, `requires`, `opens`, `uses`, and `provides`. The motivation: before Java 9, the JDK was a monolithic 60+MB `rt.jar` with no enforced boundaries — any class could access any other via reflection, JARs on the classpath shadowed each other silently (the 'classpath hell'), and you couldn't ship a slim runtime. JPMS enables **strong encapsulation** (packages not exported are truly inaccessible, even via reflection unless `opens`), **reliable configuration** (missing dependencies fail at startup, not at first use), and **scalable runtime images** via `jlink` (ship only the modules your app needs — as small as ~25MB vs 200MB+ full JDK). **Migration challenges**: most existing code runs unmodified on the classpath (the 'unnamed module'), but libraries using deep reflection (Spring, Hibernate, Jackson) hit `InaccessibleObjectException` on internal JDK classes — fixed via `--add-opens` JVM flags or explicit `opens` in module-info. The split-package problem (two JARs contributing to the same package) breaks under JPMS. Automatic modules (non-modular JARs on the module path) ease incremental migration. Adoption outside the JDK itself is slow; most libraries are still classpath-friendly. For typical Spring Boot apps, you usually **don't write module-info.java** — the JDK is modular internally, but your app runs on the classpath.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows JPMS's motivation (strong encapsulation, reliable configuration, jlink images), the module-info syntax, and the pragmatic reality that most apps don't modularize but benefit indirectly via jlink",
+        "common_mistake": "Thinking JPMS replaces Maven/Gradle dependency management (it doesn't — it's runtime, they're build-time). Thinking every app should have module-info.java. Confusing `exports` (compile + run) with `opens` (reflection only)",
+        "to_stand_out": "Mention jlink custom runtime images and measurable size reductions, explain the automatic module vs unnamed module vs explicit module trilemma, discuss why Spring Boot apps mostly stay on the classpath, and reference `--add-opens` as the practical migration escape hatch"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "oracle",
+        "red hat",
+        "jetbrains"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Modules — The Problems JPMS Solves",
+            "content": "Before Java 9, the JDK and the ecosystem had several structural problems:\n\n**1. Monolithic JDK** — `rt.jar` was ~60MB containing everything from `java.lang` to `javax.xml`. You couldn't ship a minimal runtime; a Hello World app needed the full JDK.\n\n**2. Classpath hell** — the classpath is a flat list of JARs. If two JARs contain the same class, the first one wins silently. Missing dependencies fail at first use (sometimes in production), not at startup.\n\n**3. No strong encapsulation** — `public` in Java means 'public to everyone.' Every JDK internal class (`sun.misc.Unsafe`, `sun.reflect.*`) was reachable. Libraries depended on internals that weren't meant to be stable.\n\n**4. No slim runtime** — embedded/cloud deployments shipped 200MB+ JDKs even when using a tiny subset.\n\nJPMS addresses these with:\n- **Explicit dependencies**: modules declare what they `requires`.\n- **Strong encapsulation**: only `exports`ed packages are accessible; the rest are hidden even from reflection (unless `opens`).\n- **Reliable configuration**: the module graph is resolved at startup; missing modules fail fast.\n- **`jlink`**: custom runtime images containing only required modules (~25–60MB typical).\n- **Service loader improvements**: `uses`/`provides` for typed service discovery."
+          },
+          {
+            "type": "after_code",
+            "title": "`module-info.java` — The Module Descriptor",
+            "content": "```java\n// src/main/java/module-info.java\nmodule com.acme.payments {\n    // I need these other modules to compile and run\n    requires java.sql;\n    requires java.net.http;\n    requires transitive com.acme.core;  // 'transitive' = my consumers get it too\n    requires static lombok;              // 'static' = compile-time only (annotation processor)\n\n    // I expose these packages to everyone\n    exports com.acme.payments.api;\n    exports com.acme.payments.events to com.acme.billing, com.acme.audit;  // qualified export\n\n    // These packages are open for reflection (Jackson, Hibernate, Spring)\n    opens com.acme.payments.dto;                            // open to everyone\n    opens com.acme.payments.entity to org.hibernate.orm.core;  // qualified open\n\n    // Service loading\n    uses com.acme.payments.spi.GatewayProvider;\n    provides com.acme.payments.spi.GatewayProvider\n        with com.acme.payments.stripe.StripeProvider,\n             com.acme.payments.paypal.PaypalProvider;\n}\n```\n\n**Key directives**:\n- **`requires X`** — this module depends on X at compile and runtime.\n- **`requires transitive X`** — consumers of this module also read X (common for API modules that expose types from X).\n- **`requires static X`** — compile-time only; not required at runtime (Lombok, annotation processors).\n- **`exports pkg`** — makes package accessible for compile + run.\n- **`exports pkg to A, B`** — qualified export: only modules A and B can access.\n- **`opens pkg`** — allows deep reflection (`setAccessible(true)`) into package. Needed for Spring/Jackson/Hibernate.\n- **`opens pkg to X`** — qualified open: only X can reflect.\n- **`uses Service`** / **`provides Service with Impl`** — `ServiceLoader` declaration.\n\n**Key distinction**: `exports` vs `opens`\n- `exports` = compile-time and runtime access (but NOT deep reflection on private fields).\n- `opens` = full reflection access (what frameworks need to read private fields)."
+          },
+          {
+            "type": "step",
+            "title": "Unnamed, Automatic, and Named Modules — The Migration Trilemma",
+            "content": "JPMS defines three ways a JAR behaves at runtime:\n\n**1. Named module** — has `module-info.class`, lives on the **module path** (`--module-path`). Full JPMS enforcement. Examples: all JDK modules (`java.base`, `java.sql`, `java.net.http`).\n\n**2. Automatic module** — no `module-info.class`, but placed on the **module path**. The module name is derived from the JAR filename (or `Automatic-Module-Name` manifest entry). Auto-exports every package, auto-reads every other module. Bridge for non-modular libraries.\n\n**3. Unnamed module** — JAR on the **classpath** (not module path). Everything on the classpath lumps into a single unnamed module. Auto-reads every other module, but named modules cannot require unnamed. This is where most app code still lives.\n\n**Migration playbook**:\n- Start with everything on classpath (unnamed module) — no code changes needed.\n- When you want to modularize a library, publish it with `Automatic-Module-Name: com.acme.foo` in the manifest so consumers don't depend on the JAR filename.\n- Eventually, add `module-info.java` to make it a named module.\n- Consumers can then `requires com.acme.foo` — getting reliable configuration.\n\n**Reality check**: most Spring Boot apps stay on the classpath and never define `module-info.java`. They still benefit from JPMS indirectly because the JDK itself is modular — `jlink` works on the JDK even when your app isn't modular."
+          },
+          {
+            "type": "step",
+            "title": "`jlink` — Custom Runtime Images",
+            "content": "One of the most practical benefits of JPMS, even for non-modular apps: you can build a **custom JDK image** containing only the modules your app uses, dramatically shrinking the runtime.\n\n```bash\n# Discover which JDK modules your app needs\njdeps --print-module-deps --ignore-missing-deps myapp.jar\n# Output: java.base,java.logging,java.naming,java.sql,java.xml\n\n# Build a custom runtime with only those modules\njlink \\\n  --module-path \"$JAVA_HOME/jmods\" \\\n  --add-modules java.base,java.logging,java.naming,java.sql,java.xml \\\n  --output custom-runtime \\\n  --strip-debug \\\n  --no-man-pages \\\n  --no-header-files \\\n  --compress=2\n\n# Result\ndu -sh custom-runtime/\n# 45M  (vs ~200M for full JDK)\n\n# Run your app with the custom runtime\n./custom-runtime/bin/java -cp myapp.jar com.acme.Main\n```\n\n**Typical size reductions** (Spring Boot Hello World, JDK 21):\n- Full JDK: ~180–220 MB.\n- `jlink` image: ~60–90 MB.\n- With additional compression + stripping: ~35–50 MB.\n\n**Where this matters**:\n- Docker images (smaller layers, faster deploys).\n- AWS Lambda custom runtimes, edge compute.\n- Embedded devices.\n- CI build artifacts.\n\n**GraalVM native-image** goes further (10–30 MB, zero JDK) but has more constraints; `jlink` is the middle ground."
+          },
+          {
+            "type": "step",
+            "title": "Migration Challenges and `--add-opens`",
+            "content": "Moving to Java 9+ broke many libraries because:\n\n**1. Deep reflection on JDK internals** — Hibernate, Spring, Jackson, Lombok all used `setAccessible(true)` on internal JDK classes. JPMS blocks this by default.\n\nSymptom:\n```\njava.lang.reflect.InaccessibleObjectException: Unable to make field private final java.util.ArrayList\n  java.util.Arrays$ArrayList.a accessible: module java.base does not \"opens java.util\" to unnamed module\n```\n\nFix with **`--add-opens`** at JVM startup:\n```bash\njava --add-opens java.base/java.util=ALL-UNNAMED \\\n     --add-opens java.base/java.lang=ALL-UNNAMED \\\n     -jar myapp.jar\n```\n\nThis is the standard escape hatch. Most frameworks (Spring Boot 3+, Hibernate 6+) have updated to avoid the worst offenders, but `--add-opens` is still common.\n\n**2. Removed APIs** — several deprecated APIs were removed in Java 9–11:\n- `sun.misc.Unsafe` discouraged (still works; replacement: `VarHandle`).\n- Java EE modules removed from JDK (JAXB, JAX-WS, CORBA) — must be added as separate dependencies.\n- `java.xml.bind` → add `jakarta.xml.bind:jakarta.xml.bind-api`.\n\n**3. Split packages** — two JARs contributing classes to the same package. Classpath tolerates this; module path forbids it. Usually requires repackaging one of the JARs.\n\n**4. `jdeps` is your friend** — `jdeps --jdk-internals myapp.jar` lists all usages of JDK internal APIs you need to fix before modularizing."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Should You Modularize Your App?",
+            "content": "**Modularize when**:\n- Building a library consumed by others — `Automatic-Module-Name` at minimum, full module-info ideally.\n- Building an application where a slim runtime matters (embedded, containers, Lambda).\n- Working on a large modular monolith where enforcing boundaries has real value.\n- Using `jlink` or GraalVM native-image.\n\n**Don't modularize when**:\n- You're building a typical Spring Boot microservice — the reflection overhead and framework friction outweigh benefits.\n- Your team doesn't have the bandwidth to fight `--add-opens` battles.\n- Your dependency graph includes non-modular libraries that you can't control.\n- You're already using GraalVM native-image, which handles modularity differently.\n\n**Pragmatic middle ground**:\n- Stay on the classpath for app code (unnamed module).\n- Use `jlink` to build slim runtimes even without modularizing your own code.\n- Add `Automatic-Module-Name` to any library JAR you publish — it's free and helps downstream.\n- Consider JPMS for new greenfield projects; skip it for legacy migrations unless there's a clear win.\n\n**Comparison with other dependency systems**:\n- JPMS is **runtime** enforcement; Maven/Gradle are **build-time**. They're complementary, not alternatives.\n- OSGi is more powerful (dynamic loading, versioning) but also more complex; JPMS deliberately doesn't do versioning.\n- For typical apps, Maven + classpath is still the default; JPMS shines for JDK itself and libraries."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JPMS** (Java 9, JEP 261/376) adds a module layer above packages.\n- **`module-info.java`** declares `requires`, `exports`, `opens`, `uses`, `provides`.\n- **Motivation**: strong encapsulation, reliable configuration, slim runtimes via `jlink`.\n- **Three kinds of modules**: named (module-info), automatic (JAR on module path), unnamed (classpath).\n- **`exports`** = compile + run access (public only); **`opens`** = full reflection access (needed by frameworks).\n- **`requires transitive`** = consumers inherit the dependency.\n- **`requires static`** = compile-time only (annotation processors).\n- **`jlink`** builds custom runtime images (~30–90 MB vs 200 MB+).\n- **Migration pain**: `InaccessibleObjectException` on JDK internals; fix with `--add-opens`.\n- **Removed modules**: Java EE (`java.xml.bind`, `java.xml.ws`, CORBA) — add as external deps.\n- **Split packages** are forbidden on module path; use `jdeps` to find them.\n- **Automatic-Module-Name** in the manifest is the minimum migration step for library authors.\n- Most Spring Boot apps **stay on the classpath**; modularization is rare outside the JDK itself."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Java Platform Module System, delivered in Java 9, adds a module layer above packages that controls which classes are exported to other modules and which other modules are required.\n\n**Why it was added**\n- **Monolithic JDK** — `rt.jar` was 60MB of everything; couldn't ship a slim runtime\n- **Classpath hell** — duplicate classes silently shadowed each other; missing deps failed at first use\n- **No strong encapsulation** — `sun.misc.Unsafe` and all JDK internals were reachable; libraries depended on non-stable internals\n- **Goal**: strong encapsulation + reliable configuration + custom runtime images\n\n**`module-info.java`** at the module root declares:\n- `requires X` — I need module X\n- `requires transitive X` — my consumers also get X\n- `requires static X` — compile-time only (annotation processors like Lombok)\n- `exports pkg` — package visible to everyone\n- `exports pkg to A, B` — qualified; only A and B\n- `opens pkg` — allow deep reflection (Spring, Hibernate, Jackson need this)\n- `uses Service` / `provides Service with Impl` — ServiceLoader\n\n**`exports` vs `opens` — the crucial distinction**\n- `exports` = compile and runtime access to public API\n- `opens` = full reflection access including private fields\n- Frameworks that use reflection need `opens`, not just `exports`\n\n**Three kinds of modules**\n- **Named module** — has module-info, full JPMS enforcement\n- **Automatic module** — plain JAR on the module path; auto-exports and auto-requires everything; bridge for non-modular libraries\n- **Unnamed module** — JAR on the classpath; no enforcement; where most app code still lives\n\n**`jlink` — the killer feature**\n- Build a custom JDK with only the modules your app uses\n- `jdeps --print-module-deps` to discover them\n- Typical reduction: 200MB full JDK → 30–90MB custom image\n- Matters for Docker images, AWS Lambda, embedded devices\n- Works even if your app isn't modular, because the JDK itself is\n\n**Migration challenges**\n- **`InaccessibleObjectException`** when frameworks reflect into JDK internals\n- Fix with **`--add-opens java.base/java.util=ALL-UNNAMED`** at startup — the standard escape hatch\n- **Removed modules**: Java EE bits (JAXB, JAX-WS, CORBA) now external deps\n- **Split packages** forbidden on module path; `jdeps` finds them\n- Most libraries only add `Automatic-Module-Name: com.acme.foo` to manifest — the minimum useful step\n\n**Adoption reality**\n- The JDK is fully modular internally\n- Most Spring Boot apps stay on the classpath — they benefit from `jlink` without modularizing themselves\n- Library authors add `Automatic-Module-Name` at minimum\n- Greenfield libraries: worth full modularization\n- Legacy migrations: usually not worth the friction\n\n**Recommendation:** For typical Spring Boot microservices, **don't modularize your own code** — the friction with Spring/Hibernate/Jackson reflection is rarely worth it. Do benefit indirectly by using **`jlink`** to build slim JDK images for Docker and Lambda — a 180MB full JDK shrinks to 45MB for a typical app, dramatically reducing container pull times and cold-start costs. If you publish a **library**, add **`Automatic-Module-Name: com.acme.yourlib`** to the manifest as the minimum courtesy to downstream consumers — it's free. Keep **`--add-opens`** flags in your `JAVA_TOOL_OPTIONS` or Dockerfile as a migration escape hatch for frameworks that still touch JDK internals. For greenfield projects where you control the whole dependency tree and care about strong encapsulation, full modularization with `module-info.java` is worth considering — otherwise stay on the classpath."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `exports` and `opens`?",
+        "How does `jlink` produce a smaller runtime than a full JDK?",
+        "Why do Spring/Hibernate apps often need `--add-opens` flags?",
+        "What's an automatic module and when would you use `Automatic-Module-Name`?",
+        "Why was JAXB removed from the JDK in Java 11?"
+      ],
+      "seo": {
+        "metaTitle": "Java 9 Module System (JPMS) — module-info, jlink, Migration Guide",
+        "metaDescription": "Complete guide to Java's JPMS: module-info.java syntax, exports vs opens, jlink custom runtimes, automatic vs named modules, migration challenges, and when to modularize."
+      },
+      "order": 1,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "The Java Platform Module System, delivered in Java 9, adds a module layer above packages that controls which classes are exported to other modules and which other modules are required.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before Java 9, the JDK and the ecosystem had several structural problems: 1. Monolithic JDK — rt.jar was ~60MB containing everything from java.lang to javax.xml. You couldn't ship a minimal runtime; a Hello World app needed the full JDK. 2. Classpath hell — the classpath is a flat list of JARs. If two JARs contain the same class, the first one wins silently. Missing dependencies fail at first use (sometimes in production), not at startup. 3. No strong encapsulation —."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows JPMS's motivation (strong encapsulation, reliable configuration, jlink images), the module-info syntax, and the pragmatic reality that most apps don't modularize but benefit indirectly via jlink"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "JPMS (Java 9, JEP 261/376) adds a module layer above packages",
+              "module-info",
+              "java declares requires, exports, opens, uses, provides",
+              "Motivation: strong encapsulation, reliable configuration, slim runtimes via jlink",
+              "Three kinds of modules: named (module-info), automatic (JAR on module path), unnamed (classpath)"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before Java 9, the JDK and the ecosystem had several structural problems: 1. Monolithic JDK — rt.jar was ~60MB containing everything from java.lang to javax.xml. You couldn't ship a minimal runtime; a Hello World app needed the full JDK. 2. Classpath hell — the classpath is a flat list of JARs. If two JARs contain the same class, the first one wins silently. Missing dependencies fail at first use (sometimes in production), not at startup. 3. No strong encapsulation — public in Java means 'public to everyone.' Every JDK internal class (sun.misc.Unsafe, sun.reflect.*) was reachable. Libraries depended on internals that weren't meant to be stable. 4. No slim runtime — embedded/cloud deployments shipped 200MB+ JDKs even when using a tiny."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking JPMS replaces Maven/Gradle dependency management (it doesn't — it's runtime, they're build-time)",
+              "Thinking every app should have module-info",
+              "Confusing exports (compile + run) with opens (reflection only)"
+            ]
+          }
+        ],
+        "cap": "For greenfield projects where you control the whole dependency tree and care about strong encapsulation, full modularization with module-info.java is worth considering — otherwise stay on the classpat",
+        "familiarity_anchors": [
+          "Platform",
+          "Module",
+          "System"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between `exports` and `opens`?",
+          "How does `jlink` produce a smaller runtime than a full JDK?",
+          "Why do Spring/Hibernate apps often need `--add-opens` flags?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    },
+    {
+      "id": "java-9-factory-methods-list-of-set-of-map-of",
+      "slug": "java-9-factory-methods-list-of-set-of-map-of",
+      "question": "What are the Java 9 `List.of`, `Set.of`, `Map.of` factory methods? How do they differ from `Collections.unmodifiableList`?",
+      "title": "Java 9 Immutable Collection Factories — `List.of`, `Set.of`, `Map.of`",
+      "direct_answer": "**Java 9** added concise **static factory methods** on `List`, `Set`, and `Map` for creating **truly immutable** collections: `List.of(a, b, c)`, `Set.of(a, b, c)`, `Map.of(k1, v1, k2, v2)`, plus `Map.ofEntries(Map.entry(k, v), ...)` for maps with more than 10 entries. These differ from `Collections.unmodifiableList(new ArrayList<>(...))` in three important ways: **(1) Real immutability** — the returned collection throws `UnsupportedOperationException` on any mutation, and there's **no backing collection** someone can modify behind your back (unlike `unmodifiableList`, which wraps a mutable list that the caller might still hold). **(2) Null-intolerant** — `List.of(null)` throws NPE; nulls are forbidden as elements, keys, or values. **(3) Structurally optimized** — the JVM returns compact, purpose-built classes (`ImmutableCollections.ListN`, `Set12`, `Map1`, etc.), smaller and faster than a wrapped `ArrayList`. **`Map.copyOf(map)`**, **`List.copyOf(collection)`**, **`Set.copyOf(collection)`** (also Java 10+) make defensive copies in one call. Use these for constants, DTO field initializers, test fixtures, and anywhere an immutable collection is the right signal. Caveat: they're **structurally** immutable — if elements themselves are mutable (e.g., `List<Map<String, Object>>`), the contents can still change. For deeply immutable data, combine with records and immutable element types.",
+      "layout_type": "default",
+      "difficulty": "easy",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the Java 9 factories exist, their immutability guarantees, null intolerance, and how they improve on `Collections.unmodifiableList`",
+        "common_mistake": "Thinking `List.of` is just syntactic sugar for `Arrays.asList`. Confusing `Arrays.asList` (fixed-size but mutable via set) with `List.of` (truly immutable). Forgetting that nulls aren't allowed",
+        "to_stand_out": "Mention structural vs deep immutability, discuss the specialized internal classes (ListN, Set12), explain `List.copyOf` as defensive-copy shortcut, and note Map.of's 10-pair limit with Map.ofEntries as the alternative"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "linkedin",
+        "netflix",
+        "spring"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Three Factory Method Families",
+            "content": "Java 9 added concise static factories on the collection interfaces:\n\n```java\n// List.of — up to 10 elements via overloads; varargs beyond\nList<String> colors = List.of(\"red\", \"green\", \"blue\");\nList<Integer> nums = List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);  // varargs\n\n// Set.of — same structure; duplicates throw IllegalArgumentException\nSet<String> roles = Set.of(\"admin\", \"user\", \"guest\");\n// Set.of(\"a\", \"a\"); // IllegalArgumentException: duplicate element\n\n// Map.of — up to 10 key/value pairs as alternating arguments\nMap<String, Integer> scores = Map.of(\n    \"alice\", 100,\n    \"bob\", 85,\n    \"carol\", 92);\n\n// Map.ofEntries — any number of entries, explicit Map.entry pairs\nMap<String, Integer> bigMap = Map.ofEntries(\n    Map.entry(\"a\", 1),\n    Map.entry(\"b\", 2),\n    // ... as many as you want\n    Map.entry(\"z\", 26));\n\n// Java 10+: copyOf — defensive immutable copy of an existing collection\nList<String> safe = List.copyOf(mutableList);\nMap<String, Integer> safeMap = Map.copyOf(mutableMap);\n```\n\n**Key properties**:\n- **Truly immutable** — throws `UnsupportedOperationException` on `add`, `set`, `remove`, `put`, `clear`.\n- **Null-hostile** — `List.of(null)` and `Map.of(\"k\", null)` throw `NullPointerException`.\n- **Duplicate-hostile for Sets** — `Set.of(\"a\", \"a\")` throws `IllegalArgumentException`.\n- **Serializable** — unlike `Stream.collect(Collectors.toUnmodifiableList())` in some JDK versions.\n- **No incidental ordering guarantees for Sets/Maps** (beyond the obvious) — don't rely on iteration order."
+          },
+          {
+            "type": "step",
+            "title": "vs `Collections.unmodifiableList` — Three Real Differences",
+            "content": "Before Java 9, the canonical way to produce a read-only list was:\n```java\nList<String> list = Collections.unmodifiableList(new ArrayList<>(List.of(\"a\", \"b\", \"c\")));\n```\n\n**Difference 1: True vs superficial immutability**\n```java\nList<String> mutable = new ArrayList<>(List.of(\"a\", \"b\"));\nList<String> wrapper = Collections.unmodifiableList(mutable);\n\nwrapper.add(\"c\");    // throws UnsupportedOperationException ✓\nmutable.add(\"c\");    // MUTATES — wrapper now sees [a, b, c] too!\n```\n`unmodifiableList` is a **view** over the original. If the original leaks, immutability leaks. `List.of` has no backing collection — there's no reference to mutate.\n\n**Difference 2: Null handling**\n```java\nList.of(\"a\", null, \"b\");               // NPE\nCollections.unmodifiableList(\n    new ArrayList<>(Arrays.asList(\"a\", null, \"b\"))  // null allowed\n);\n```\nThe Java 9 factories enforce non-null contracts. This prevents whole categories of bugs.\n\n**Difference 3: Memory and performance**\nThe JVM returns specialized classes from `List.of`, `Set.of`, `Map.of`:\n- `ImmutableCollections.List0`, `List1`, `List2`, `ListN` — specialized by size.\n- `Set12` (0–2 elements), `SetN`.\n- `Map1`, `MapN`.\n\nThese are **smaller** (no resize buffer, no modCount, no backing array for small sizes) and have **faster access** in some cases. `List.of(\"a\")` uses a single-field class with no allocation overhead of an `ArrayList`.\n\n**Summary table**:\n| Feature | `List.of` | `Collections.unmodifiableList(new ArrayList<>(...))` |\n|---|---|---|\n| Immutable structure | True | Only if you never expose the original |\n| Nulls allowed | No | Yes |\n| Memory overhead | Minimal | ArrayList + wrapper |\n| Serializable | Yes | Depends |\n| Concise syntax | Yes | Verbose |"
+          },
+          {
+            "type": "after_code",
+            "title": "Common Patterns and Idioms",
+            "content": "**Constants**:\n```java\npublic class Config {\n    private static final List<String> SUPPORTED_LOCALES =\n        List.of(\"en_US\", \"en_GB\", \"fr_FR\", \"de_DE\", \"ja_JP\");\n\n    private static final Set<String> ADMIN_ROLES =\n        Set.of(\"ADMIN\", \"SUPERADMIN\", \"ROOT\");\n\n    private static final Map<String, Integer> RETRY_LIMITS = Map.of(\n        \"payment\", 3,\n        \"email\", 5,\n        \"webhook\", 10);\n}\n```\n\n**DTO field initializers**:\n```java\npublic record ApiResponse<T>(T data, Map<String, String> meta) {\n    public ApiResponse(T data) {\n        this(data, Map.of());  // empty immutable map\n    }\n}\n```\n\n**Test fixtures**:\n```java\n@Test\nvoid testSummary() {\n    List<Order> orders = List.of(\n        new Order(1L, new BigDecimal(\"100\")),\n        new Order(2L, new BigDecimal(\"200\")),\n        new Order(3L, new BigDecimal(\"50\")));\n\n    BigDecimal total = orderService.sumTotal(orders);\n    assertEquals(new BigDecimal(\"350\"), total);\n}\n```\n\n**Defensive copy (`copyOf`)**:\n```java\npublic final class Report {\n    private final List<String> lines;\n\n    public Report(List<String> lines) {\n        this.lines = List.copyOf(lines);  // immutable snapshot\n    }\n\n    public List<String> getLines() {\n        return lines;  // safe to expose\n    }\n}\n```\n\n**Building dynamically, freezing at the end**:\n```java\nList<String> temp = new ArrayList<>();\ntemp.add(\"first\");\ntemp.add(\"second\");\nList<String> frozen = List.copyOf(temp);\n```\n\n**Converting streams** (Java 10+ has `Stream.toList()`):\n```java\nList<String> result = stream.collect(Collectors.toUnmodifiableList());\n// Or, Java 10+:\nList<String> result = stream.toList();  // returns unmodifiable list (not the same class as List.of, but immutable)\n```"
+          },
+          {
+            "type": "step",
+            "title": "Map.of — the 10-Entry Limit and `Map.ofEntries`",
+            "content": "`Map.of` has overloads for 0 through 10 entries using alternating key/value arguments:\n```java\nMap.of(k1, v1, k2, v2, k3, v3)   // 3 entries\nMap.of(k1, v1, ..., k10, v10)     // 10 entries (maximum overload)\n```\n\nBeyond 10, use **`Map.ofEntries`** with explicit `Map.entry`:\n```java\nMap<String, Integer> statusCodes = Map.ofEntries(\n    Map.entry(\"OK\", 200),\n    Map.entry(\"Created\", 201),\n    Map.entry(\"NoContent\", 204),\n    Map.entry(\"BadRequest\", 400),\n    Map.entry(\"Unauthorized\", 401),\n    Map.entry(\"Forbidden\", 403),\n    Map.entry(\"NotFound\", 404),\n    Map.entry(\"Conflict\", 409),\n    Map.entry(\"InternalError\", 500),\n    Map.entry(\"BadGateway\", 502),\n    Map.entry(\"ServiceUnavailable\", 503));\n```\n\n**Why two methods?** The alternating-arg `Map.of` has better performance and is cleaner for small maps, but can't be overloaded past 10. `ofEntries` uses varargs of `Map.Entry`, so it scales but requires the extra `Map.entry()` wrapper per pair.\n\n**Gotcha**: `Map.of(k1, v1, k2, v2)` doesn't preserve insertion order in iteration. If you need order, use `new LinkedHashMap<>(Map.of(...))` or build a `LinkedHashMap` directly.\n\n**Duplicates**: `Map.of(\"a\", 1, \"a\", 2)` throws `IllegalArgumentException` — same as `Set.of` duplicates."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use These Factories",
+            "content": "**Use `List.of` / `Set.of` / `Map.of` when**:\n- Creating compile-time constants.\n- Initializing DTO / record fields.\n- Building test fixtures.\n- Returning an empty collection (prefer `List.of()` over `Collections.emptyList()` for consistency).\n- Passing an immutable collection to an API that shouldn't modify it.\n\n**Use `List.copyOf` / `Set.copyOf` / `Map.copyOf` when**:\n- Defensive-copying a collection received from a caller.\n- Freezing a mutable builder at the end of construction.\n- **Optimization note**: `copyOf` checks if the source is already the expected immutable type and returns it as-is — zero allocation for repeated defensive copies.\n\n**Use `Collections.unmodifiableList` / traditional patterns when**:\n- You need to allow `null` elements.\n- You're wrapping a live view that should reflect changes to the underlying collection (rare and usually a design smell).\n- You're working with pre-Java 9 code.\n\n**Watch out for**:\n- **Structural vs deep immutability**: `List.of(new ArrayList<>(List.of(1, 2)))` has an outer immutable list but the inner `ArrayList` is still mutable. For deep immutability, make the elements themselves immutable (records, primitives, `String`).\n- **No nulls**: a common gotcha when migrating code that relied on null placeholders.\n- **`Stream.toList()` (Java 16+) returns an unmodifiable list** — but it may allow nulls, unlike `List.of`. They're not identical.\n- **Duplicate keys/elements** throw exceptions — good safety, surprising if you expected last-wins semantics.\n- **No guaranteed order for Set/Map iteration** beyond the obvious contract; don't build test assertions on iteration order.\n\n**Comparison with `Arrays.asList`**:\n- `Arrays.asList(\"a\", \"b\")` returns a **fixed-size but mutable** list (`set` works, `add` doesn't).\n- `List.of(\"a\", \"b\")` returns a **truly immutable** list (`set` throws too).\n- `Arrays.asList` allows null; `List.of` doesn't.\n- Prefer `List.of` unless you specifically need the legacy behavior."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Java 9 factories**: `List.of`, `Set.of`, `Map.of`, `Map.ofEntries` — create truly immutable collections.\n- **Throws** `UnsupportedOperationException` on any mutation attempt.\n- **No nulls** — element/key/value null throws NPE.\n- **No duplicates** in `Set.of` and `Map.of` — throws `IllegalArgumentException`.\n- **Specialized internal classes** (`List1`, `ListN`, `Set12`, `Map1`, `MapN`) — smaller and faster than `ArrayList` + wrapper.\n- **Java 10+**: `List.copyOf`, `Set.copyOf`, `Map.copyOf` for defensive immutable copies.\n- **Structural only**: elements inside can still be mutable if they're mutable types.\n- **`Map.of` limit**: 10 pairs; use `Map.ofEntries(Map.entry(k,v), ...)` beyond that.\n- **vs `Collections.unmodifiableList`**: the old wrapper leaks immutability if the backing collection is held elsewhere.\n- **vs `Arrays.asList`**: `Arrays.asList` is fixed-size but mutable via `set`, allows nulls.\n- **No iteration-order guarantees** for Set/Map factories.\n- **Serializable** — safe to use in Serialization-sensitive code."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Java 9 added concise static factory methods on `List`, `Set`, and `Map` for creating **truly immutable** collections:\n\n- `List.of(a, b, c)` — immutable list\n- `Set.of(a, b, c)` — immutable set (duplicates throw `IllegalArgumentException`)\n- `Map.of(k1, v1, k2, v2)` — immutable map, up to 10 key/value pairs\n- `Map.ofEntries(Map.entry(k, v), ...)` — arbitrary number of entries\n- Java 10+: `List.copyOf`, `Set.copyOf`, `Map.copyOf` — defensive copies\n\n**Three key differences vs `Collections.unmodifiableList`**\n\n**1. True immutability**\n- `Collections.unmodifiableList` is a **view** over a mutable list. If the original leaks, immutability leaks.\n- `List.of` has no backing mutable collection — nothing to mutate behind your back.\n\n**2. Null-hostile**\n- `List.of(null)` throws NPE\n- Nulls are forbidden as elements, keys, or values\n- Prevents a whole class of subtle bugs\n\n**3. Structurally optimized**\n- JVM returns specialized internal classes: `List1`, `List2`, `ListN`, `Set12`, `Map1`, `MapN`\n- Smaller and often faster than `ArrayList` + `unmodifiableList` wrapper\n- No resize buffer, no modCount, no backing array for small sizes\n\n**Other properties**\n- Throw `UnsupportedOperationException` on any mutation\n- Duplicates in `Set.of` and `Map.of` throw `IllegalArgumentException`\n- Serializable by design\n- No guaranteed iteration order for Set/Map — don't build assertions on it\n\n**`Map.of` has a 10-pair limit**\n- The alternating-arg overloads stop at 10\n- Beyond that: `Map.ofEntries(Map.entry(k1, v1), Map.entry(k2, v2), ...)`\n- Slightly more verbose but scales\n\n**Common patterns**\n- Constants: `static final List<String> LOCALES = List.of(...)`\n- DTO/record initializers: `new ApiResponse<>(data, Map.of())` for empty meta\n- Test fixtures\n- Defensive copies: `List.copyOf(untrustedList)`\n- Stream to immutable: `stream.toList()` (Java 16+) or `stream.collect(Collectors.toUnmodifiableList())`\n\n**vs `Arrays.asList`**\n- `Arrays.asList` is fixed-size but mutable via `set` — legacy trap\n- `List.of` is truly immutable\n- `Arrays.asList` allows nulls; `List.of` doesn't\n- Prefer `List.of` unless you specifically need the legacy behavior\n\n**Structural vs deep immutability**\n- `List.of(mutableMap)` — the list is immutable but the map inside is still mutable\n- For deep immutability, make elements themselves immutable (records, primitives, String)\n\n**`copyOf` optimization**\n- `List.copyOf(source)` checks if source is already the expected immutable type and returns it as-is\n- Zero allocation for repeated defensive copies\n\n**Recommendation:** Reach for **`List.of`, `Set.of`, `Map.of`** as your default for constants, DTO initializers, and test fixtures. They're more concise, truly immutable, and null-safe. Use **`List.copyOf`** etc. for defensive copies when accepting collections from callers — the optimization skips the allocation if the input is already immutable. Only fall back to **`Collections.unmodifiableList(new ArrayList<>(...))`** when you need to allow nulls (rare and usually a design smell). Remember the 10-pair limit on `Map.of`; for bigger maps use **`Map.ofEntries`**. And always keep **structural vs deep immutability** in mind — `List.of(mutableMap)` is only shallow-immutable; for deep immutability, make the elements immutable too."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `List.of` and `Arrays.asList`?",
+        "Why does `List.of` throw on null elements?",
+        "When would you use `Map.ofEntries` instead of `Map.of`?",
+        "How is `List.copyOf` optimized when the source is already immutable?",
+        "What's the difference between `Stream.toList()` (Java 16+) and `List.of`?"
+      ],
+      "seo": {
+        "metaTitle": "Java 9 `List.of`, `Set.of`, `Map.of` — Immutable Collection Factories",
+        "metaDescription": "Complete guide to Java 9 immutable collection factories: List.of, Set.of, Map.of, Map.ofEntries, copyOf, vs Collections.unmodifiableList, null-hostility, and performance."
+      },
+      "order": 2,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Java 9 added concise static factory methods on List, Set, and Map for creating truly immutable collections: List.of(a, b, c) — immutable list Set.of(a, b, c) — immutable set (duplicates throw IllegalArgumentException) Map.of(k1, v1, k2.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Java 9 added concise static factories on the collection interfaces: ``java // List.of — up to 10 elements via overloads; varargs beyond List<String> colors = List.of(\"red\", \"green\", \"blue\"); List<Integer> nums = List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11); // varargs // Set.of — same structure; duplicates throw IllegalArgumentException Set<String> roles = Set.of(\"admin\", \"user\", \"guest\"); // Set.of(\"a\", \"a\"); // IllegalArgumentException: duplicate element // Map.of — up to 10 key/value pairs as alternating arguments Map<String, Integer> scores =."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows the Java 9 factories exist, their immutability guarantees, null intolerance, and how they improve on Collections.unmodifiableList"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Java 9 factories: List",
+              "ofEntries — create truly immutable collections",
+              "Throws UnsupportedOperationException on any mutation attempt",
+              "No nulls — element/key/value null throws NPE",
+              "No duplicates in Set"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Java 9 added concise static factories on the collection interfaces: ``java // List.of — up to 10 elements via overloads; varargs beyond List<String> colors = List.of(\"red\", \"green\", \"blue\"); List<Integer> nums = List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11); // varargs // Set.of — same structure; duplicates throw IllegalArgumentException Set<String> roles = Set.of(\"admin\", \"user\", \"guest\"); // Set.of(\"a\", \"a\"); // IllegalArgumentException: duplicate element // Map.of — up to 10 key/value pairs as alternating arguments Map<String, Integer> scores = Map.of( \"alice\", 100, \"bob\", 85, \"carol\", 92); // Map.ofEntries — any number of entries, explicit Map.entry pairs Map<String, Integer> bigMap = Map.ofEntries( Map.entry(\"a\", 1), Map.entry(\"b\", 2), // ... as many as you want Map.entry(\"z\", 26)); // Java 10+: copyOf —."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking List",
+              "of is just syntactic sugar for Arrays",
+              "Confusing Arrays",
+              "asList (fixed-size but mutable via set) with List",
+              "of (truly immutable)"
+            ]
+          }
+        ],
+        "cap": "And always keep structural vs deep immutability in mind — List.of(mutableMap) is only shallow-immutable; for deep immutability, make the elements immutable too.",
+        "familiarity_anchors": [
+          "These",
+          "Collections",
+          "ArrayList"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between `List.of` and `Arrays.asList`?",
+          "Why does `List.of` throw on null elements?",
+          "When would you use `Map.ofEntries` instead of `Map.of`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    },
+    {
+      "id": "java-10-var-local-variable-type-inference",
+      "slug": "java-10-var-local-variable-type-inference",
+      "question": "What is Java 10's `var` keyword? Where can and can't you use it, and what are the readability trade-offs?",
+      "title": "Java 10 `var` — Local Variable Type Inference",
+      "direct_answer": "**`var`** (Java 10, JEP 286) enables **local variable type inference** — the compiler infers the variable's type from the initializer's static type, so you write `var list = new ArrayList<String>();` instead of `ArrayList<String> list = new ArrayList<String>();`. **`var` is NOT dynamic typing** — the type is fixed at compile time; `var x = 1;` declares an `int`, and you can't later assign a String. It only works for **local variables with initializers**, **for-loop variables**, and **try-with-resources**. It does NOT work for **fields**, **method parameters**, **return types**, **lambda parameters** (without types), **`null` initializer alone**, or **array initializers without `new`**. The key trade-off is readability: `var` shines when the type is obvious from the initializer (`var users = userRepo.findAll();` — clearly `List<User>`) but hurts when the type is non-obvious (`var result = service.process();` — what's `result`?). The Java community guidelines (Oracle's style guide by Stuart Marks) say: use `var` when it makes code clearer, skip it when the explicit type adds signal. It's especially useful with long generic types (`Map<String, List<Map<String, Integer>>>`) and with diamond operator (`var map = new HashMap<String, List<Integer>>();` — no redundancy). Java 11 added **`var` in lambda parameters** specifically to allow annotations like `@NonNull`.",
+      "layout_type": "default",
+      "difficulty": "easy",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows `var` is compile-time (not dynamic), where it works and doesn't, and the readability trade-offs from Oracle's style guide",
+        "common_mistake": "Thinking `var` makes Java dynamically typed. Using `var` where the type is non-obvious. Trying to use `var` for fields or method parameters. Declaring `var x = null;`",
+        "to_stand_out": "Cite Stuart Marks' official style guide (G1 through G7), discuss the `var` + diamond interaction, mention Java 11's lambda-parameter `var` for annotations, and explain the interaction with intersection types"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "linkedin",
+        "netflix",
+        "spring"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What `var` Actually Does",
+            "content": "`var` tells the compiler to **infer the type from the initializer's static type**. It's syntactic sugar — the compiled bytecode is identical to writing the type explicitly.\n\n```java\nvar list = new ArrayList<String>();\n// compiler infers: ArrayList<String>\n// exact same bytecode as: ArrayList<String> list = new ArrayList<String>();\n\nvar count = 42;                // int\nvar name = \"alice\";            // String\nvar users = userRepo.findAll(); // List<User> (if findAll returns List<User>)\nvar sum = 0.5 * qty * price;   // double\n```\n\n**Crucial: `var` is NOT dynamic typing**. The type is fixed at compile time. Once inferred, the variable has that type forever:\n\n```java\nvar x = 1;  // int\nx = \"hello\"; // COMPILE ERROR: incompatible types\n```\n\nContrast with JavaScript's `var` or Python — Java's `var` is static typing with inference, like Kotlin's `val`/`var`, Scala's `val`/`var`, or C#'s `var`.\n\n**What `var` DOESN'T do**:\n- Doesn't allow type changes after inference.\n- Doesn't imply mutability (confusingly, `var` in Kotlin does mean 'mutable', but Java's doesn't — it's just inference).\n- Doesn't work without an initializer — the compiler needs something to infer from."
+          },
+          {
+            "type": "step",
+            "title": "Where `var` Works",
+            "content": "**Allowed contexts**:\n\n**1. Local variables with initializer**:\n```java\nvar message = \"hello\";\nvar count = computeCount();\nvar map = new HashMap<String, List<Integer>>();\n```\n\n**2. For-loop variables**:\n```java\nfor (var i = 0; i < 10; i++) { ... }\nfor (var user : users) { ... }\n```\n\n**3. Try-with-resources**:\n```java\ntry (var stream = Files.lines(path)) {\n    stream.forEach(System.out::println);\n}\n```\n\n**4. Java 11+: lambda parameters (with types or annotations)**:\n```java\nPredicate<String> p = (var s) -> !s.isEmpty();\n// Useful for annotations\nConsumer<String> c = (@NonNull var s) -> process(s);\n```\n\n**NOT allowed** (compile error):\n\n**1. Fields** — class-level type inference is a harder design problem (intentional restriction):\n```java\nclass Foo {\n    var count = 0;  // ERROR\n}\n```\n\n**2. Method parameters**:\n```java\nvoid process(var input) { ... }  // ERROR\n```\n\n**3. Method return types**:\n```java\nvar compute() { ... }  // ERROR\n```\n\n**4. No initializer**:\n```java\nvar x;          // ERROR: cannot infer type\nvar x = null;   // ERROR: `null` alone has no type\n```\n\n**5. Array initializer without `new`**:\n```java\nvar arr = {1, 2, 3};        // ERROR\nvar arr = new int[]{1, 2, 3}; // OK — int[]\n```\n\n**6. Lambda alone (without a target type)**:\n```java\nvar f = x -> x + 1;  // ERROR: can't infer the functional interface\nFunction<Integer, Integer> f = x -> x + 1;  // OK\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "The Readability Trade-offs",
+            "content": "**Good use — type is obvious from initializer**:\n```java\nvar users = userRepo.findAll();                     // List<User> obvious\nvar total = BigDecimal.ZERO;                        // BigDecimal obvious\nvar map = new HashMap<String, List<Integer>>();     // no redundancy\nvar now = Instant.now();                            // Instant obvious\nvar response = restTemplate.getForEntity(url, UserDTO.class);  // ResponseEntity<UserDTO>\n```\n\n**Bad use — type is non-obvious**:\n```java\nvar result = service.process(input);    // What is result? Requires jumping to definition\nvar config = load();                     // What does load return?\nvar items = compute();                   // Lost all type information visually\n```\n\n**Ambiguous — use judgment**:\n```java\nvar count = list.size();  // int — obvious, fine\nvar index = findIndex();  // int — obvious\nvar ratio = a / b;         // depends on operands, probably fine\n```\n\n**Especially useful — long generic types**:\n```java\n// Before\nMap<String, List<Map<String, Integer>>> complex = ...;\n// After\nvar complex = ...;  // type info is in the RHS expression; no double-typing\n```\n\n**Diamond + var — controversial**:\n```java\nvar list = new ArrayList<>();  // inferred: ArrayList<Object> (probably not what you wanted)\nvar list = new ArrayList<String>();  // better — explicit type on RHS\n```\n\n**Intersection types** (multi-bound inference):\n```java\n// s has inferred type: Serializable & Comparable<String>\nvar s = (Serializable & Comparable<String>) \"hello\";\n// Without var, you couldn't have named this type at all!\n```"
+          },
+          {
+            "type": "step",
+            "title": "Oracle's Official Style Guide — Stuart Marks' Guidelines",
+            "content": "Stuart Marks (Oracle) published official guidelines (summarized):\n\n**G1. Take advantage of the initializer.**\n- `var` makes you think about the RHS. Make it clear.\n- `var list = List.<String>of();` is clearer than `var list = List.of();` (latter is `List<Object>`).\n\n**G2. Minimize scope.**\n- Short lifetime → `var` works. Long lifetime → explicit type is more useful.\n- `var` inside a tight loop is fine; `var` for a variable used across 50 lines can hurt.\n\n**G3. Consider using `var` when the initializer provides sufficient information.**\n- Constructor call: `var user = new User();` — clear.\n- Static factory: `var users = List.of(a, b);` — clear.\n\n**G4. Use `var` to break up chained or nested expressions.**\n- Instead of `process(compute(transform(x)))`, introduce named `var` intermediates.\n\n**G5. Don't worry too much about 'programming to the interface' with local variables.**\n- `ArrayList<String> list = new ArrayList<>();` vs `List<String> list = new ArrayList<>();` matters less for locals than for fields/parameters.\n- `var list = new ArrayList<String>();` is fine locally.\n\n**G6. Beware of diamond on RHS.**\n- `var list = new ArrayList<>();` → `ArrayList<Object>`, usually not intended.\n- Either specify the type on RHS or avoid `var`.\n\n**G7. Take care when using `var` with literals.**\n- `var x = 1;` is `int`, not `long`. Explicit for ambiguity: `var x = 1L;` for long, `var x = 1.0;` for double.\n\nThe underlying principle: **`var` is for clarity, not terseness**. If it makes the reader's life easier, use it. If it makes them jump to definitions, skip it."
+          },
+          {
+            "type": "step",
+            "title": "Java 11 — `var` in Lambda Parameters",
+            "content": "Java 11 (JEP 323) added `var` to lambda parameter lists — not because type inference was missing (lambdas already had it), but to **allow annotations** on parameters:\n\n```java\n// Before Java 11 — can't add annotations to inferred-type parameters\nConsumer<String> c = s -> process(s);  // no way to annotate s\nConsumer<String> c = (String s) -> process(s);  // explicit type works\n\n// Java 11+ — var allows annotations without verbosity\nConsumer<String> c = (@NonNull var s) -> process(s);\nBiFunction<String, Integer, String> f = (@NonNull var s, @Positive var n) -> s.repeat(n);\n```\n\n**Rules for lambda `var`**:\n- All parameters must use `var` or none must (no mixing).\n- Can't mix `var` with explicit types: `(var s, String t) ->` is illegal.\n- Mostly useful when you need parameter annotations; otherwise, bare inference is cleaner.\n\n**Niche feature** — outside of NonNull/@Nullable use cases, most lambdas are better without `var`."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use `var`",
+            "content": "**Use `var` when**:\n- The type is obvious from the initializer — constructor call, static factory, well-named method.\n- The type is long or noisy — nested generics, intersection types.\n- It avoids redundancy — `ArrayList<String> list = new ArrayList<>();` becomes `var list = new ArrayList<String>();`.\n- In tight scopes — inside a loop body, short methods.\n- For working with intersection types you couldn't name otherwise.\n\n**Don't use `var` when**:\n- The return type is non-obvious — `var result = service.process();` forces the reader to jump to definitions.\n- You want to deliberately signal an abstract type — `List<String> names = new ArrayList<>();` communicates 'I only need List semantics.'\n- The initializer is a literal with ambiguity — `var x = 0;` is `int`; if you wanted `long`, write `var x = 0L;` or `long x = 0;`.\n- Diamond + var gives an unexpected type — `var list = new ArrayList<>();` is `ArrayList<Object>`.\n- For fields, parameters, return types — `var` isn't allowed anyway.\n\n**Team conventions**:\n- Some teams ban `var` outright (stability over terseness).\n- Some require explicit types for API-facing code but allow `var` inside methods.\n- Some use `var` freely but run IDE hints showing the inferred type (IntelliJ's 'Show inferred types').\n- Decide as a team and be consistent.\n\n**Tooling**:\n- Modern IDEs show inferred types on hover.\n- Code review matters more when `var` is used — the initializer must be expressive.\n- Static analysis (Checkstyle, SonarQube) can warn on `var` where the type isn't obvious."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`var`** (Java 10, JEP 286) enables local variable type inference.\n- **Compile-time, not dynamic** — the inferred type is fixed; you can't reassign to a different type.\n- **Works for**: local variables with initializer, for-loop variables, try-with-resources, (Java 11+) lambda parameters with annotations.\n- **Doesn't work for**: fields, method parameters, return types, null-only initializer, bare lambda without target, array initializer without `new`.\n- **Readability is the key criterion** — use when the type is obvious from the RHS, skip when it isn't.\n- **Oracle's style guide (Stuart Marks)**: 7 guidelines focusing on clarity, scope, initializer expressiveness.\n- **Good uses**: long generic types, local scopes, constructor calls, static factories, intersection types.\n- **Bad uses**: non-obvious method calls, abstract-type signals (`List` vs `ArrayList`), ambiguous literals.\n- **Diamond pitfall**: `var list = new ArrayList<>();` → `ArrayList<Object>`.\n- **Java 11 lambda `var`**: primarily for annotations on inferred-type parameters.\n- **Not dynamic typing** — same type safety as explicit types; just less typing."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`var` (Java 10, JEP 286) is **local variable type inference** — the compiler infers the type from the initializer's static type, so you write `var list = new ArrayList<String>();` instead of repeating the type.\n\n**Critical point: `var` is NOT dynamic typing**\n- The type is fixed at compile time\n- `var x = 1;` declares an `int`; you can't later assign a String\n- Same type safety as explicit types, just less typing\n- Like Kotlin/Scala/C#'s `var`, not like JavaScript/Python\n\n**Where `var` works**\n- Local variables with an initializer\n- For-loop variables and for-each\n- Try-with-resources\n- Java 11+: lambda parameters (for annotations like `@NonNull`)\n\n**Where `var` doesn't work**\n- Fields (class-level)\n- Method parameters\n- Method return types\n- Without an initializer (`var x;` fails)\n- `var x = null;` — null alone has no type\n- Array initializer without `new`\n- Bare lambda without target type\n\n**The readability trade-off**\n\n**Good uses** — type obvious from initializer:\n- `var users = userRepo.findAll();` — obviously List<User>\n- `var now = Instant.now();` — obviously Instant\n- `var map = new HashMap<String, List<Integer>>();` — no redundancy\n- `var total = BigDecimal.ZERO;` — obviously BigDecimal\n\n**Bad uses** — type non-obvious:\n- `var result = service.process();` — what is result? Forces reader to jump to definition\n- `var config = load();` — no signal\n- `var items = compute();` — lost all type info\n\n**Oracle's official style guide** — Stuart Marks' 7 guidelines\n1. Take advantage of the initializer — make the RHS expressive\n2. Minimize scope — `var` works best in short lifetimes\n3. Use when initializer is clear\n4. Use to break up chained expressions with named intermediates\n5. Don't worry too much about 'programming to the interface' for locals\n6. Beware of diamond on RHS — `var list = new ArrayList<>();` is `ArrayList<Object>`\n7. Take care with literals — `var x = 1;` is `int`, not `long`\n\n**Especially useful for**\n- Long generic types: `Map<String, List<Map<String, Integer>>>` becomes `var`\n- Intersection types: `var s = (Serializable & Comparable<String>) \"hello\";` — couldn't name this type otherwise\n- Tight scopes inside methods\n\n**Java 11's lambda-parameter `var`**\n- Added specifically to allow annotations on inferred-type lambda params\n- `(@NonNull var s) -> process(s)` — annotations with inference\n- All params must use `var` or none (no mixing)\n- Mostly useful for NonNull/Nullable; otherwise bare inference is cleaner\n\n**Team conventions**\n- Some ban `var` outright for stability\n- Some require explicit types for API-facing code\n- Some use freely with IDE inferred-type hints\n- Decide as a team, be consistent\n- Modern IDEs show inferred types on hover\n\n**Pitfalls**\n- **Diamond trap**: `var list = new ArrayList<>();` → `ArrayList<Object>`\n- **Literal ambiguity**: `var x = 0;` is int; want long? write `0L`\n- **Refactor sensitivity**: changing the method signature changes the inferred type — locally fine, but watch for downstream assumptions\n\n**Recommendation:** Use **`var`** liberally when the type is obvious from the initializer — `var users = userRepo.findAll();`, `var map = new HashMap<String, Integer>();`, `var now = Instant.now();`. It removes redundancy and reads better. **Skip `var`** when the type isn't obvious — `var result = service.process();` forces readers to jump to definitions, which is worse than just spelling out the type. Follow Oracle's official style guide (Stuart Marks' G1–G7): the underlying principle is that `var` is for **clarity, not terseness**. Watch the **diamond trap**: `var list = new ArrayList<>();` infers `ArrayList<Object>`; either specify the generic type on the RHS or don't use `var`. For **fields, parameters, and return types**, `var` isn't allowed anyway — spell out the type there for stability and API documentation. Remember it's **compile-time inference, not dynamic typing** — same safety guarantees, just less keyboard."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Is `var` dynamic typing? Why or why not?",
+        "Why can't you use `var` for fields?",
+        "What happens with `var list = new ArrayList<>();`?",
+        "What was the reason for adding `var` to lambda parameters in Java 11?",
+        "How does `var` interact with intersection types?"
+      ],
+      "seo": {
+        "metaTitle": "Java 10 `var` — Local Variable Type Inference Guide",
+        "metaDescription": "Master Java 10's var: compile-time inference (not dynamic), where it works, readability trade-offs, Oracle's style guide (Stuart Marks), diamond pitfalls, and Java 11 lambda var."
+      },
+      "order": 3,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "var (Java 10, JEP 286) is local variable type inference — the compiler infers the type from the initializer's static type, so you write var list = new ArrayList<String>(); instead of repeating the type.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "var tells the compiler to infer the type from the initializer's static type. It's syntactic sugar — the compiled bytecode is identical to writing the type explicitly. ``java var list = new ArrayList<String>(); // compiler infers: ArrayList<String> // exact same bytecode as: ArrayList<String> list = new ArrayList<String>(); var count = 42; // int var name = \"alice\"; // String var users = userRepo.findAll(); // List<User> (if findAll returns List<User>) var sum = 0.5 qty price; // double ` Crucial: var."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows var is compile-time (not dynamic), where it works and doesn't, and the readability trade-offs from Oracle's style guide"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "var (Java 10, JEP 286) enables local variable type inference",
+              "Compile-time, not dynamic — the inferred type is fixed; you can't reassign to a different type",
+              "Works for: local variables with initializer, for-loop variables, try-with-resources, (Java 11+) lambda parameters with annotations",
+              "Doesn't work for: fields, method parameters, return types, null-only initializer, bare lambda without target, array initializer without new",
+              "Readability is the key criterion — use when the type is obvious from the RHS, skip when it isn't"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "var tells the compiler to infer the type from the initializer's static type. It's syntactic sugar — the compiled bytecode is identical to writing the type explicitly. ``java var list = new ArrayList<String>(); // compiler infers: ArrayList<String> // exact same bytecode as: ArrayList<String> list = new ArrayList<String>(); var count = 42; // int var name = \"alice\"; // String var users = userRepo.findAll(); // List<User> (if findAll returns List<User>) var sum = 0.5 qty price; // double ` Crucial: var is NOT dynamic typing. The type is fixed at compile time. Once inferred, the variable has that type forever: `java var x = 1; // int x = \"hello\"; // COMPILE ERROR: incompatible types ` Contrast with JavaScript's var or."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking var makes Java dynamically typed",
+              "Using var where the type is non-obvious",
+              "Trying to use var for fields or method parameters",
+              "Declaring var x = null;"
+            ]
+          }
+        ],
+        "cap": "Remember it's compile-time inference, not dynamic typing — same safety guarantees, just less keyboard.",
+        "familiarity_anchors": [
+          "ArrayList",
+          "String",
+          "Oracle"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Is `var` dynamic typing? Why or why not?",
+          "Why can't you use `var` for fields?",
+          "What happens with `var list = new ArrayList<>();`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    },
+    {
+      "id": "java-11-http-client-api",
+      "slug": "java-11-http-client-api",
+      "question": "What is the Java 11 HttpClient API? How does it compare to `HttpURLConnection` and Apache HttpClient?",
+      "title": "Java 11 `HttpClient` — Modern HTTP Client with HTTP/2 and Async",
+      "direct_answer": "The **`java.net.http.HttpClient`** (Java 11, JEP 321) is a **modern, built-in HTTP client** that replaces the old, painful `HttpURLConnection`. It supports **HTTP/1.1 and HTTP/2** (negotiated transparently), **WebSocket**, **synchronous and asynchronous APIs** (`send` and `sendAsync` returning `CompletableFuture<HttpResponse<T>>`), **request/response body handlers** (byte arrays, strings, streams, files, JSON via custom handlers), **connection pooling**, **HTTP/2 multiplexing**, **redirect policies**, **timeouts**, and **TLS/authentication**. It's built on a **builder pattern**: `HttpClient.newBuilder().connectTimeout(...).version(HTTP_2).build()` for the client, and `HttpRequest.newBuilder().uri(...).header(...).POST(body).build()` for requests. Compared to **`HttpURLConnection`** (the pre-Java-11 JDK option), it's vastly cleaner, supports HTTP/2, has built-in async, and doesn't require you to manually wire input/output streams. Compared to **Apache HttpClient / OkHttp**, it's JDK-native (no dependency), covers most use cases, but has fewer extension points (interceptors, rich logging, advanced proxy handling). For typical REST calls, JDK `HttpClient` is now the default choice — especially paired with **virtual threads on Java 21** where the synchronous API scales to massive concurrency without a reactive stack. For complex needs (interceptors, custom auth flows, very specific timeouts), Apache/OkHttp still wins.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the Java 11 HttpClient API shape (builder, BodyPublisher/BodyHandler, send/sendAsync), its HTTP/2 + WebSocket support, and how it compares to HttpURLConnection and Apache/OkHttp",
+        "common_mistake": "Confusing BodyPublisher (request body) with BodyHandler (response body). Thinking the API is blocking-only. Forgetting it uses HTTP/2 by default when server supports it",
+        "to_stand_out": "Mention HTTP/2 multiplexing and stream ID handling, discuss the synergy with Java 21 virtual threads (synchronous API scales to millions), show a CompletableFuture pipeline with proper error handling, and note the WebSocket API"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "spring",
+        "uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Motivation — What `HttpClient` Replaces",
+            "content": "Pre-Java 11, making an HTTP request in the JDK meant `HttpURLConnection`:\n\n```java\n// The old, painful way\nURL url = new URL(\"https://api.example.com/users/42\");\nHttpURLConnection conn = (HttpURLConnection) url.openConnection();\nconn.setRequestMethod(\"GET\");\nconn.setRequestProperty(\"Accept\", \"application/json\");\nconn.setConnectTimeout(5000);\nconn.setReadTimeout(10000);\nint status = conn.getResponseCode();\n\ntry (var is = conn.getInputStream();\n     var reader = new BufferedReader(new InputStreamReader(is))) {\n    String body = reader.lines().collect(Collectors.joining());\n    // parse JSON...\n}\nconn.disconnect();\n```\n\nProblems:\n- No HTTP/2 support.\n- No built-in async.\n- Manual stream plumbing for every request.\n- No connection pooling across requests.\n- Brittle error handling (exceptions vs. status codes).\n- No WebSocket.\n\nMost projects reached for Apache HttpClient, OkHttp, or Spring's `RestTemplate`/`WebClient`. Java 11's `HttpClient` finally gives the JDK a competitive built-in option.\n\n**Key design wins**:\n- Builder pattern — readable, IDE-friendly.\n- HTTP/1.1 and HTTP/2 (automatic negotiation via ALPN).\n- Sync (`send`) and async (`sendAsync`) APIs.\n- Immutable, thread-safe `HttpClient` — create once, reuse everywhere.\n- Connection pooling and HTTP/2 multiplexing built in.\n- WebSocket support.\n- Body handlers for common shapes: `String`, `byte[]`, `Path` (stream to file), `InputStream`, etc."
+          },
+          {
+            "type": "after_code",
+            "title": "Basic Synchronous GET and POST",
+            "content": "**Create a reusable client** (thread-safe; create once, reuse):\n```java\nHttpClient client = HttpClient.newBuilder()\n    .version(HttpClient.Version.HTTP_2)                 // prefer HTTP/2\n    .followRedirects(HttpClient.Redirect.NORMAL)\n    .connectTimeout(Duration.ofSeconds(10))\n    .build();\n```\n\n**Simple GET**:\n```java\nHttpRequest req = HttpRequest.newBuilder()\n    .uri(URI.create(\"https://api.example.com/users/42\"))\n    .header(\"Accept\", \"application/json\")\n    .timeout(Duration.ofSeconds(30))\n    .GET()\n    .build();\n\nHttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());\nSystem.out.println(resp.statusCode());   // 200\nSystem.out.println(resp.headers());      // HttpHeaders\nSystem.out.println(resp.body());         // JSON string\n```\n\n**POST with JSON**:\n```java\nString json = \"\"\"\n    {\"name\": \"Alice\", \"email\": \"alice@x.com\"}\n    \"\"\";\n\nHttpRequest req = HttpRequest.newBuilder()\n    .uri(URI.create(\"https://api.example.com/users\"))\n    .header(\"Content-Type\", \"application/json\")\n    .header(\"Authorization\", \"Bearer \" + token)\n    .POST(HttpRequest.BodyPublishers.ofString(json))\n    .build();\n\nHttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());\nif (resp.statusCode() >= 200 && resp.statusCode() < 300) {\n    User created = mapper.readValue(resp.body(), User.class);\n}\n```\n\n**Download to file**:\n```java\nHttpResponse<Path> resp = client.send(req,\n    HttpResponse.BodyHandlers.ofFile(Path.of(\"/tmp/download.bin\")));\n// Stream directly to file — no in-memory copy\n```\n\n**BodyPublisher options** (request body):\n- `BodyPublishers.noBody()` — GET, DELETE, HEAD.\n- `BodyPublishers.ofString(str)` — text/JSON.\n- `BodyPublishers.ofByteArray(bytes)` — binary.\n- `BodyPublishers.ofFile(path)` — stream from file.\n- `BodyPublishers.ofInputStream(() -> stream)` — streaming upload.\n\n**BodyHandler options** (response body):\n- `BodyHandlers.ofString()` / `ofString(charset)`.\n- `BodyHandlers.ofByteArray()`.\n- `BodyHandlers.ofFile(path)`.\n- `BodyHandlers.ofInputStream()` — streaming download.\n- `BodyHandlers.ofLines()` — `Stream<String>` over response lines.\n- `BodyHandlers.discarding()` — ignore body."
+          },
+          {
+            "type": "after_code",
+            "title": "Async with `CompletableFuture`",
+            "content": "The async API returns `CompletableFuture<HttpResponse<T>>` — compose, combine, handle errors using the full CF toolkit.\n\n**Single async call**:\n```java\nclient.sendAsync(req, HttpResponse.BodyHandlers.ofString())\n    .thenApply(HttpResponse::body)\n    .thenAccept(System.out::println)\n    .exceptionally(ex -> {\n        logger.error(\"request failed\", ex);\n        return null;\n    });\n```\n\n**Fan-out, fan-in**:\n```java\nList<URI> urls = List.of(url1, url2, url3);\n\nList<CompletableFuture<String>> futures = urls.stream()\n    .map(u -> HttpRequest.newBuilder(u).GET().build())\n    .map(r -> client.sendAsync(r, HttpResponse.BodyHandlers.ofString()))\n    .map(f -> f.thenApply(HttpResponse::body))\n    .toList();\n\nCompletableFuture<List<String>> all = CompletableFuture\n    .allOf(futures.toArray(new CompletableFuture[0]))\n    .thenApply(v -> futures.stream().map(CompletableFuture::join).toList());\n\nList<String> bodies = all.join();\n```\n\n**Chain with retry**:\n```java\nCompletableFuture<HttpResponse<String>> withRetry(HttpRequest req, int attempts) {\n    CompletableFuture<HttpResponse<String>> cf = client.sendAsync(req, BodyHandlers.ofString());\n    for (int i = 1; i < attempts; i++) {\n        cf = cf.thenCompose(r ->\n            r.statusCode() >= 500\n                ? client.sendAsync(req, BodyHandlers.ofString())\n                : CompletableFuture.completedFuture(r));\n    }\n    return cf;\n}\n```\n\n**Backpressure / streaming**:\n```java\nclient.sendAsync(req, HttpResponse.BodyHandlers.ofLines())\n    .thenAccept(resp -> resp.body()\n        .filter(line -> !line.isBlank())\n        .forEach(this::processLine));\n```"
+          },
+          {
+            "type": "step",
+            "title": "HTTP/2, WebSocket, and Advanced Features",
+            "content": "**HTTP/2 is negotiated via ALPN** on TLS connections automatically:\n```java\nHttpClient client = HttpClient.newBuilder()\n    .version(HttpClient.Version.HTTP_2)  // prefer HTTP/2, fall back to HTTP/1.1\n    .build();\n\n// Response tells you which version was actually used\nHttpResponse<String> resp = client.send(req, BodyHandlers.ofString());\nresp.version();  // HTTP_2 or HTTP_1_1\n```\n\n**HTTP/2 multiplexing benefits**:\n- Multiple concurrent requests share a single TCP connection.\n- No head-of-line blocking at the HTTP layer (still at TCP level).\n- Header compression (HPACK).\n- Server push (theoretically; rarely used).\n- The client automatically manages streams; you don't see stream IDs.\n\n**WebSocket**:\n```java\nCompletableFuture<WebSocket> wsFuture = client.newWebSocketBuilder()\n    .buildAsync(URI.create(\"wss://echo.websocket.org\"),\n        new WebSocket.Listener() {\n            @Override\n            public CompletionStage<?> onText(WebSocket ws, CharSequence data, boolean last) {\n                System.out.println(\"received: \" + data);\n                ws.request(1);\n                return null;\n            }\n            @Override\n            public void onOpen(WebSocket ws) {\n                ws.sendText(\"hello\", true);\n                ws.request(1);\n            }\n        });\n\nWebSocket ws = wsFuture.join();\nws.sendText(\"another message\", true);\nws.sendClose(WebSocket.NORMAL_CLOSURE, \"bye\");\n```\n\n**Authentication**:\n```java\nHttpClient client = HttpClient.newBuilder()\n    .authenticator(new Authenticator() {\n        @Override\n        protected PasswordAuthentication getPasswordAuthentication() {\n            return new PasswordAuthentication(\"user\", \"password\".toCharArray());\n        }\n    })\n    .build();\n```\n\n**Proxy and SSL**:\n```java\nHttpClient client = HttpClient.newBuilder()\n    .proxy(ProxySelector.of(new InetSocketAddress(\"proxy.corp\", 8080)))\n    .sslContext(customSSLContext())\n    .sslParameters(customSSLParams())\n    .build();\n```\n\n**Custom `Executor` for async**:\n```java\nExecutor executor = Executors.newVirtualThreadPerTaskExecutor();  // Java 21\nHttpClient client = HttpClient.newBuilder()\n    .executor(executor)\n    .build();\n```"
+          },
+          {
+            "type": "step",
+            "title": "Java 21 Virtual Threads — The Sync API Wins",
+            "content": "Before Java 21, the pattern for scaling HTTP calls was:\n- Use the **async API** (`sendAsync`) for parallelism.\n- Accept the complexity of `CompletableFuture` chains.\n- Tune thread pools carefully.\n\nWith Java 21 virtual threads, the **synchronous API** scales to massive concurrency:\n```java\ntry (var exec = Executors.newVirtualThreadPerTaskExecutor()) {\n    List<Future<String>> futures = urls.stream()\n        .map(u -> exec.submit(() -> {\n            HttpRequest req = HttpRequest.newBuilder(u).GET().build();\n            return client.send(req, BodyHandlers.ofString()).body();\n            // synchronous blocking call — no CompletableFuture needed!\n        }))\n        .toList();\n\n    List<String> bodies = futures.stream()\n        .map(f -> {\n            try { return f.get(); }\n            catch (Exception e) { throw new RuntimeException(e); }\n        })\n        .toList();\n}\n```\n\n**Why this is better**:\n- Sequential-style code, easy to read and debug.\n- Virtual threads unmount from carrier threads when blocked on I/O — no thread pool saturation.\n- Scales to **millions of concurrent requests**.\n- Stack traces point directly at your code.\n- No need to chain `thenApply` / `thenCompose`.\n\n**HttpClient works with virtual threads out of the box** — no pinning issues because the client uses NIO internally, not `synchronized` I/O.\n\n**When to still use `sendAsync`**:\n- Composing with other `CompletableFuture`-based APIs.\n- You need non-thread-based concurrency (reactive).\n- You're on Java 17 LTS (virtual threads require 21+).\n\nOn Java 21 for pure HTTP workloads, prefer the **sync API + virtual threads**. It's the simplest mental model and performance matches async."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Java 11 HttpClient vs Alternatives",
+            "content": "**vs `HttpURLConnection`**\n- HttpClient wins on every axis: cleaner API, HTTP/2, async, pooling, WebSocket.\n- `HttpURLConnection` exists only for backward compatibility; avoid for new code.\n\n**vs Apache HttpClient 5.x**\n- Apache: more mature, richer feature set (interceptors, custom auth, cookie stores, fine-grained timeouts per phase).\n- JDK: no dependency, covers 90% of use cases, competitive performance.\n- Pick Apache for enterprise use cases needing interceptors, request/response logging frameworks, fine-grained control.\n- Pick JDK for typical REST calls.\n\n**vs OkHttp**\n- OkHttp: Android-friendly, great interceptor model, built-in response caching, connection pooling, retries.\n- JDK: no dependency, simpler.\n- OkHttp's biggest advantage is the interceptor chain — elegant for logging, auth injection, retries.\n- On JDK 11+ server-side, JDK HttpClient is usually enough.\n\n**vs Spring `RestTemplate`**\n- `RestTemplate` is deprecated for new code (still supported).\n- Uses `HttpURLConnection` or Apache under the hood.\n- Spring recommends `WebClient` (reactive) or `RestClient` (Spring 6.1+, non-reactive) going forward.\n\n**vs Spring `WebClient`**\n- `WebClient` is reactive (Project Reactor), non-blocking.\n- Better for reactive pipelines; overkill for simple REST.\n- JDK HttpClient + virtual threads is simpler on Java 21.\n\n**vs Spring `RestClient` (Spring 6.1+)**\n- Non-reactive, fluent API; wraps JDK HttpClient or Apache by default.\n- The current Spring-recommended non-reactive option.\n- Under the hood often uses JDK HttpClient.\n\n**Decision matrix**:\n| Use case | Recommendation |\n|---|---|\n| Simple REST in plain Java | JDK HttpClient |\n| REST with lots of interceptors/logging | Apache HttpClient or OkHttp |\n| Spring 6.1+, non-reactive | `RestClient` (wraps JDK HttpClient) |\n| Reactive pipelines | Spring WebClient |\n| Android | OkHttp |\n| Java 21 server with massive concurrency | JDK HttpClient + virtual threads (sync API) |\n\n**Pitfalls**:\n- **Don't create a new `HttpClient` per request** — it holds connection pools; reuse a single instance.\n- **BodyPublisher vs BodyHandler** is confusing: Publisher = request body source, Handler = response body sink.\n- **HTTP/2 server push** exists in the API but is rarely useful.\n- **No built-in JSON** — you need Jackson/Gson/Moshi. Custom `BodyHandler` is cleaner than `ofString() + mapper.readValue()` for code that does lots of JSON.\n- **Request timeout vs connect timeout**: connectTimeout is on the client (handshake); request-level `.timeout(...)` is end-to-end."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`java.net.http.HttpClient`** (Java 11, JEP 321) replaces `HttpURLConnection`.\n- **Supports**: HTTP/1.1, HTTP/2 (via ALPN), WebSocket, sync + async.\n- **Builder pattern** for both client and request; immutable and thread-safe.\n- **`send`** for sync, **`sendAsync`** for async returning `CompletableFuture`.\n- **BodyPublisher** = request body (ofString, ofByteArray, ofFile, ofInputStream).\n- **BodyHandler** = response body sink (ofString, ofByteArray, ofFile, ofLines, discarding).\n- **Connection pooling** and HTTP/2 multiplexing built in; one client handles many concurrent requests.\n- **WebSocket** via `client.newWebSocketBuilder()` with a `Listener`.\n- **Authentication**, proxy, SSL all configurable on the builder.\n- **Java 21 virtual threads**: prefer sync API with `newVirtualThreadPerTaskExecutor()` for massive concurrency.\n- **Not a replacement for Apache/OkHttp** when you need interceptors, advanced caching, or custom auth flows.\n- **Don't create a new client per request** — reuse a singleton.\n- **Timeouts**: `connectTimeout` on client, `.timeout(...)` per request for end-to-end.\n- **No built-in JSON** — pair with Jackson/Gson/Moshi or custom BodyHandler."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Java 11's `HttpClient` is a **modern, built-in HTTP client** in `java.net.http`. It replaces the painful `HttpURLConnection` and gives the JDK a competitive alternative to Apache HttpClient or OkHttp.\n\n**What it supports**\n- **HTTP/1.1 and HTTP/2** (automatic ALPN negotiation)\n- **WebSocket**\n- **Synchronous** (`send`) and **asynchronous** (`sendAsync` returning `CompletableFuture`) APIs\n- **Connection pooling** and HTTP/2 multiplexing\n- **Redirects, timeouts, TLS, proxy, authentication**\n- **Body handlers** for common shapes: string, byte[], file, input stream, line stream, discard\n\n**Builder pattern for client and request**\n- Create `HttpClient` once, reuse — thread-safe\n- Requests are immutable; build fresh per call\n\n**The two body concepts — don't confuse**\n- **`BodyPublisher`**: request body source — `ofString`, `ofByteArray`, `ofFile`, `ofInputStream`\n- **`BodyHandler`**: response body sink — `ofString`, `ofByteArray`, `ofFile(path)`, `ofLines`, `discarding`\n\n**Basic GET**\n- `HttpRequest.newBuilder().uri(...).header(...).GET().build()`\n- `client.send(req, BodyHandlers.ofString())` → `HttpResponse<String>`\n- `.statusCode()`, `.headers()`, `.body()`\n\n**Basic POST with JSON**\n- `.header(\"Content-Type\", \"application/json\")`\n- `.POST(BodyPublishers.ofString(json))`\n\n**Async with CompletableFuture**\n- `client.sendAsync(req, BodyHandlers.ofString())`\n- Returns `CompletableFuture<HttpResponse<T>>`\n- Chain with `.thenApply`, `.thenCompose`, `.exceptionally`\n- Fan-out/fan-in with `CompletableFuture.allOf`\n\n**WebSocket**\n- `client.newWebSocketBuilder().buildAsync(uri, listener)`\n- Listener has `onOpen`, `onText`, `onBinary`, `onClose`, `onError`\n- Backpressure via `ws.request(n)`\n\n**Java 21 virtual threads change the game**\n- Use the **synchronous API** with `Executors.newVirtualThreadPerTaskExecutor()`\n- Scales to millions of concurrent blocking HTTP calls\n- Sequential-style code, no `CompletableFuture` chains\n- `HttpClient` uses NIO internally — no pinning issues with virtual threads\n- Stack traces point at your code, not async frames\n\n**vs `HttpURLConnection`**\n- HttpClient wins on every axis: cleaner, HTTP/2, async, pooling, WebSocket\n- `HttpURLConnection` is legacy; avoid for new code\n\n**vs Apache HttpClient 5.x**\n- Apache: richer features — interceptors, custom auth, cookie stores, per-phase timeouts\n- JDK: no dependency, simpler, covers 90% of use cases\n- Pick Apache for enterprise needs (interceptors, advanced logging)\n\n**vs OkHttp**\n- OkHttp: great for Android, elegant interceptor chain, built-in response caching\n- JDK: simpler server-side\n- OkHttp's interceptor model is its biggest advantage\n\n**vs Spring**\n- `RestTemplate`: legacy, wraps HttpURLConnection or Apache\n- `WebClient`: reactive (Project Reactor); overkill for simple REST\n- `RestClient` (Spring 6.1+): non-reactive, fluent, wraps JDK HttpClient — the current Spring default\n\n**Pitfalls**\n- **Don't create a new client per request** — holds pools; reuse a singleton\n- **BodyPublisher vs BodyHandler** confusion — Publisher is request body, Handler is response body\n- **No built-in JSON** — pair with Jackson/Gson/Moshi\n- **Timeouts**: `connectTimeout` on client for handshake, `.timeout(...)` per request for end-to-end\n- **HTTP/2 server push** exists but rarely useful; ignore\n\n**Recommendation:** For **plain Java** REST calls, the JDK **`HttpClient`** is now the default choice — no dependency, HTTP/2, async, and WebSocket out of the box. Create **one client singleton** and reuse it; the connection pool and HTTP/2 multiplexing are your friends. On **Java 21**, pair the **synchronous API with virtual threads** (`newVirtualThreadPerTaskExecutor`) to get massive concurrency without `CompletableFuture` ceremony — sequential code, millions of concurrent calls. Reach for **Apache HttpClient or OkHttp** when you genuinely need interceptors, advanced cookie/auth flows, or rich logging frameworks. For **Spring**, use **`RestClient`** (Spring 6.1+) which wraps JDK HttpClient with a fluent API, or **`WebClient`** if you're already on a reactive stack. Don't confuse `BodyPublisher` (request body) with `BodyHandler` (response body) — that's the main API-learning curve. Always pair with a JSON library (Jackson/Gson/Moshi) since there's no built-in JSON support."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `BodyPublisher` and `BodyHandler`?",
+        "How do `HttpClient` and virtual threads interact on Java 21?",
+        "When would you prefer Apache HttpClient over the JDK `HttpClient`?",
+        "How does HTTP/2 multiplexing affect connection pooling?",
+        "How do you handle retries with `CompletableFuture.thenCompose`?"
+      ],
+      "seo": {
+        "metaTitle": "Java 11 `HttpClient` — Modern HTTP Client API with HTTP/2 and Async",
+        "metaDescription": "Complete guide to Java 11's HttpClient: builder, BodyPublisher/BodyHandler, sync and async APIs, HTTP/2, WebSocket, Java 21 virtual threads, and vs Apache/OkHttp/Spring."
+      },
+      "order": 4,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Java 11's HttpClient is a modern, built-in HTTP client in java.net.http.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Pre-Java 11, making an HTTP request in the JDK meant HttpURLConnection: ``java // The old, painful way URL url = new URL(\"https://api.example.com/users/42\"); HttpURLConnection conn = (HttpURLConnection) url.openConnection(); conn.setRequestMethod(\"GET\"); conn.setRequestProperty(\"Accept\", \"application/json\"); conn.setConnectTimeout(5000); conn.setReadTimeout(10000); int status = conn.getResponseCode(); try (var is = conn.getInputStream(); var reader = new BufferedReader(new InputStreamReader(is))) { String body = reader.lines().collect(Collectors.joining()); // parse JSON... } conn.disconnect(); ` Problems: No HTTP/2 support. No built-in async. Manual stream plumbing for every request. No connection pooling across requests. Brittle error handling (exceptions."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows the Java 11 HttpClient API shape (builder, BodyPublisher/BodyHandler, send/sendAsync), its HTTP/2 + WebSocket support, and how it compares to HttpURLConnection and Apache/OkHttp"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "HttpClient (Java 11, JEP 321) replaces HttpURLConnection",
+              "Supports: HTTP/1",
+              "1, HTTP/2 (via ALPN), WebSocket, sync + async",
+              "Builder pattern for both client and request; immutable and thread-safe",
+              "send for sync, sendAsync for async returning CompletableFuture"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Pre-Java 11, making an HTTP request in the JDK meant HttpURLConnection: ``java // The old, painful way URL url = new URL(\"https://api.example.com/users/42\"); HttpURLConnection conn = (HttpURLConnection) url.openConnection(); conn.setRequestMethod(\"GET\"); conn.setRequestProperty(\"Accept\", \"application/json\"); conn.setConnectTimeout(5000); conn.setReadTimeout(10000); int status = conn.getResponseCode(); try (var is = conn.getInputStream(); var reader = new BufferedReader(new InputStreamReader(is))) { String body = reader.lines().collect(Collectors.joining()); // parse JSON... } conn.disconnect(); ` Problems: No HTTP/2 support. No built-in async. Manual stream plumbing for every request. No connection pooling across requests. Brittle error handling (exceptions vs. status codes). No WebSocket. Most projects reached for Apache HttpClient, OkHttp, or Spring's RestTemplate/WebClient. Java 11's HttpClient finally gives the JDK a competitive built-in option. Key design wins: Builder pattern — readable, IDE-friendly. HTTP/1.1 and HTTP/2 (automatic negotiation via."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing BodyPublisher (request body) with BodyHandler (response body)",
+              "Thinking the API is blocking-only",
+              "Forgetting it uses HTTP/2 by default when server supports it"
+            ]
+          }
+        ],
+        "cap": "Always pair with a JSON library (Jackson/Gson/Moshi) since there's no built-in JSON support.",
+        "familiarity_anchors": [
+          "HttpClient",
+          "HttpURLConnection",
+          "WebSocket"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between `BodyPublisher` and `BodyHandler`?",
+          "How do `HttpClient` and virtual threads interact on Java 21?",
+          "When would you prefer Apache HttpClient over the JDK `HttpClient`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    }
+  ]
+}

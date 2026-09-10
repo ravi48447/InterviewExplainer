@@ -1,0 +1,235 @@
+{
+  "topic": "Kubernetes Fundamentals",
+  "topicSlug": "kubernetes-fundamentals",
+  "questions": [
+    {
+      "id": "k8s-004",
+      "slug": "deploying-spring-boot-kubernetes-step-by-step",
+      "question": "What are the steps to deploy a Spring Boot application to Kubernetes?",
+      "title": "Deploying Spring Boot to Kubernetes: Step-by-Step",
+      "direct_answer": "Steps: (1) Build Docker image and push to registry, (2) Create Kubernetes Deployment with resource limits and probes, (3) Create Service for internal discovery, (4) Create ConfigMap/Secret for configuration, (5) Create Ingress for external access, (6) Apply with kubectl apply -f. Use Helm or Kustomize for environment-specific config management.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Practical Kubernetes deployment knowledge end-to-end",
+        "common_mistake": "Deploying without resource limits (allows one pod to starve the node), without health probes (Kubernetes can't detect unhealthy pods), or with latest image tag (can't roll back reliably)",
+        "to_stand_out": "Mention image tagging strategy (commit SHA or semver, never latest), rolling update strategy settings, PodDisruptionBudget for zero-downtime maintenance, and namespaces for multi-environment isolation"
+      },
+      "company_tags": [
+        "google",
+        "amazon",
+        "microsoft",
+        "netflix"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Missing Pieces That Separate a YAML File From a Production Deployment",
+            "content": "Running `kubectl apply -f deployment.yaml` is trivially easy. Getting that deployment to survive its first real incident is where most teams fail. The gap between a working deployment and a production-ready one comes down to three things that basic tutorials skip: **immutable image tags** so rollback actually works, **resource limits** so one pod cannot starve a node, and **health probes** so Kubernetes can distinguish a healthy pod from a crashing one.\n\nWithout immutable tags, `kubectl rollout undo` cannot guarantee you are reverting to the exact code that was running before \u2014 if the `latest` tag was overwritten in the registry, you are rolling forward to unknown code. Without resource limits, a memory leak in one pod triggers Linux OOM killer across the entire node, taking down co-located services. Without probes, Kubernetes has no signal to stop routing traffic to a pod that is starting up, deadlocked, or failing to connect to its database.\n\nThe deployment workflow itself is straightforward: build and tag an image, push to a registry, apply Kubernetes manifests. The production concerns live in the details of those manifests \u2014 how you configure the rolling update strategy, where you draw the line between requests and limits, and which probe types you configure for your Spring Boot application's specific startup characteristics."
+          },
+          {
+            "type": "step",
+            "title": "Why the Image Tag Determines Whether Rollback Works",
+            "content": "The first step is building and pushing a Docker image with a **deterministic tag** \u2014 either the git commit SHA or a semantic version. The `latest` tag is the most dangerous shortcut in container deployment because it breaks two critical capabilities: rollback and audit.\n\nWhen you run `kubectl rollout undo`, Kubernetes scales up the previous ReplicaSet which references the old image tag. If that tag was `latest` and someone has since pushed a new build to `latest`, the \"rollback\" pulls the newer image \u2014 you are not rolling back at all. With a SHA-based tag like `myapp:a1b2c3d`, the ReplicaSet pins to that exact build artifact.\n\nThe build step itself has two approaches. A `Dockerfile` gives you full control over the image contents but requires maintaining the file and understanding multi-stage builds for slim JVM images. **Jib** from Google builds optimized Docker images directly from Maven or Gradle without a Dockerfile \u2014 it layers dependencies, resources, and classes separately so that code changes produce small incremental layer pushes.\n\n```bash\nGIT_SHA=$(git rev-parse --short HEAD)\n./mvnw jib:build -Dimage=myregistry.io/spring-app:${GIT_SHA}\n```\n\nThis produces a properly layered image tagged with the exact commit that generated it. Every rollback, every audit, every incident investigation can trace a running pod back to a specific commit in version control."
+          },
+          {
+            "type": "step",
+            "title": "Resource Limits and Probes: What Kubernetes Needs From You to Manage Pods",
+            "content": "A Deployment without resource limits or health probes is flying blind. Kubernetes uses **resource requests** for scheduling decisions \u2014 which node has room for this pod \u2014 and **limits** for runtime enforcement \u2014 kill the pod if it exceeds memory, throttle if it exceeds CPU. Without requests, the scheduler packs pods onto nodes randomly. Without limits, a single memory leak takes down every pod on the node.\n\nFor Spring Boot applications, the configuration needs to account for the JVM's memory model. Set memory requests to expected steady-state usage and limits with headroom for GC spikes. Use `-XX:MaxRAMPercentage=75.0` so the JVM heap stays within the container's memory limit with room for metaspace, thread stacks, and code cache.\n\n```yaml\ncontainers:\n  - name: app\n    image: myregistry.io/spring-app:a1b2c3d\n    resources:\n      requests: {memory: 512Mi, cpu: 250m}\n      limits:   {memory: 1Gi,   cpu: 1000m}\n    startupProbe:\n      httpGet: {path: /actuator/health/liveness, port: 8080}\n      failureThreshold: 30\n      periodSeconds: 10\n    livenessProbe:\n      httpGet: {path: /actuator/health/liveness, port: 8080}\n      periodSeconds: 10\n    readinessProbe:\n      httpGet: {path: /actuator/health/readiness, port: 8080}\n      periodSeconds: 5\n```\n\nThe **rolling update strategy** controls how Kubernetes transitions between versions. Setting `maxSurge: 1` and `maxUnavailable: 0` ensures zero downtime \u2014 Kubernetes creates one new pod, waits for it to pass readiness, then terminates one old pod, repeating until all pods are updated."
+          },
+          {
+            "type": "step",
+            "title": "From kubectl apply to Verified Zero-Downtime Rollout",
+            "content": "With manifests ready, `kubectl apply -f k8s/` deploys all resources declaratively. The `-f` flag accepts a directory, applying every YAML file inside it. Track the rollout in real time with `kubectl rollout status deployment/spring-app` \u2014 this blocks until all pods in the new ReplicaSet are ready or the rollout fails.\n\nIf the new version fails readiness probes, the rollout stalls. Old pods remain running and serving traffic. At this point, you have two options: fix the issue and push a corrected image (which triggers a new rollout), or run `kubectl rollout undo deployment/spring-app` to immediately revert. The undo command scales up the previous ReplicaSet \u2014 because **Kubernetes retains old ReplicaSets** (controlled by `revisionHistoryLimit`, default 10), rollback is instant with no image rebuild.\n\nFor production deployments with **multiple environments**, use Kustomize or Helm to manage per-environment differences. Kustomize overlays patch base manifests with environment-specific values \u2014 different replica counts, different image tags, different resource limits. Helm charts template the same manifests with values files. Both approaches solve the same problem: avoiding copy-pasted YAML files that drift apart over time. The goal is one source of truth for the deployment shape, parameterized for dev, staging, and production."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Never use the `latest` image tag** \u2014 `kubectl rollout undo` with `latest` can pull a newer image instead of reverting, making rollback non-deterministic; always tag with commit SHA or semantic version\n- **`maxSurge: 1, maxUnavailable: 0` guarantees zero downtime** \u2014 Kubernetes creates a replacement pod before terminating any existing one, so capacity never drops below the desired replica count during rollout\n- **Resource limits prevent node-level collateral damage** \u2014 a pod without memory limits can trigger Linux OOM killer across the entire node, taking down every co-located service that was running fine\n- **Startup probe eliminates `initialDelaySeconds` guessing** \u2014 set `failureThreshold x periodSeconds` to maximum boot time instead of hardcoding a delay that breaks when Flyway migrations run longer than expected\n- **Kustomize or Helm for multi-environment deployments** \u2014 one set of base manifests parameterized per environment avoids copy-pasted YAML files that drift apart silently over weeks"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Deploying a Spring Boot application to Kubernetes involves five components working together: a containerized image, a Deployment, a Service, a ConfigMap, and an Ingress. Each element has one job, and the deploy process builds them in dependency order.\n\n**Build and push the image**\n- Tag the image with the registry path and a specific version: `docker build -t my-registry.io/payment-service:v1.2.3 .` then `docker push` \u2014 never use the `latest` tag in Kubernetes manifests because Kubernetes will not pull a new `latest` image if it already has a cached copy\n- Authenticate to the registry from Kubernetes using an `imagePullSecret` \u2014 create it with `kubectl create secret docker-registry regcred --docker-server=...` and reference it in the Pod spec; missing this is the most common cause of `ErrImagePull`\n\n**Deployment and ConfigMap**\n- Write a Deployment YAML declaring the image, replica count, resource requests and limits, liveness/readiness probes, and environment variable references to ConfigMaps and Secrets \u2014 never hardcode configuration values in the Deployment spec\n- Create the ConfigMap before the Deployment: `kubectl apply -f configmap.yaml && kubectl apply -f deployment.yaml` \u2014 a Deployment referencing a missing ConfigMap fails to create Pods with a `CreateContainerConfigError`\n- Verify rollout completion: `kubectl rollout status deployment/payment-service` blocks until all replicas are running the new version or the rollout times out\n\n**Service and Ingress**\n- Create a ClusterIP Service with a label selector matching the Deployment's Pod labels \u2014 verify the selector works immediately with `kubectl get endpoints payment-service`; empty endpoints mean the selector does not match any running Pods\n- Create the Ingress pointing to the Service by name \u2014 test the full path from outside the cluster with `curl -H \"Host: payments.example.com\" http://<ingress-ip>/api/payments` to confirm the entire routing chain is working before marking the deployment complete"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between kubectl apply and kubectl create?",
+        "How does a rolling update work with maxSurge=1 and maxUnavailable=0?",
+        "What is Helm and when would you use it over plain kubectl?"
+      ],
+      "seo": {
+        "metaTitle": "Deploy Spring Boot Kubernetes Step-by-Step Guide | InterviewExplainer",
+        "metaDescription": "Step-by-step Spring Boot Kubernetes deployment. Dockerfile, Deployment with probes and limits, Service, Ingress, ConfigMap, Secret, and rollback strategy."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Deploying a Spring Boot application to Kubernetes involves five components working together: a containerized image, a Deployment, a Service, a ConfigMap, and an Ingress.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Running kubectl apply -f deployment.yaml is trivially easy. Getting that deployment to survive its first real incident is where most teams fail. The gap between a working deployment and a production-ready one comes down to three things that basic tutorials skip: immutable image tags so rollback actually works, resource limits so one pod cannot starve a node, and health probes so Kubernetes can distinguish a healthy pod from a crashing one. Without immutable tags, kubectl rollout undo cannot guarantee you."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical Kubernetes deployment knowledge end-to-end"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Never use the latest image tag \u2014 kubectl rollout undo with latest can pull a newer image instead of reverting, making rollback non-deterministic; always tag with commit SHA or semantic version maxSurge: 1, maxUnavailable: 0 guarantees zero downtime \u2014 Kubernetes creates a replacement pod before terminating any existing one, so capacity never drops below the desired replica count during rollout Resource limits prevent node-level collateral damage \u2014 a pod without memory limits can trigger Linux OOM killer across the entire node, taking down every co-located service that was running fine Startup probe eliminates initialDelaySeconds guessing \u2014 set failureThreshold x periodSeconds to maximum boot time instead of hardcoding a delay that breaks when Flyway migrations run longer than expected Kustomize or Helm for multi-environment deployments \u2014 one set of base manifests parameterized per environment avoids copy-pasted YAML files that drift apart silently over weeks"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Running kubectl apply -f deployment.yaml is trivially easy. Getting that deployment to survive its first real incident is where most teams fail. The gap between a working deployment and a production-ready one comes down to three things that basic tutorials skip: immutable image tags so rollback actually works, resource limits so one pod cannot starve a node, and health probes so Kubernetes can distinguish a healthy pod from a crashing one. Without immutable tags, kubectl rollout undo cannot guarantee you are reverting to the exact code that was running before \u2014 if the latest tag was overwritten in the registry, you are rolling forward to unknown code. Without resource limits, a memory leak in one pod triggers Linux OOM killer."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Deploying without resource limits (allows one pod to starve the node), without health probes (Kubernetes can't detect unhealthy pods), or with latest image tag (can't roll back reliably)"
+            ]
+          }
+        ],
+        "cap": "and reference it in the Pod spec; missing this is the most common cause of ErrImagePull Deployment and ConfigMap Write a Deployment YAML declaring the image, replica count, resource requests and limit",
+        "familiarity_anchors": [
+          "Steps",
+          "Build",
+          "Docker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between kubectl apply and kubectl create?",
+          "How does a rolling update work with maxSurge=1 and maxUnavailable=0?",
+          "What is Helm and when would you use it over plain kubectl?"
+        ]
+      }
+    },
+    {
+      "id": "k8s-010",
+      "slug": "spring-boot-oomkilled-kubernetes-debugging",
+      "question": "How do you debug a Spring Boot app that keeps getting OOMKilled in Kubernetes?",
+      "title": "Debugging OOMKilled Spring Boot in Kubernetes",
+      "direct_answer": "OOMKilled means the container exceeded its memory limit. Diagnose by checking kubectl describe pod for the reason, reviewing JVM heap and non-heap usage with JVM flags, and analyzing GC logs. Fix by increasing memory limit, reducing heap via MaxRAMPercentage, fixing memory leaks (heap dump analysis), or reducing Metaspace/thread count.",
+      "layout_type": "problem-detective",
+      "interviewer_intent": {
+        "testing": "Production debugging skills for the most common JVM + container failure mode",
+        "common_mistake": "Just increasing the memory limit without understanding why memory is growing \u2014 fixes the symptom but not the root cause (could be a memory leak)",
+        "to_stand_out": "Show the diagnostic commands (kubectl describe, jcmd heap dump), distinguish between heap OOM, metaspace OOM, and thread OOM, and explain how to use VisualVM/Eclipse MAT to analyze heap dumps"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "pivotal"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The 3 AM Page: Spring Boot Pod Restarting Every Few Hours With Exit Code 137",
+            "content": "Your monitoring fires an alert at 3 AM: the `order-service` pod has restarted 5 times in the past 6 hours. `kubectl get pods` shows `Restart Count: 5`. The pod is currently running, but `kubectl describe pod` reveals the last termination reason: `OOMKilled`, exit code 137.\n\nThe first instinct \u2014 increase the memory limit \u2014 is the most common mistake. It might buy you a few more hours, but if the root cause is a **memory leak**, the pod will eventually hit the new limit too. The correct response is to diagnose why memory is growing before changing any configuration.\n\nOOMKilled means the Linux cgroup's memory ceiling was breached. The kernel sends SIGKILL (exit code 137) \u2014 the process gets no chance to handle it, no graceful shutdown, no heap dump generation. This is important: the JVM does not log `OutOfMemoryError` because it is the kernel, not the JVM, that terminates the process. If you do see a JVM `OutOfMemoryError` in the logs, the heap was exhausted but the container limit was not yet hit \u2014 a different problem with a different diagnostic path.\n\nThe three possible root causes look identical from `kubectl describe pod` but have completely different fixes: **heap exhaustion** from a memory leak or undersized `-Xmx`, **metaspace overflow** from class loader leaks caused by hot-reloading or excessive dynamic proxies, and **thread stack accumulation** from unbounded thread pool creation."
+          },
+          {
+            "type": "before_code",
+            "title": "The Configuration That Guarantees an OOMKill",
+            "content": "The problematic configuration sets the JVM heap equal to the container memory limit, leaving no room for non-heap memory.\n\n```yaml\nresources:\n  limits:\n    memory: 512Mi\nenv:\n  - name: JAVA_TOOL_OPTIONS\n    value: \"-Xmx512m\"\n```\n\nWith this configuration, the JVM attempts to allocate 512MB for heap alone. But a Spring Boot application with 200 active threads (Tomcat default), Spring's reflection-heavy context loading, and JIT compilation needs an additional 200-400MB for **non-heap allocations**. The total process memory \u2014 Resident Set Size (RSS) \u2014 quickly exceeds 512Mi, and the kernel kills it.\n\nThe insidious aspect is timing. The pod might survive for hours under light load because heap usage stays well below 512MB. Then traffic spikes, heap grows toward the maximum, GC kicks in (requiring temporary memory overhead), and the total RSS crosses the cgroup limit. Or the application accumulates cached objects over hours until the heap approaches the maximum, and any concurrent memory pressure pushes total RSS over the edge. The inconsistent timing makes this look intermittent when the underlying cause is deterministic."
+          },
+          {
+            "type": "diagnosis",
+            "title": "Separating Mis-Sizing From Memory Leaks: The Diagnostic Commands",
+            "content": "Before changing any configuration, determine whether this is a sizing problem (heap configured too close to the limit) or a leak problem (heap growing unboundedly). The diagnostic approach differs for each case.\n\n**Start by confirming the OOMKill and checking JVM logs.** Run `kubectl logs <pod-name> --previous` and search for `OutOfMemoryError`. If the JVM logged a heap OOM error, heap was exhausted \u2014 but the container limit might not have been the direct trigger. If there is no JVM error in the logs, total process memory exceeded the cgroup limit directly. The `kubectl describe pod` output confirms the kill reason.\n\n**Profile memory in a running pod before the next OOMKill.** If the pod is currently running, the most revealing diagnostic is the native memory breakdown.\n\n```bash\nkubectl exec <pod-name> -- jcmd 1 VM.native_memory summary\nkubectl exec <pod-name> -- jstat -gcutil 1 10s\n```\n\nThe `VM.native_memory` output shows heap, metaspace, thread stacks, code cache, and GC overhead as separate categories. If heap dominates and is near `MaxHeapSize`, it is a heap sizing or leak issue. If metaspace is growing above 300MB, suspect a **class loader leak** from dynamic proxies or hot-reloading frameworks. If thread count is anomalously high (thousands), it is an executor leak.\n\n**The leak test using jstat.** Watch the Old Generation percentage after each full GC cycle. If Old Gen usage after full GC steadily climbs \u2014 40%, then 55%, then 70% across cycles \u2014 objects are being retained that should be garbage collected. You have a memory leak. If Old Gen stabilizes at a consistent level after full GC, the heap is simply undersized for the workload.\n\nFor confirmed leaks, capture a heap dump with `jcmd 1 GC.heap_dump /tmp/heapdump.hprof`, copy it with `kubectl cp`, and analyze it in **Eclipse MAT**. The Leak Suspects report identifies which object classes retain the most memory and traces the reference chains \u2014 typically an unbounded cache, a growing listener list, or a `ThreadLocal` never cleaned up in a pooled thread environment."
+          },
+          {
+            "type": "after_code",
+            "title": "The Fix: MaxRAMPercentage and Defensive JVM Flags",
+            "content": "The configuration fix addresses both the immediate sizing problem and provides diagnostic instrumentation for future incidents.\n\n```yaml\nresources:\n  requests:\n    memory: 512Mi\n  limits:\n    memory: 1Gi\nenv:\n  - name: JAVA_TOOL_OPTIONS\n    value: >-\n      -XX:+UseContainerSupport\n      -XX:MaxRAMPercentage=75.0\n      -XX:+HeapDumpOnOutOfMemoryError\n      -XX:HeapDumpPath=/tmp/heapdump.hprof\n      -Xlog:gc*:file=/tmp/gc.log:time,uptime\n```\n\n**`MaxRAMPercentage=75.0`** caps heap at 75% of the container limit (768MB of 1Gi), leaving 256MB for non-heap. **`UseContainerSupport`** ensures the JVM reads the cgroup limit rather than host memory. These two flags together eliminate the sizing cause of OOMKill.\n\n**`HeapDumpOnOutOfMemoryError`** captures a heap dump automatically when the JVM runs out of heap memory \u2014 before the kernel kills the process. This is your forensic evidence for memory leaks: copy the dump off the pod with `kubectl cp` and analyze it offline. Without this flag, the OOMKill happens and all diagnostic information dies with the container.\n\n**GC logging** (`-Xlog:gc*`) records every garbage collection event with timestamps. When investigating a suspected leak, the GC log shows Old Gen growth patterns over time without requiring an exec session into the pod. If Old Gen usage after each full GC is steadily increasing, a leak is confirmed.\n\nFor teams that experience repeated OOMKills, the **Vertical Pod Autoscaler** (VPA) in recommend mode observes actual memory usage over days and suggests adjusted requests and limits. Run VPA as a recommendation engine first \u2014 review its suggestions before enabling automatic adjustment to avoid unexpected pod restarts during resizing."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Exit code 137 = kernel OOMKill, not JVM OutOfMemoryError** \u2014 the kernel sends SIGKILL when the cgroup limit is breached; the JVM gets no chance to log an error or generate a heap dump automatically\n- **`-Xmx` must never equal the container memory limit** \u2014 metaspace, thread stacks, code cache, and GC overhead need 200-400MB beyond heap; this is the most common cause of predictable OOMKills in containers\n- **`jstat -gcutil` distinguishes sizing from leaks** \u2014 if Old Gen percentage after full GC is steadily climbing, objects are being retained that should be collected; stable post-GC usage means the heap is simply undersized\n- **`-XX:+HeapDumpOnOutOfMemoryError` captures forensic evidence** \u2014 the heap dump is generated before the container dies; copy it with `kubectl cp` and analyze it in Eclipse MAT's Leak Suspects report\n- **`MaxRAMPercentage=75.0` with `UseContainerSupport`** \u2014 caps heap at 75% of the cgroup limit automatically, leaving 25% for non-heap; scales with the container limit without hardcoding `-Xmx` values"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "OOMKilled means the kernel killed the container because it exceeded its memory limit \u2014 the container runtime reported `exit code 137`, not a JVM `OutOfMemoryError`. Distinguishing between these two is the starting point for diagnosis.\n\n**Immediate diagnosis**\n- `kubectl describe pod <pod-name>` in the pod's `Last State` section shows `OOMKilled` with `exitCode: 137` \u2014 this is kernel OOMKill (cgroup limit exceeded), not a Java heap exhaustion; the JVM had no warning and no heap dump was generated\n- `kubectl get events --namespace <ns> --sort-by='.lastTimestamp'` shows memory-related events and node pressure conditions around the time of the kill\n- Compare `kubectl top pod <pod-name>` (live RSS) against `resources.limits.memory` in the Deployment spec \u2014 if RSS is consistently at or above the limit, the limit is simply too low for the actual footprint\n\n**Root cause categories**\n- Heap too small for the workload: increase `-XX:MaxRAMPercentage` or the container memory limit; add `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heap.hprof` so the next soft OutOfMemoryError (before the hard OOMKill) produces a heap dump for analysis\n- Non-heap memory exhaustion: thread stacks (1 MB each by default), Metaspace, and direct buffers all live outside heap limits; a service with 100 active threads consumes 100 MB of stack alone \u2014 check thread count with `kubectl exec -it <pod> -- jcmd 1 Thread.print | grep -c \"java.lang.Thread.State\"`\n- Memory leak: RSS grows continuously over time even at stable traffic; a growing heap dump over multiple captures (using JFR or heap dump over time) identifies the leaking object type\n\n**Heap dump extraction**\n- A running pod: `kubectl exec -it <pod> -- jcmd 1 GC.heap_dump /tmp/heap.hprof` then `kubectl cp <pod>:/tmp/heap.hprof ./heap.hprof` \u2014 analyze with Eclipse MAT or IntelliJ's profiler to identify the largest retained objects and the code paths holding references to them\n- After a kill: configure `emptyDir` volume mounted at `/tmp` and `--HeapDumpPath=/tmp/` so the dump persists in the volume briefly after the container exits; copy it out before the next container start overwrites it"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you copy a heap dump from a Kubernetes pod that has already been OOMKilled?",
+        "What is a class loader leak and how does it cause Metaspace OOM?",
+        "How do you use Eclipse MAT to find a memory leak in a Spring Boot application?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes OOMKilled Spring Boot Debug JVM Memory | InterviewExplainer",
+        "metaDescription": "Debug OOMKilled Spring Boot in Kubernetes. kubectl describe, heap dump analysis, MaxRAMPercentage fix, distinguishing heap vs metaspace vs thread OOM."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "OOMKilled means the kernel killed the container because it exceeded its memory limit \u2014 the container runtime reported exit code 137, not a JVM OutOfMemoryError.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Your monitoring fires an alert at 3 AM: the order-service pod has restarted 5 times in the past 6 hours. kubectl get pods shows Restart Count: 5. The pod is currently running, but kubectl describe pod reveals the last termination reason: OOMKilled, exit code 137. The first instinct \u2014 increase the memory limit \u2014 is the most common mistake. It might buy you a few more hours, but if the root cause is a memory leak, the pod will eventually hit the new limit too. The correct response is to."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Your monitoring fires an alert at 3 AM: the order-service pod has restarted 5 times in the past 6 hours.",
+              "kubectl get pods shows Restart Count: 5.",
+              "The pod is currently running, but kubectl describe pod reveals the last termination reason: OOMKilled, exit code 137.",
+              "The first instinct \u2014 increase the memory limit \u2014 is the most common mistake.",
+              "It might buy you a few more hours, but if the root cause is a memory leak, the pod will eventually hit the new limit too.",
+              "The correct response is to diagnose why memory is growing before changing any configuration."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Exit code 137 = kernel OOMKill, not JVM OutOfMemoryError \u2014 the kernel sends SIGKILL when the cgroup limit is breached; the JVM gets no chance to log an error or generate a heap dump automatically -Xmx must never equal the container memory limit \u2014 metaspace, thread stacks, code cache, and GC overhead need 200-400MB beyond heap; this is the most common cause of predictable OOMKills in containers jstat -gcutil distinguishes sizing from leaks \u2014 if Old Gen percentage after full GC is steadily climbing, objects are being retained that should be collected; stable post-GC usage means the heap is simply undersized -XX:+HeapDumpOnOutOfMemoryError captures forensic evidence \u2014 the heap dump is generated before the container dies; copy it with kubectl cp and analyze it in Eclipse MAT's Leak Suspects report MaxRAMPercentage=75",
+              "0 with UseContainerSupport \u2014 caps heap at 75% of the cgroup limit automatically, leaving 25% for non-heap; scales with the container limit without hardcoding -Xmx values"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Just increasing the memory limit without understanding why memory is growing \u2014 fixes the symptom but not the root cause (could be a memory leak)"
+          }
+        ],
+        "cap": "Immediate diagnosis kubectl describe pod <pod-name> in the pod's Last State section shows OOMKilled with exitCode: 137 \u2014 this is kernel OOMKill (cgroup limit exceeded), not a Java heap exhaustion; the",
+        "familiarity_anchors": [
+          "OOMKilled",
+          "Diagnose",
+          "MaxRAMPercentage"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you copy a heap dump from a Kubernetes pod that has already been OOMKilled?",
+          "What is a class loader leak and how does it cause Metaspace OOM?",
+          "How do you use Eclipse MAT to find a memory leak in a Spring Boot application?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,239 @@
+{
+  "topic": "Transactions",
+  "topicSlug": "transactions",
+  "questions": [
+    {
+      "id": "jpa-003",
+      "slug": "transactional-internals-propagation",
+      "title": "@Transactional Internals \u2014 Proxy and Propagation",
+      "question": "How does @Transactional work internally in Spring, and what are the main propagation levels?",
+      "direct_answer": "@Transactional is implemented via Spring AOP proxy. When a @Transactional method is called through the proxy, Spring opens a transaction before the method and commits or rolls back after. The behaviour across nested calls is controlled by propagation levels such as REQUIRED, REQUIRES_NEW, and NESTED.",
+      "layout_type": "internals-deep-dive",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "interviewer_intent": {
+        "testing": "Deep understanding of Spring AOP and transaction management \u2014 not just how to annotate but what happens at runtime.",
+        "common_mistake": "Calling a @Transactional method from within the same class bypasses the proxy and the transaction is silently skipped. Candidates often do not mention this self-invocation pitfall.",
+        "to_stand_out": "Explain the self-invocation pitfall, transaction synchronisation, and how readOnly=true is a hint to the database driver to optimise for read workloads."
+      },
+      "company_tags": [
+        "Pivotal",
+        "VMware",
+        "Netflix",
+        "Zalando"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@Transactional Works Through Proxies \u2014 Which Is Why Calling It From the Same Class Does Nothing",
+            "content": "The most common `@Transactional` bug is self-invocation. A method in a service class calls another `@Transactional` method in the same class, expecting a transaction to start. **Nothing happens.** The transaction annotation is silently ignored because `@Transactional` works through **CGLIB proxies** \u2014 Spring creates a subclass that wraps the transactional method with `begin`, `commit`, and `rollback` logic. When you call a method on `this`, you bypass the proxy entirely.\n\nUnderstanding the proxy mechanism explains every `@Transactional` gotcha: why it only works on public methods (the proxy can't override private/final methods), why self-invocation skips the transaction, and why the annotation on an interface method may not be inherited.\n\nBeyond the proxy, the **propagation level** determines what happens when one transactional method calls another. `REQUIRED` (the default) joins the existing transaction. `REQUIRES_NEW` suspends it and creates a new one. Getting propagation wrong either silently shares transactions that should be independent or creates unnecessary transaction overhead."
+          },
+          {
+            "type": "phase",
+            "title": "Proxy Interception \u2014 What Spring Actually Does When You Call a @Transactional Method",
+            "content": "When Spring encounters a `@Transactional` bean, it creates a CGLIB proxy subclass at startup. The proxy overrides each transactional method with logic that starts a transaction before the method body and commits or rolls back after.\n\nThe call chain is: **caller \u2192 proxy \u2192 actual method \u2192 proxy (commit/rollback).** If the caller is a different bean, the call goes through the proxy. If the caller is the same class (`this.method()`), the proxy is bypassed \u2014 the call goes directly to the actual method, and Spring never sees the `@Transactional` annotation.\n\nThe fix for self-invocation is either extracting the method to a separate bean (cleanest), injecting the proxy into itself (`@Autowired private MyService self;`), or using `AopContext.currentProxy()` (least clean). In practice, extracting to a separate service is always the right answer \u2014 self-invocation usually signals that the class has too many responsibilities."
+          },
+          {
+            "type": "phase",
+            "title": "Propagation Levels \u2014 REQUIRED, REQUIRES_NEW, and the Ones That Actually Matter",
+            "content": "`REQUIRED` (the default) joins the calling transaction if one exists, or creates a new one if not. This is correct for 95% of use cases. **The subtlety: if the inner method throws a runtime exception, the outer transaction is marked for rollback** even if the outer method catches the exception. The transaction is poisoned.\n\n`REQUIRES_NEW` suspends the current transaction and creates a completely independent one. The inner transaction can commit even if the outer rolls back. Use this for **audit logging** \u2014 you want the audit entry to persist even if the business operation fails.\n\n`MANDATORY` requires an existing transaction and throws if none exists. Use this on methods that should never be called without a transaction \u2014 it catches bugs at development time.\n\n**`readOnly = true`** is not a propagation level but a critical hint. It tells the JDBC driver and Hibernate to optimize for read-only access. Hibernate skips dirty checking for entities loaded in a read-only transaction, which matters when loading thousands of entities for reporting."
+          },
+          {
+            "type": "phase",
+            "title": "The Self-Invocation Problem \u2014 Why Your @Transactional Method Is Running Without a Transaction",
+            "content": "`@Transactional` works through a CGLIB proxy that wraps the bean. External callers get the proxy \u2014 the transaction starts. **But when a method calls another method within the same class**, the call goes directly to `this`, bypassing the proxy entirely. The called method runs without a transaction, even if it's annotated with `@Transactional`.\n\nThis is the most common `@Transactional` bug, and it's silent: no error, no exception, the code runs \u2014 but without transaction semantics. Changes made in the inner method aren't rolled back if an exception occurs. Writes happen immediately, not at commit time.\n\nThree solutions, in order of preference:\n\n**Move the method to another bean.** If `PaymentService.processPayment()` calls `this.recordAuditLog()` which needs its own transaction (`REQUIRES_NEW`), move `recordAuditLog` to `AuditLogService`. External call \u2192 proxy \u2192 transaction.\n\n**Self-inject the proxy.** `@Autowired PaymentService self; self.recordAuditLog()` \u2014 Spring injects the proxy, so the call goes through the proxy. This is a code smell but functional for small refactors.\n\n**`AopContext.currentProxy()`** retrieves the current proxy: `((PaymentService)AopContext.currentProxy()).recordAuditLog()`. Requires `@EnableAspectJAutoProxy(exposeProxy = true)`. Functional but ugly \u2014 prefer extracting to a new bean.\n\nFor testing: `@SpringBootTest` loads the full application context with proxies \u2014 `@Transactional` works correctly. `@ExtendWith(SpringExtension.class)` with manually wired beans bypasses proxies \u2014 `@Transactional` is ignored. This asymmetry explains why unit tests pass but integration tests reveal transaction issues."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Transactional` works through a proxy \u2014 self-invocation bypasses it** \u2014 calling `this.processOrder()` from within the same class goes through `this`, not the proxy; the transaction annotation is ignored.\n- **`REQUIRED` (default) joins an existing transaction** \u2014 if a transaction is active, the method joins it; on rollback, the entire transaction rolls back, not just this method's work.\n- **`REQUIRES_NEW` suspends the outer transaction and opens a new one** \u2014 the inner transaction commits or rolls back independently; costly because it requires a new database connection from the pool.\n- **`NESTED` uses a savepoint inside the outer transaction** \u2014 the inner transaction can roll back to the savepoint without rolling back the outer; requires database savepoint support (not all drivers support this).\n- **Default rollback is on `RuntimeException` only** \u2014 checked exceptions do not trigger rollback; use `@Transactional(rollbackFor = Exception.class)` to rollback on checked exceptions too."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@Transactional` is one of Spring's most powerful annotations \u2014 and the most misunderstood. Understanding propagation tells you exactly what happens when transactional methods call each other.\n\n**The proxy mechanism**\n- Spring wraps the bean in a proxy; when an external caller calls the annotated method, the proxy begins a transaction, calls the real method, then commits or rolls back\n- `this.method()` bypasses the proxy \u2014 the call goes directly to the concrete class; no transaction is started\n- Fix: inject the bean into itself, or move the called method to a separate `@Service` class\n\n**Propagation types**\n- `REQUIRED` \u2014 join existing or create new; most operations use this; rollback on the inner method rolls back everything\n- `REQUIRES_NEW` \u2014 always creates a new transaction, suspending the outer; use for audit logging that must succeed even if the outer transaction rolls back; costs a second database connection\n- `NESTED` \u2014 savepoint inside the outer transaction; inner rollback returns to the savepoint; outer transaction continues; requires database savepoint support\n- `SUPPORTS` \u2014 joins if present, no transaction if not; use for read operations that can run either way\n\n**Rollback rules**\n- `RuntimeException` (unchecked) \u2192 rollback by default\n- `Exception` (checked) \u2192 no rollback by default; add `@Transactional(rollbackFor = Exception.class)` explicitly"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between REQUIRES_NEW and NESTED propagation in terms of how a rollback in the inner method affects the outer transaction?",
+        "How does @Transactional behave when placed on an interface method rather than the implementation class?",
+        "Why does Spring recommend using @Transactional on concrete classes rather than interfaces when using CGLIB proxies?"
+      ],
+      "seo": {
+        "meta_title": "@Transactional Internals Spring AOP Proxy \u2014 Java Interview",
+        "meta_description": "How Spring @Transactional works internally via AOP proxy, propagation levels REQUIRED vs REQUIRES_NEW vs NESTED, the self-invocation pitfall, and readOnly optimisation.",
+        "keywords": [
+          "@transactional internals spring",
+          "spring aop proxy transaction",
+          "propagation levels spring",
+          "requires_new nested spring",
+          "self invocation @transactional"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "@Transactional is one of Spring's most powerful annotations \u2014 and the most misunderstood.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The most common @Transactional bug is self-invocation. A method in a service class calls another @Transactional method in the same class, expecting a transaction to start. Nothing happens. The transaction annotation is silently ignored because @Transactional works through CGLIB proxies \u2014 Spring creates a subclass that wraps the transactional method with begin, commit, and rollback logic. When you call a method on this, you bypass the proxy entirely. Understanding the proxy mechanism explains every @Transactional gotcha: why it only works on public methods (the proxy can't override private/final methods), why."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "When Spring encounters a @Transactional bean, it creates a CGLIB proxy subclass at startup.",
+              "The proxy overrides each transactional method with logic that starts a transaction before the method body and commits or rolls back after.",
+              "The call chain is: caller \u2192 proxy \u2192 actual method \u2192 proxy (commit/rollback).",
+              "If the caller is a different bean, the call goes through the proxy.",
+              "If the caller is the same class (this.method()), the proxy is bypassed \u2014 the call goes directly to the actual method, and Spring never sees the @Transactional annotation.",
+              "The fix for self-invocation is either extracting the method to a separate bean (cleanest), injecting the proxy into itself (@Autowired private MyService self;), or using AopContext.currentProxy() (least clean)."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@Transactional works through a proxy \u2014 self-invocation bypasses it \u2014 calling this",
+              "processOrder() from within the same class goes through this, not the proxy; the transaction annotation is ignored",
+              "REQUIRED (default) joins an existing transaction \u2014 if a transaction is active, the method joins it; on rollback, the entire transaction rolls back, not just this method's work",
+              "REQUIRES_NEW suspends the outer transaction and opens a new one \u2014 the inner transaction commits or rolls back independently; costly because it requires a new database connection from the pool",
+              "NESTED uses a savepoint inside the outer transaction \u2014 the inner transaction can roll back to the savepoint without rolling back the outer; requires database savepoint support (not all drivers support this)"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Calling a @Transactional method from within the same class bypasses the proxy and the transaction is silently skipped. Candidates often do not mention this self-invocation pitfall."
+          }
+        ],
+        "cap": "The proxy mechanism Spring wraps the bean in a proxy; when an external caller calls the annotated method, the proxy begins a transaction, calls the real method, then commits or rolls back this.method(",
+        "familiarity_anchors": [
+          "Transactional",
+          "Spring",
+          "REQUIRED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between REQUIRES_NEW and NESTED propagation in terms of how a rollback in the inner method affects the outer transaction?",
+          "How does @Transactional behave when placed on an interface method rather than the implementation class?",
+          "Why does Spring recommend using @Transactional on concrete classes rather than interfaces when using CGLIB proxies?"
+        ]
+      }
+    },
+    {
+      "id": "jpa-006",
+      "slug": "optimistic-vs-pessimistic-locking",
+      "title": "Optimistic vs Pessimistic Locking in JPA",
+      "question": "What is the difference between optimistic and pessimistic locking in JPA, and when should you use each?",
+      "direct_answer": "Optimistic locking uses a version column to detect concurrent updates at commit time \u2014 it fails fast without holding DB locks. Pessimistic locking acquires a DB-level lock (SELECT FOR UPDATE) to prevent concurrent access. Use optimistic for low-contention reads with occasional writes; pessimistic for high-contention or critical sections where conflicts must be prevented.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "interviewer_intent": {
+        "testing": "Concurrency awareness \u2014 the candidate should understand both strategies, their DB-level implications, and how to implement each in JPA.",
+        "common_mistake": "Treating optimistic locking as pessimistic or not knowing that OptimisticLockException must be caught and the operation retried at the application layer.",
+        "to_stand_out": "Discuss @Version type choices (int, long, Instant), @Retryable from Spring Retry for automatic retry, and how pessimistic locking affects connection pool sizing."
+      },
+      "company_tags": [
+        "PayPal",
+        "Stripe",
+        "Goldman Sachs",
+        "Deutsche Bank"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Optimistic Locking Doesn't Lock Anything \u2014 It Detects Conflicts After the Fact",
+            "content": "The names are misleading. **Optimistic locking never acquires a database lock.** It adds a `@Version` column to the entity and checks it at UPDATE time: `UPDATE order SET status = 'SHIPPED', version = 3 WHERE id = 1 AND version = 2`. If another transaction already changed the row (version is now 3), the WHERE clause matches zero rows, and Hibernate throws `OptimisticLockException`. **Your application must catch this and retry** \u2014 JPA doesn't retry for you.\n\n**Pessimistic locking acquires a real database lock** with `SELECT ... FOR UPDATE`. No other transaction can modify the row until the lock is released at commit. This guarantees no conflicts but **holds the lock for the entire transaction duration**, blocking other transactions and potentially causing deadlocks.\n\nThe choice depends on conflict frequency. Optimistic locking works when conflicts are rare \u2014 most updates succeed, and the occasional retry is acceptable. Pessimistic locking works when conflicts are frequent and retries would cascade into more conflicts."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Optimistic vs Pessimistic \u2014 Conflict Handling, Performance, and Connection Impact",
+            "content": "The trade-off is between conflict prevention (pessimistic) and conflict detection (optimistic).\n\n| Aspect | Optimistic | Pessimistic |\n|---|---|---|\n| **Mechanism** | `@Version` column, check at UPDATE time | `SELECT ... FOR UPDATE` database lock |\n| **Lock held** | None | For entire transaction duration |\n| **On conflict** | `OptimisticLockException` \u2014 app must retry | Blocks until lock released |\n| **Deadlock risk** | None | Yes \u2014 two transactions locking rows in different order |\n| **Throughput** | High \u2014 no blocking | Lower \u2014 serializes access |\n| **Connection pool impact** | Minimal | Significant \u2014 connections held longer |\n| **Best for** | Low contention, read-heavy | High contention, short critical sections |\n\n**Connection pool impact is the hidden cost of pessimistic locking.** A locked row holds a database connection for the entire transaction. If many transactions lock rows simultaneously, the connection pool (default HikariCP `maximumPoolSize = 10`) exhausts quickly, and new requests queue or timeout. Size your connection pool based on expected concurrent locked transactions."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Optimistic locking: `@Version` column detects conflicts at commit time** \u2014 Hibernate adds `WHERE version = ?` to every UPDATE; if another transaction committed first, `OptimisticLockException` is thrown.\n- **Pessimistic locking: database-level lock held for the transaction duration** \u2014 `SELECT ... FOR UPDATE` (exclusive) or `SELECT ... FOR SHARE` (shared); prevents concurrent reads/writes but blocks other transactions.\n- **Optimistic locking suits low-contention, read-heavy workloads** \u2014 no blocking; conflicts are rare and handled at commit; pessimistic locking suits high-contention scenarios where conflicts are frequent.\n- **`@Lock(LockModeType.PESSIMISTIC_WRITE)` on a Spring Data method generates `SELECT FOR UPDATE`** \u2014 the row is locked until the transaction ends; other transactions block on that row.\n- **`OptimisticLockException` requires a retry loop \u2014 Spring Retry helps** \u2014 wrap the operation in `@Retryable(OptimisticLockException.class)` with a max attempt count; exponential backoff prevents retry storms."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Concurrency control prevents two transactions from corrupting the same data. Optimistic and pessimistic locking are two strategies with opposite performance trade-offs.\n\n**Optimistic locking**\n- Add a `@Version` field to the entity: `@Version private Long version;`\n- Hibernate includes `WHERE id = ? AND version = ?` in every UPDATE; the version column increments on each write\n- If another transaction committed a change in the meantime, the `version` no longer matches; Hibernate throws `OptimisticLockException`\n- No database lock held \u2014 reads are non-blocking; conflicts surface only at commit time\n- Best for: user edits to records where conflicts are rare; e-commerce inventory updates with low contention\n\n**Pessimistic locking**\n- `@Lock(LockModeType.PESSIMISTIC_WRITE)` on the repository method \u2192 `SELECT ... FOR UPDATE`\n- Other transactions that try to read or write the locked row block until the lock is released at commit\n- Best for: high-contention scenarios (seat reservation, bank transfer) where concurrent modifications are expected and must be serialized\n\n**Handling `OptimisticLockException`**\n- The operation must be retried with a fresh read of the entity\n- `@Retryable(value = OptimisticLockException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))` wraps the method automatically\n- Always limit max attempts and add jitter to backoff \u2014 unlimited retries under high contention create retry storms"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement automatic retry for OptimisticLockException using Spring Retry?",
+        "What happens if you use PESSIMISTIC_WRITE and two transactions attempt to lock the same row simultaneously?",
+        "Can you use optimistic locking on entities you did not create (e.g., third-party or legacy schemas without a version column)?"
+      ],
+      "seo": {
+        "meta_title": "Optimistic vs Pessimistic Locking JPA \u2014 Java Interview Guide",
+        "meta_description": "Compare optimistic (@Version) and pessimistic (SELECT FOR UPDATE) locking in JPA/Hibernate \u2014 when to use each, OptimisticLockException handling, and implementation examples.",
+        "keywords": [
+          "optimistic locking jpa @version",
+          "pessimistic locking jpa",
+          "select for update hibernate",
+          "optimisticlockexception spring",
+          "jpa locking strategies"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Concurrency control prevents two transactions from corrupting the same data.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The names are misleading. Optimistic locking never acquires a database lock. It adds a @Version column to the entity and checks it at UPDATE time: UPDATE order SET status = 'SHIPPED', version = 3 WHERE id = 1 AND version = 2. If another transaction already changed the row (version is now 3), the WHERE clause matches zero rows, and Hibernate throws OptimisticLockException. Your application must catch this and retry."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The trade-off is between conflict prevention (pessimistic) and conflict detection (optimistic)",
+              "| Aspect | Optimistic | Pessimistic | |---|---|---| | Mechanism | @Version column, check at UPDATE time | SELECT",
+              "FOR UPDATE database lock | | Lock held | None | For entire transaction duration | | On conflict | OptimisticLockException \u2014 app must retry | Blocks until lock released | | Deadlock risk | None | Yes \u2014 two transactions locking rows in different order | | Throughput | High \u2014 no blocking | Lower \u2014 serializes access | | Connection pool impact | Minimal | Significant \u2014 connections held longer | | Best for | Low contention, read-heavy | High contention, short critical sections | Connection pool impact is the hidden cost of pessimistic locking",
+              "A locked row holds a database connection for the entire transaction",
+              "If many transactions lock rows simultaneously, the connection pool (default HikariCP maximumPoolSize = 10) exhausts quickly, and new requests queue or timeout"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The names are misleading. Optimistic locking never acquires a database lock. It adds a @Version column to the entity and checks it at UPDATE time: UPDATE order SET status = 'SHIPPED', version = 3 WHERE id = 1 AND version = 2. If another transaction already changed the row (version is now 3), the WHERE clause matches zero rows, and Hibernate throws OptimisticLockException. Your application must catch this and retry \u2014 JPA doesn't retry for you. Pessimistic locking acquires a real database lock with SELECT ... FOR UPDATE. No other."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The names are misleading. Optimistic locking never acquires a database lock. It adds a @Version column to the entity and checks it at UPDATE time: UPDATE order SET status = 'SHIPPED', version = 3 WHERE id = 1 AND version = 2. If another transaction already changed the row (version is now 3), the WHERE clause matches zero rows, and."
+          }
+        ],
+        "cap": "FOR UPDATE Other transactions that try to read or write the locked row block until the lock is released at commit Best for: high-contention scenarios (seat reservation, bank transfer) where concurrent",
+        "familiarity_anchors": [
+          "Optimistic",
+          "Pessimistic",
+          "SELECT"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement automatic retry for OptimisticLockException using Spring Retry?",
+          "What happens if you use PESSIMISTIC_WRITE and two transactions attempt to lock the same row simultaneously?",
+          "Can you use optimistic locking on entities you did not create (e.g., third-party or legacy schemas without a version column)?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "topic": "Caching Strategies",
+  "topicSlug": "caching-strategies",
+  "questions": [
+    {
+      "id": "redis-003",
+      "slug": "cache-strategies-comparison",
+      "question": "What are the differences between cache-aside, write-through, and write-behind caching strategies?",
+      "title": "Cache-Aside vs Write-Through vs Write-Behind Caching Strategies",
+      "direct_answer": "Cache-aside (lazy loading) puts cache management in application code: read from cache, fall back to DB on miss, then populate the cache. Write-through keeps cache and DB always in sync by writing to both on every update, at the cost of write latency. Write-behind (write-back) writes to the cache immediately and asynchronously flushes to the DB, boosting write throughput but risking data loss on crash. The right choice depends on your read/write ratio and tolerance for stale data or data loss.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Understanding of caching patterns beyond simple 'cache the result', including trade-offs between consistency, latency, and durability.",
+        "common_mistake": "Confusing write-through with write-behind, or not considering what happens on a cache miss in each strategy.",
+        "to_stand_out": "Mention read-through as a variant of cache-aside where the cache itself handles DB reads, and discuss which strategies pair well with Redis vs Memcached."
+      },
+      "company_tags": [
+        "Netflix",
+        "Stripe",
+        "Dropbox",
+        "Shopify",
+        "LinkedIn"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Read-through, refresh-ahead, and operational nuance",
+            "content": "Read-through caching moves miss handling into the cache layer: the store calls the database loader itself, which simplifies application code compared to classic cache-aside but couples you to a cache implementation that understands your entity loader. Refresh-ahead proactively reloads keys before they expire when access predictions show they will be hot again\u2014useful for catalog edges that spike predictably, but it can over-fetch if predictions are wrong.\n\nWhen you evaluate strategies for a Spring Boot service, quantify **read:write ratio**, **staleness budget**, and **durability**. Cache-aside keeps the database authoritative and is forgiving when Redis disappears\u2014you simply pay more database load until the cache refills. Write-through shines when product owners insist the cache never serves a version older than the primary row, such as pricing during a promotion, at the cost of synchronously touching two systems on every mutation. Write-back is rarely the default: reserve it for extremely write-heavy, loss-tolerant workloads where asynchronous writers and replay queues are already part of your reliability story.\n\nFinally, operational concerns overlap all patterns: observability on hit ratio, tracing cache misses to downstream latency, and drills for \"Redis down\" should appear in the same answer as the strategy names\u2014interviewers want proof you shipped this, not just memorized definitions. Understanding these patterns in the context of Spring Boot specifically helps frame the interview answer. With `@Cacheable`, Spring implements cache-aside transparently via AOP."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Strategy Comparison",
+            "content": "| Aspect | Cache-Aside (Lazy) | Write-Through | Write-Behind (Write-Back) |\n|---|---|---|---|\n| **Read path** | Check cache \u2192 miss \u2192 query DB \u2192 populate cache | Check cache \u2192 always hit (cache is pre-populated) | Check cache \u2192 always hit (cache is pre-populated) |\n| **Write path** | Write DB \u2192 evict/update cache | Write cache + DB synchronously | Write cache \u2192 async flush to DB |\n| **Consistency** | Eventual (stale until TTL or eviction) | Strong (cache always matches DB) | Eventual (async lag) |\n| **Write latency** | DB latency only (cache update is fire-and-forget) | DB + cache latency (both synchronous) | Cache latency only (DB write deferred) |\n| **Data loss risk** | None (DB is authoritative) | None (DB always written) | **Yes** \u2014 crash before flush loses buffered writes |\n| **Memory efficiency** | High (only hot data cached) | Low (all written data cached, even if never read) | Low (all written data cached) |\n| **Complexity** | Simple (app controls everything) | Medium (cache must front every write) | High (needs async queue, retry, ordering) |\n| **Best for** | Read-heavy, tolerance for brief staleness | Read-heavy, zero-staleness requirement | Write-heavy, loss-tolerant (leaderboards, analytics) |\n| **Spring support** | `@Cacheable` + `@CacheEvict` | `@CachePut` on every mutation | Custom `RedisTemplate` + async processor |"
+          },
+          {
+            "type": "code_example",
+            "title": "Cache-Aside Pattern in Java",
+            "content": "The cache-aside pattern in Java with Spring and Redis:\n\n```java\n@Service\npublic class ProductService {\n\n    private final ProductRepository repo;\n    private final RedisTemplate<String, Product> redis;\n\n    // Cache-aside READ: check cache, fallback to DB, populate cache\n    public Product findById(Long id) {\n        String key = \"product:\" + id;\n        Product cached = redis.opsForValue().get(key);\n        if (cached != null) {\n            return cached; // Cache hit \u2014 skip the DB entirely\n        }\n        // Cache miss \u2014 load from database\n        Product product = repo.findById(id)\n            .orElseThrow(() -> new ProductNotFoundException(id));\n        // Populate cache with TTL so stale entries auto-expire\n        redis.opsForValue().set(key, product, Duration.ofMinutes(15));\n        return product;\n    }\n\n    // Cache-aside WRITE: update DB first, then evict stale cache\n    public Product update(Product product) {\n        Product saved = repo.save(product);\n        redis.delete(\"product:\" + saved.getId()); // Evict, don't update\n        return saved;\n    }\n}\n```\n\n**Why evict instead of update on write?** Eviction is simpler and avoids race conditions where a concurrent read between the DB write and cache update could re-populate the cache with stale data. The next read will miss the cache and fetch the fresh value from the DB.\n\nWith Spring annotations, the same pattern becomes declarative:\n\n```java\n@Cacheable(\"products\")   // Cache-aside read\npublic Product findById(Long id) { return repo.findById(id).orElseThrow(); }\n\n@CacheEvict(\"products\")  // Evict on write\npublic void update(Product p) { repo.save(p); }\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Cache-aside is the safest default** \u2014 cache holds only requested data; simple miss/fill logic; risk is cache stampede on simultaneous cold misses; mitigate with probabilistic early expiry or a distributed lock on fill\n- **Write-through eliminates stale reads at the cost of write speed** \u2014 cache always reflects the latest write; every write takes two round trips (cache + database); wasted cache space for data never read\n- **Write-behind risks data loss** \u2014 database writes are async; a Redis failure between write and async flush loses the update permanently; appropriate only when some loss is acceptable (counters, metrics)\n- **TTL is required in all strategies** \u2014 without TTL, cache-aside entries are never evicted when the database changes without a corresponding cache write; always set a reasonable expiry\n- **Mixing strategies introduces inconsistency** \u2014 if some write paths evict and others don't, or some reads use cache while others bypass it, the cache reflects a partial view; enforce the strategy consistently across all paths to the same data"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Cache strategies differ in who fills the cache and when \u2014 and choosing the wrong strategy leads to either stale data (write-behind) or cache misses at the worst time (cache-aside on cold start).\n\n**Cache-aside (lazy loading) \u2014 the most common**\n- The application checks the cache first; on a miss, it queries the database, stores the result in the cache, and returns it \u2014 which means the cache only holds data that's been requested, so cold start doesn't pre-populate anything\n- This is the right default for most read-heavy workloads: simple to implement, no wasted cache space on data that's never read\n- The risk is cache stampede on cold start or after expiry: many concurrent requests all miss simultaneously, all hit the database, and all try to write the same key \u2014 handled with probabilistic early expiry or a mutex\n\n**Write-through \u2014 always update cache on write**\n- The application writes to the cache and the database together \u2014 which means the cache is always warm and reads are always fast, but writes are slower (two writes instead of one) and cache entries exist even for data that's never read\n- Best when you can't afford a cache miss for any user \u2014 payment processing, real-time inventory, user session data\n\n**Write-behind (write-back) \u2014 write to cache first, database later**\n- Writes go to the cache immediately and the database asynchronously in the background \u2014 which means writes are extremely fast but the database may be temporarily behind, and a Redis crash before the async flush loses those writes\n- Only appropriate for high-throughput write scenarios where some data loss is acceptable: analytics counters, activity feeds, approximate metrics\n\n**Read-through \u2014 the cache fetches from the database itself**\n- The application always reads from the cache; on a miss, the cache automatically queries the database and populates itself \u2014 the application code doesn't handle misses explicitly; used in Redis caching middleware like AWS ElastiCache with DAX"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does read-through caching differ from cache-aside?",
+        "What is the refresh-ahead pattern and when would you use it?",
+        "How would you handle a write-behind cache failure before the async flush completes?"
+      ],
+      "seo": {
+        "metaTitle": "Cache-Aside vs Write-Through vs Write-Behind | Java Redis Interview Guide",
+        "metaDescription": "Compare cache-aside, write-through, and write-behind caching strategies with trade-off tables and Java code examples for Redis interview preparation."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Cache strategies differ in who fills the cache and when \u2014 and choosing the wrong strategy leads to either stale data (write-behind) or cache misses at the worst time (cache-aside on cold start).",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Read-through caching moves miss handling into the cache layer: the store calls the database loader itself, which simplifies application code compared to classic cache-aside but couples you to a cache implementation that understands your entity loader. Refresh-ahead proactively reloads keys before they expire when access predictions show they will be hot again\u2014useful for catalog edges that spike predictably, but it can over-fetch if predictions are wrong. When you evaluate strategies for a Spring Boot service, quantify read:write ratio, staleness budget."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of caching patterns beyond simple 'cache the result', including trade-offs between consistency, latency, and durability."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Cache-aside is the safest default \u2014 cache holds only requested data; simple miss/fill logic; risk is cache stampede on simultaneous cold misses; mitigate with probabilistic early expiry or a distributed lock on fill Write-through eliminates stale reads at the cost of write speed \u2014 cache always reflects the latest write; every write takes two round trips (cache + database); wasted cache space for data never read Write-behind risks data loss \u2014 database writes are async; a Redis failure between write and async flush loses the update permanently; appropriate only when some loss is acceptable (counters, metrics) TTL is required in all strategies \u2014 without TTL, cache-aside entries are never evicted when the database changes without a corresponding cache write; always set a reasonable expiry Mixing strategies introduces inconsistency \u2014 if some write paths evict and others don't, or some reads use cache while others bypass it, the cache reflects a partial view; enforce the strategy consistently across all paths to the same data"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The cache-aside pattern in Java with Spring and Redis: ``java @Service public class ProductService { private final ProductRepository repo; private final RedisTemplate<String, Product> redis; // Cache-aside READ: check cache, fallback to DB, populate cache public Product findById(Long id) { String key = \"product:\" + id; Product cached = redis.opsForValue().get(key); if (cached != null) { return cached; // Cache hit \u2014 skip the DB entirely } // Cache miss \u2014 load from database Product product = repo.findById(id) .orElseThrow(() -> new ProductNotFoundException(id)); // Populate cache with TTL so stale entries auto-expire redis.opsForValue().set(key, product, Duration.ofMinutes(15)); return product; } // Cache-aside WRITE: update DB first, then evict stale cache public Product update(Product product) { Product saved = repo.save(product); redis.delete(\"product:\" + saved.getId()); // Evict, don't."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing write-through with write-behind, or not considering what happens on a cache miss in each strategy"
+            ]
+          }
+        ],
+        "cap": "Cache-aside (lazy loading) \u2014 the most common The application checks the cache first; on a miss, it queries the database, stores the result in the cache, and returns it \u2014 which means the cache only.",
+        "familiarity_anchors": [
+          "Cache",
+          "Write"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does read-through caching differ from cache-aside?",
+          "What is the refresh-ahead pattern and when would you use it?",
+          "How would you handle a write-behind cache failure before the async flush completes?"
+        ]
+      }
+    }
+  ]
+}

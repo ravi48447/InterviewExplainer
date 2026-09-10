@@ -1,0 +1,333 @@
+{
+  "topic": "Docker Security",
+  "topicSlug": "docker-security",
+  "questions": [
+    {
+      "id": "docker-007",
+      "slug": "docker-non-root-user-java-security",
+      "question": "Why should you run Java applications as a non-root user in Docker, and how do you configure it?",
+      "title": "Running Non-Root User in Docker: Security Best Practice for Java",
+      "direct_answer": "Running as root in Docker is a security risk \u2014 if the container is compromised, the attacker has root access to the container filesystem and potentially the host if the container escapes. Create a dedicated user in the Dockerfile with RUN adduser, set it with USER instruction before ENTRYPOINT, and ensure the application directory is owned by that user.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Security awareness in containerized Java deployments \u2014 a common finding in security audits",
+        "common_mistake": "Forgetting to chown application files to the new user \u2014 the app fails to start because it can't write to its working directory",
+        "to_stand_out": "Mention read-only root filesystem (--read-only), explain capabilities dropping, discuss distroless images (no shell = reduced attack surface), and show how Kubernetes SecurityContext enforces non-root"
+      },
+      "company_tags": [
+        "google",
+        "netflix",
+        "pivotal",
+        "amazon"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Root Inside a Container Is Still Root \u2014 and That Matters More Than You Think",
+            "content": "Containers run as root by default, and most developers never change this because things just work. The false assumption is that container isolation makes root harmless \u2014 the process is sandboxed, so what damage could it do? The answer becomes clear when you consider what happens after a successful exploit.\n\nIf an attacker exploits a **remote code execution** vulnerability in your Spring Boot application \u2014 a deserialization bug, a path traversal in file upload, or an SSRF that reaches internal services \u2014 they gain code execution inside the container. As root, they can read every file in the container filesystem, modify the running application, install tools, and attempt container escape techniques that target the Linux kernel. A container escape from a root process grants root on the host node, compromising every other container on that machine.\n\nAs a non-root user, the same attacker can execute code but cannot read files outside the application directory, cannot install packages, cannot modify system binaries, and container escape techniques that require root privileges fail entirely. The attack surface shrinks from \"complete system compromise\" to \"application-level access\" \u2014 a critical reduction that buys time for detection and response."
+          },
+          {
+            "type": "step",
+            "title": "Create the User Before Copying Files \u2014 Ownership Must Match",
+            "content": "The most common failure after switching to non-root is a `Permission denied` error on startup because the JAR file is still owned by root. The fix is using **`COPY --chown`** to set ownership during the copy instruction itself, which avoids a separate `chown` layer that doubles the file's storage in the image.\n\nThe Dockerfile below creates a system user with no home directory and no login shell, then copies the application artifact with correct ownership before switching to that user.\n\n```dockerfile\nFROM eclipse-temurin:21-jre-alpine\nWORKDIR /app\nRUN addgroup -S appgroup && adduser -S appuser -G appgroup\nCOPY --chown=appuser:appgroup target/*.jar app.jar\nUSER appuser\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]\n```\n\nThe `USER` directive affects every instruction after it, including `ENTRYPOINT`. Any `RUN` commands that need root permissions \u2014 like installing packages with `apk add` or creating directories \u2014 must appear before `USER`. The pattern is: install dependencies as root, copy application files with `--chown`, switch to the unprivileged user, then define the entrypoint."
+          },
+          {
+            "type": "step",
+            "title": "Handle Writable Paths and Enforce Non-Root in Kubernetes",
+            "content": "Spring Boot and its embedded Tomcat need to write temporary files to `/tmp` during request processing. When combined with Kubernetes' `readOnlyRootFilesystem: true` \u2014 which makes the entire container filesystem read-only \u2014 the application fails to start because it cannot create temp files.\n\nThe solution is mounting an **emptyDir volume** at `/tmp`, giving the application a writable directory without making the entire filesystem writable.\n\n```yaml\nspec:\n  containers:\n    - name: app\n      securityContext:\n        runAsNonRoot: true\n        runAsUser: 1000\n        readOnlyRootFilesystem: true\n        allowPrivilegeEscalation: false\n        capabilities:\n          drop: [\"ALL\"]\n      volumeMounts:\n        - name: tmp\n          mountPath: /tmp\n  volumes:\n    - name: tmp\n      emptyDir: {}\n```\n\nThe **SecurityContext** enforces multiple layers of defense. `runAsNonRoot: true` rejects the pod if the image tries to run as root \u2014 catching regressions when someone rebuilds the Dockerfile and forgets the `USER` directive. `capabilities: drop: [\"ALL\"]` removes Linux capabilities like `NET_ADMIN`, `SYS_CHROOT`, and `SETUID` that a web application never needs. `allowPrivilegeEscalation: false` prevents any process inside the container from gaining more privileges than it started with.\n\nFor ConfigMaps and Secrets mounted into the container, Kubernetes sets the file owner to root by default. Set `defaultMode: 0444` in the volume spec so the non-root user can read configuration files. For sensitive secrets, use `fsGroup` in the pod security context to grant group-level read access without making files world-readable."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`COPY --chown` sets ownership during build** \u2014 avoids the common `Permission denied` startup failure and eliminates a separate `chown` layer that would double file storage in the image\n- **`capabilities: drop: [\"ALL\"]` removes ambient Linux powers** \u2014 web applications never need `NET_ADMIN`, `SYS_CHROOT`, or `SETUID`, and removing them blocks privilege escalation paths after a successful exploit\n- **`readOnlyRootFilesystem: true` requires writable `/tmp`** \u2014 Spring Boot's embedded Tomcat writes temp files during request processing, so mount an `emptyDir` volume at `/tmp` or the application fails to start\n- **`runAsNonRoot: true` in SecurityContext catches Dockerfile regressions** \u2014 if someone rebuilds the image without the `USER` directive, Kubernetes rejects the pod at scheduling time rather than running it as root\n- **Distroless images eliminate the shell entirely** \u2014 Google's `gcr.io/distroless/java21` contains only the JRE and CA certificates with no `sh`, `bash`, `apt`, or `curl`, so an attacker with code execution cannot install tools or spawn an interactive shell"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "By default, Docker containers run as root inside the container. If a vulnerability in your application allows container escape, a root container gives an attacker far more capability than a non-root process would. The fix is two lines in your Dockerfile.\n\n**Creating and using a non-root user**\n- In the runtime stage of your Dockerfile, add `RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser` then `USER appuser` \u2014 all subsequent instructions and the CMD run as that user\n- The application directory must be owned by the non-root user: `COPY --chown=appuser:appgroup target/app.jar /app/app.jar` \u2014 without the `--chown`, the binary is owned by root and the non-root process cannot read it\n- Use a specific numeric UID in Kubernetes environments with PodSecurityContext: `runAsUser: 10001` \u2014 Kubernetes admission controllers and PSP/PSA configurations often require non-root UIDs, and named users are only meaningful within the container's own `/etc/passwd`\n\n**File permission requirements**\n- A Spring Boot application with an embedded Tomcat writes temporary files to the system's temp directory by default \u2014 ensure the non-root user has write access to `/tmp` or configure `server.tomcat.basedir` to a path the user owns\n- JVM crash logs and heap dumps require a writable directory; set `-XX:ErrorFile=/tmp/hs_err_%p.log` and `-XX:HeapDumpPath=/tmp/heap_dump.hprof` to paths the appuser can write\n- The most common runtime failure after adding a non-root user: the application tries to write to a path owned by root and throws `java.io.IOException: Permission denied` \u2014 test the container explicitly with `docker run --user appuser` before pushing to production\n\n**Defense in depth**\n- Non-root is one layer; also combine it with read-only filesystem (`--read-only` flag), dropped Linux capabilities (`--cap-drop=ALL`), and no-new-privileges (`--security-opt no-new-privileges=true`) for a hardened production container\n- These controls together prevent an attacker from writing executables, escalating privileges, or loading kernel modules even if they achieve code execution inside the container"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What are Linux capabilities and why does dropping them improve security?",
+        "What is a distroless container image and what are its security advantages?",
+        "How does readOnlyRootFilesystem in Kubernetes work with Spring Boot's need for temp directories?"
+      ],
+      "seo": {
+        "metaTitle": "Docker Non-Root User Java Spring Boot Security | InterviewExplainer",
+        "metaDescription": "Run Java Docker containers as non-root user. Dockerfile USER instruction, chown, Kubernetes SecurityContext, readOnlyRootFilesystem, and capability dropping."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "By default, Docker containers run as root inside the container.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Containers run as root by default, and most developers never change this because things just work. The false assumption is that container isolation makes root harmless \u2014 the process is sandboxed, so what damage could it do? The answer becomes clear when you consider what happens after a successful exploit. If an attacker exploits a remote code execution vulnerability in your Spring Boot application \u2014 a deserialization bug, a path traversal in file upload, or an SSRF that reaches internal services \u2014 they gain code execution inside the container. As."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The most common failure after switching to non-root is a Permission denied error on startup because the JAR file is still owned by root.",
+              "The fix is using COPY --chown to set ownership during the copy instruction itself, which avoids a separate chown layer that doubles the file's storage in the image.",
+              "The Dockerfile below creates a system user with no home directory and no login shell, then copies the application artifact with correct ownership before switching to that user.",
+              "``dockerfile FROM eclipse-temurin:21-jre-alpine WORKDIR /app RUN addgroup -S appgroup && adduser -S appuser -G appgroup COPY --chown=appuser:appgroup target/*.jar app.jar USER appuser EXPOSE 8080 ENTRYPOINT [\"java\", \"-jar\", \"app.jar\"] ` The USER directive affects every instruction after it, including ENTRYPOINT.",
+              "Any RUN commands that need root permissions \u2014 like installing packages with apk add or creating directories \u2014 must appear before USER."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "COPY --chown sets ownership during build \u2014 avoids the common Permission denied startup failure and eliminates a separate chown layer that would double file storage in the image capabilities: drop: [\"ALL\"] removes ambient Linux powers \u2014 web applications never need NET_ADMIN, SYS_CHROOT, or SETUID, and removing them blocks privilege escalation paths after a successful exploit readOnlyRootFilesystem: true requires writable /tmp \u2014 Spring Boot's embedded Tomcat writes temp files during request processing, so mount an emptyDir volume at /tmp or the application fails to start runAsNonRoot: true in SecurityContext catches Dockerfile regressions \u2014 if someone rebuilds the image without the USER directive, Kubernetes rejects the pod at scheduling time rather than running it as root Distroless images eliminate the shell entirely \u2014 Google's gcr",
+              "io/distroless/java21 contains only the JRE and CA certificates with no sh, bash, apt, or curl, so an attacker with code execution cannot install tools or spawn an interactive shell"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Forgetting to chown application files to the new user \u2014 the app fails to start because it can't write to its working directory"
+          }
+        ],
+        "cap": "Creating and using a non-root user In the runtime stage of your Dockerfile, add RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser then USER appuser \u2014 all subsequent instruc",
+        "familiarity_anchors": [
+          "Running",
+          "Docker",
+          "Create"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What are Linux capabilities and why does dropping them improve security?",
+          "What is a distroless container image and what are its security advantages?",
+          "How does readOnlyRootFilesystem in Kubernetes work with Spring Boot's need for temp directories?"
+        ]
+      }
+    },
+    {
+      "id": "docker-009",
+      "slug": "docker-image-scanning-security-best-practices",
+      "question": "What are Docker image security best practices for Java applications?",
+      "title": "Docker Image Security: Scanning and Best Practices for Java",
+      "direct_answer": "Key practices: use minimal base images (Alpine/distroless) to reduce attack surface, scan images with Trivy/Snyk for known CVEs, never embed secrets in images, run as non-root, keep base images updated, and use multi-stage builds to exclude build tools from the final image. CI/CD should fail on critical CVEs before pushing to registry.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Security awareness in container image lifecycle \u2014 a growing interview topic as container security audits become standard",
+        "common_mistake": "Thinking application security is enough \u2014 base image CVEs are a real attack vector and many teams ship images with hundreds of known vulnerabilities from outdated base images",
+        "to_stand_out": "Mention specific tools (Trivy, Grype, Docker Scout), discuss distroless images for zero shell attack surface, and explain why secrets in image layers (even deleted) are extractable"
+      },
+      "company_tags": [
+        "google",
+        "amazon",
+        "snyk",
+        "aquasec"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Your Spring Boot Code Might Be Secure \u2014 but Your Base Image Has 200 CVEs",
+            "content": "Teams spend weeks hardening application code \u2014 input validation, authentication, authorization \u2014 then deploy it on a base image carrying hundreds of known vulnerabilities from OS packages the application never uses. A Spring Boot image built on `ubuntu:latest` inherits bash, perl, curl, python tools, and dozens of system libraries, each a potential attack vector with its own CVE history.\n\nThe security posture of a container image is the **union** of application vulnerabilities and base image vulnerabilities. A security scanner does not distinguish between them \u2014 a critical CVE in `libssl` bundled in the base image is as reportable as a critical flaw in your own code. SOC2 audits and compliance reviews treat both identically.\n\nThis means image security is not a one-time effort at build time \u2014 it is a continuous discipline. Base images receive security patches upstream, and your images must be rebuilt regularly to incorporate them. A six-month-old image that was clean at build time may have accumulated dozens of newly disclosed CVEs. The practices below form a layered defense: minimal base images reduce the attack surface, scanning gates catch known vulnerabilities, and runtime hardening limits what an attacker can do after a successful exploit."
+          },
+          {
+            "type": "step",
+            "title": "Minimal Base Images and CI Scanning Gates That Catch CVEs Before Deployment",
+            "content": "The first defense is choosing a base image with the smallest possible package set. **Alpine-based JRE images** (like `eclipse-temurin:21-jre-alpine`) contain roughly 15 OS packages compared to Debian-based images with 100+. Fewer packages means fewer potential CVEs and a smaller surface for attackers to probe.\n\n**Distroless images** from Google take this further by eliminating the shell entirely. `gcr.io/distroless/java21-debian12` contains only the JRE, CA certificates, and timezone data. There is no `sh`, no `bash`, no `apt`, no `curl`. An attacker who gains code execution inside a distroless container cannot spawn an interactive shell, install tools, or explore the filesystem from the command line.\n\nThe second defense is automated scanning in CI. Add Trivy as a build step that runs after `docker build` and before `docker push`, configured to fail the build on CRITICAL and HIGH severity vulnerabilities.\n\n```yaml\n- name: Scan image for vulnerabilities\n  uses: aquasecurity/trivy-action@master\n  with:\n    image-ref: my-spring-app:${{ github.sha }}\n    severity: CRITICAL,HIGH\n    exit-code: 1\n```\n\nTreating critical CVE findings as build failures \u2014 not warnings \u2014 prevents vulnerable images from reaching the registry. Schedule weekly base image rebuilds using Dependabot or Renovate to incorporate upstream security patches, even when application code has not changed."
+          },
+          {
+            "type": "step",
+            "title": "Why Secrets in Image Layers Are Permanent \u2014 Even After Deletion",
+            "content": "Every Dockerfile instruction creates an immutable layer stored in the registry. If you `COPY` an `application.properties` file containing database credentials in one layer and delete it in a subsequent `RUN rm` command, the credentials still exist in the earlier layer. Anyone with `docker pull` access can extract every layer and read the deleted file.\n\nThis is not theoretical \u2014 automated bots scan public registries for accidentally committed secrets. The same risk applies to `ENV` instructions: `ENV DB_PASSWORD=secret` is visible via `docker inspect` and persists in the image metadata permanently.\n\nThe rule is absolute: **never embed secrets in images**. Database passwords, API keys, TLS certificates, and service account tokens must be injected at runtime. For local development, use environment variables in docker-compose. For Kubernetes production deployments, use Secrets mounted as environment variables or files with RBAC controlling access. For high-security environments, HashiCorp Vault or AWS Secrets Manager provides dynamic credential rotation.\n\nPin your base image tags to a specific digest rather than floating tags like `eclipse-temurin:21-jre-alpine`. Floating tags can change without notice when the upstream publisher pushes an update. Pinning to a digest like `eclipse-temurin:21-jre-alpine@sha256:abc123...` ensures your builds are reproducible and you control exactly when upstream changes enter your images. Update the digest on a schedule through Dependabot PRs so you review changes before they reach production."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Alpine has ~15 packages vs Debian's 100+** \u2014 fewer OS packages means fewer CVEs to track, and distroless images eliminate the shell entirely so attackers cannot install tools or pivot after gaining code execution\n- **Secrets in image layers are permanent** \u2014 `COPY` credentials then `RUN rm` still leaves them in earlier layers extractable by anyone with pull access; always inject secrets at runtime through environment variables, Kubernetes Secrets, or Vault\n- **CI scan gates catch CVEs before deployment** \u2014 Trivy or Grype running after `docker build` with `exit-code: 1` on CRITICAL severity prevents vulnerable images from reaching the registry\n- **Pin base image digests, not floating tags** \u2014 `eclipse-temurin:21-jre-alpine@sha256:abc123` guarantees reproducible builds; update the digest weekly through Dependabot PRs so upstream patches land on your schedule\n- **Rebuild images weekly even without code changes** \u2014 newly disclosed CVEs affect existing images; scheduled rebuilds with fresh base layers incorporate upstream security patches automatically"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Container image scanning catches known CVEs in your base image, installed packages, and application dependencies before the image reaches production. Scanning is a quality gate, not just a reporting tool.\n\n**Where vulnerabilities come from**\n- Base image vulnerabilities: an `ubuntu:22.04` or `debian:bullseye` base image includes hundreds of packages, each a potential CVE surface \u2014 a 6-month-old base image often carries critical CVEs in OpenSSL, glibc, or curl that patches have already fixed\n- Application dependency vulnerabilities: Trivy and Grype scan JAR files inside the image, reading the Maven/Gradle dependency tree embedded in the manifest \u2014 a vulnerable Jackson or Log4j version surfaces here even if the OS is clean\n- Language runtime vulnerabilities: the JVM itself has CVEs; pinning to a specific JRE base image tag means you miss security patches; use a floating minor-version tag (`eclipse-temurin:21-jre`) and rebuild regularly\n\n**Tooling**\n- Trivy is the current standard for CI integration \u2014 `trivy image --exit-code 1 --severity HIGH,CRITICAL myapp:latest` fails the CI build on any high or critical CVE; `--severity MEDIUM` is too noisy for a quality gate\n- GitHub Container Registry and AWS ECR both have built-in scanning; configure automated scanning on push and block deployment from registries with unfixed critical CVEs\n- `docker scout cves myapp:latest` (Docker Scout) provides CVE information directly in the Docker CLI \u2014 useful for local investigation but Trivy's CI integration is more configurable\n\n**Minimizing the attack surface**\n- Use distroless or Alpine base images for production \u2014 `gcr.io/distroless/java21-debian12` contains only the JRE and necessary runtime libraries; no shell, no package manager, no curl; fewer installed components means fewer CVE targets\n- Distroless images trade debugging ease for security: `docker exec -it` into a distroless container gives you no shell; use ephemeral debug containers in Kubernetes or add a Busybox sidecar for troubleshooting in non-production environments\n- Multi-stage builds ensure the build tooling (Maven, JDK, source code) never enters the final scanned image \u2014 the scanner only sees the minimal runtime artifact"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between Trivy and Snyk for container image scanning?",
+        "How does a distroless image differ from a minimal Alpine-based image?",
+        "How do you inject secrets into a Docker container at runtime securely?"
+      ],
+      "seo": {
+        "metaTitle": "Docker Image Security Scanning Java Spring Boot Trivy | InterviewExplainer",
+        "metaDescription": "Docker image security for Java applications. Trivy scanning, minimal base images, distroless, never embed secrets, non-root users, and CI/CD security gates."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Container image scanning catches known CVEs in your base image, installed packages, and application dependencies before the image reaches production.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Teams spend weeks hardening application code \u2014 input validation, authentication, authorization \u2014 then deploy it on a base image carrying hundreds of known vulnerabilities from OS packages the application never uses. A Spring Boot image built on ubuntu:latest inherits bash, perl, curl, python tools, and dozens of system libraries, each a potential attack vector with its own CVE history. The security posture of a container image is the union of application vulnerabilities and base image vulnerabilities. A security scanner does."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Security awareness in container image lifecycle \u2014 a growing interview topic as container security audits become standard"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Alpine has ~15 packages vs Debian's 100+ \u2014 fewer OS packages means fewer CVEs to track, and distroless images eliminate the shell entirely so attackers cannot install tools or pivot after gaining code execution Secrets in image layers are permanent \u2014 COPY credentials then RUN rm still leaves them in earlier layers extractable by anyone with pull access; always inject secrets at runtime through environment variables, Kubernetes Secrets, or Vault CI scan gates catch CVEs before deployment \u2014 Trivy or Grype running after docker build with exit-code: 1 on CRITICAL severity prevents vulnerable images from reaching the registry Pin base image digests, not floating tags \u2014 eclipse-temurin:21-jre-alpine@sha256:abc123 guarantees reproducible builds; update the digest weekly through Dependabot PRs so upstream patches land on your schedule Rebuild images weekly even without code changes \u2014 newly disclosed CVEs affect existing images; scheduled rebuilds with fresh base layers incorporate upstream security patches automatically"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Teams spend weeks hardening application code \u2014 input validation, authentication, authorization \u2014 then deploy it on a base image carrying hundreds of known vulnerabilities from OS packages the application never uses. A Spring Boot image built on ubuntu:latest inherits bash, perl, curl, python tools, and dozens of system libraries, each a potential attack vector with its own CVE history. The security posture of a container image is the union of application vulnerabilities and base image vulnerabilities. A security scanner does not distinguish between them \u2014 a critical CVE in libssl bundled in the base image is as reportable as a critical flaw in your own code. SOC2 audits and compliance reviews treat both identically. This means image security is not."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking application security is enough \u2014 base image CVEs are a real attack vector and many teams ship images with hundreds of known vulnerabilities from outdated base images"
+            ]
+          }
+        ],
+        "cap": "Where vulnerabilities come from Base image vulnerabilities: an ubuntu:22.04 or debian:bullseye base image includes hundreds of packages, each a potential CVE surface \u2014 a 6-month-old base image often c",
+        "familiarity_anchors": [
+          "Alpine",
+          "Trivy"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between Trivy and Snyk for container image scanning?",
+          "How does a distroless image differ from a minimal Alpine-based image?",
+          "How do you inject secrets into a Docker container at runtime securely?"
+        ]
+      }
+    },
+    {
+      "id": "docker-011",
+      "slug": "docker-environment-variables-vs-secrets",
+      "question": "How should you manage sensitive configuration (passwords, API keys) in Docker containers?",
+      "title": "Docker Secrets vs Environment Variables for Sensitive Config",
+      "direct_answer": "Never embed secrets in images. Environment variables are the standard approach but are visible in docker inspect and process listings. Docker Secrets (Swarm) or Kubernetes Secrets mount secrets as files into the container. For production, use a secrets manager (HashiCorp Vault, AWS Secrets Manager) with Spring Cloud Vault or AWS SDK for zero-knowledge secret injection.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Security awareness around credentials management in containerized environments",
+        "common_mistake": "Hardcoding credentials in Dockerfile ENV instructions or application.properties baked into the image \u2014 both are permanently stored in image layers",
+        "to_stand_out": "Discuss the difference between environment variables (visible in process table, docker inspect) vs mounted secret files (more secure), mention Spring Cloud Vault for dynamic secret rotation, and explain init containers for secret injection"
+      },
+      "company_tags": [
+        "hashicorp",
+        "amazon",
+        "netflix",
+        "stripe"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Deleted Secrets in Docker Layers Are Not Deleted \u2014 They Are Permanent",
+            "content": "The most dangerous misconception in container security is that removing a file in a later Dockerfile instruction deletes it. Docker images are built as a stack of immutable layers \u2014 every instruction creates a new layer without modifying previous ones. If you `COPY` an `application.properties` containing a database password in layer 3 and run `rm application.properties` in layer 4, the password still exists in layer 3. Anyone who can pull the image from the registry can extract each layer and read the deleted file.\n\nThe same permanence applies to `ENV` instructions. `ENV DB_PASSWORD=secret` is stored in the **image metadata** and visible via `docker inspect` to anyone with access to the container or image. `ARG` is slightly better because it does not persist in the final image metadata, but build arguments are logged in Docker's build cache and CI output.\n\nThis means secrets management for containers is fundamentally different from secrets management for traditional deployments where you could rely on filesystem permissions and process isolation. In the container world, the image is a distributable artifact \u2014 anything in it is accessible to anyone who can pull it. The only safe approach is injecting secrets at runtime, never at build time."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Five Ways to Deliver Secrets \u2014 From Worst to Best",
+            "content": "Each secret delivery mechanism trades convenience for security. The right choice depends on your threat model and infrastructure maturity.\n\n| Method | In Image | Visible in inspect | Process list visible | Rotation | Appropriate for |\n|---|---|---|---|---|---|\n| `ENV` in Dockerfile | Yes \u2014 permanent | Yes | Yes | Requires rebuild | Never use |\n| `-e` at runtime | No | Yes | Yes via `/proc` | Restart required | Local dev only |\n| Docker Secrets (Swarm) | No | No | No \u2014 mounted as files | Restart required | Swarm production |\n| Kubernetes Secrets | No | No (with RBAC) | No \u2014 mounted as files | Restart or watch | K8s production |\n| Vault / cloud managers | No | No | No | Dynamic \u2014 no restart | High-security production |\n\nThe progression shows a clear pattern: moving secrets from build-time to runtime, from environment variables to mounted files, and from static credentials to dynamically issued short-lived tokens. Each step up reduces the blast radius when a secret is compromised. **Kubernetes Secrets** represent the standard production approach for most teams, while Vault or cloud-native secret managers represent the gold standard for regulated environments."
+          },
+          {
+            "type": "step",
+            "title": "Kubernetes Secrets and Vault \u2014 the Production Standard",
+            "content": "Kubernetes Secrets injected via `secretKeyRef` are the baseline for production Java deployments. The Secret object stores credentials in etcd (encrypted at rest if configured), and RBAC controls which pods can access which secrets. Spring Boot reads them as environment variables automatically through its relaxed binding.\n\n```yaml\nenv:\n  - name: SPRING_DATASOURCE_PASSWORD\n    valueFrom:\n      secretKeyRef:\n        name: db-credentials\n        key: password\n```\n\nThis approach keeps secrets out of the image, limits access through RBAC, and maps directly to Spring Boot's property system. The limitation is that updating a Secret requires a pod restart to pick up the new value \u2014 unless you mount the Secret as a volume file and configure Spring Cloud Kubernetes to watch for changes.\n\nFor environments requiring **dynamic credential rotation**, HashiCorp Vault with Spring Cloud Vault eliminates shared passwords entirely. Vault issues a unique, short-lived database credential to each pod at startup. When the credential's TTL expires, the Vault agent sidecar renews it transparently without restarting the pod.\n\n```yaml\nspring:\n  cloud:\n    vault:\n      host: vault.internal\n      authentication: KUBERNETES\n  config:\n    import: vault://secret/myapp\n```\n\nThe `KUBERNETES` authentication method uses the pod's service account token to authenticate with Vault \u2014 no static credentials are needed anywhere. This closes the chicken-and-egg problem of needing a credential to fetch credentials. Each pod gets a unique database user with a 24-hour TTL, so a compromised credential expires automatically and cannot be reused across services."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Docker layers are immutable \u2014 deleted secrets persist** \u2014 `COPY` credentials then `RUN rm` still leaves them in earlier layers extractable by anyone who can pull the image from the registry\n- **`ENV` and `ARG` are both visible** \u2014 `ENV` persists in image metadata readable via `docker inspect`; `ARG` appears in build cache and CI logs even though it does not persist in the final image\n- **Runtime env vars are visible in `/proc`** \u2014 `-e DB_PASSWORD=secret` can be read by any process inside the container via `/proc/1/environ`, making file-mounted secrets more secure than environment variables\n- **Kubernetes Secrets with RBAC are the production baseline** \u2014 `secretKeyRef` injection keeps credentials out of images and limits access to authorized pods through role-based access control\n- **Vault issues dynamic, per-pod credentials** \u2014 each pod gets a unique short-lived database user via Spring Cloud Vault's Kubernetes auth, eliminating shared passwords and providing automatic rotation without pod restarts"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Environment variables and Docker secrets both inject configuration into containers, but they solve different problems. Environment variables are for non-sensitive configuration; secrets are for credentials, API keys, and anything that should not appear in `docker inspect`.\n\n**Why environment variables are not safe for secrets**\n- Environment variables are visible in `docker inspect <container>`, in process listings like `/proc/1/environ`, in CI logs if printed, and in any crash dump \u2014 they are not encrypted at rest or in transit\n- Container orchestrators (Kubernetes, Swarm) expose environment variables through their APIs; a misconfigured RBAC policy that allows `get pods` can return the full environment variable list including embedded secrets\n- The correct mental model: environment variables are for configuration that you would not mind seeing in a debug log; secrets are for anything you would rotate if it appeared in a log\n\n**Docker secrets \u2014 how they work**\n- Docker Swarm secrets mount as files in `/run/secrets/<secret_name>` inside the container \u2014 the application reads the file, not an environment variable; the secret value never appears in the process environment or `docker inspect` output\n- Spring Boot reads secret files with `spring.config.import=optional:configtree:/run/secrets/` \u2014 each file in the directory becomes a property, so `spring.datasource.password` in a Spring config maps to the file at `/run/secrets/spring.datasource.password`\n- Secrets are encrypted at rest in Swarm's Raft log and transmitted encrypted to the container \u2014 the only plaintext exposure is the in-memory mount inside the container's filesystem namespace\n\n**Production secret management**\n- In Kubernetes, use external secret operators (External Secrets Operator, Sealed Secrets, AWS Secrets Manager) to inject secrets from a central secret store \u2014 Kubernetes Secrets are only base64-encoded by default, not encrypted; the external operator adds real encryption and audit trails\n- In AWS ECS, use Task IAM roles to fetch from Secrets Manager or Parameter Store at container startup \u2014 no secrets embedded in the task definition or container image\n- Never put secrets in Dockerfiles, Docker Compose files, or `.env` files committed to version control \u2014 `.env` must be in `.gitignore` the moment the project is created"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you enable encryption at rest for Kubernetes Secrets?",
+        "What is the difference between mounting a Kubernetes Secret as an environment variable vs a volume file?",
+        "How does Spring Cloud Vault's dynamic secret rotation work without requiring pod restarts?"
+      ],
+      "seo": {
+        "metaTitle": "Docker Secrets vs Environment Variables Java Spring Boot Security | InterviewExplainer",
+        "metaDescription": "Manage sensitive config in Docker and Kubernetes. Environment variables vs secrets, Kubernetes Secret RBAC, HashiCorp Vault dynamic rotation for Spring Boot."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Environment variables and Docker secrets both inject configuration into containers, but they solve different problems.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most dangerous misconception in container security is that removing a file in a later Dockerfile instruction deletes it. Docker images are built as a stack of immutable layers \u2014 every instruction creates a new layer without modifying previous ones. If you COPY an application.properties containing a database password in layer 3 and run rm application.properties in layer 4, the password still exists in layer 3. Anyone who can pull the image from the registry can extract each layer and."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Security awareness around credentials management in containerized environments"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Docker layers are immutable \u2014 deleted secrets persist \u2014 COPY credentials then RUN rm still leaves them in earlier layers extractable by anyone who can pull the image from the registry ENV and ARG are both visible \u2014 ENV persists in image metadata readable via docker inspect; ARG appears in build cache and CI logs even though it does not persist in the final image Runtime env vars are visible in /proc \u2014 -e DB_PASSWORD=secret can be read by any process inside the container via /proc/1/environ, making file-mounted secrets more secure than environment variables Kubernetes Secrets with RBAC are the production baseline \u2014 secretKeyRef injection keeps credentials out of images and limits access to authorized pods through role-based access control Vault issues dynamic, per-pod credentials \u2014 each pod gets a unique short-lived database user via Spring Cloud Vault's Kubernetes auth, eliminating shared passwords and providing automatic rotation without pod restarts"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most dangerous misconception in container security is that removing a file in a later Dockerfile instruction deletes it. Docker images are built as a stack of immutable layers \u2014 every instruction creates a new layer without modifying previous ones. If you COPY an application.properties containing a database password in layer 3 and run rm application.properties in layer 4, the password still exists in layer 3. Anyone who can pull the image from the registry can extract each layer and read the deleted file. The same permanence applies to ENV instructions. ENV DB_PASSWORD=secret is stored in the image metadata and visible via docker inspect to anyone with access to the container or image. ARG is slightly better because it does."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Hardcoding credentials in Dockerfile ENV instructions or application",
+              "properties baked into the image \u2014 both are permanently stored in image layers"
+            ]
+          }
+        ],
+        "cap": "Why environment variables are not safe for secrets Environment variables are visible in docker inspect <container>, in process listings like /proc/1/environ, in CI logs if printed, and in any crash du",
+        "familiarity_anchors": [
+          "Never",
+          "Environment",
+          "Docker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you enable encryption at rest for Kubernetes Secrets?",
+          "What is the difference between mounting a Kubernetes Secret as an environment variable vs a volume file?",
+          "How does Spring Cloud Vault's dynamic secret rotation work without requiring pod restarts?"
+        ]
+      }
+    }
+  ]
+}

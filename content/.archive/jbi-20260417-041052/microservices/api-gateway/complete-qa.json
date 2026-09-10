@@ -1,0 +1,86 @@
+{
+  "topic": "API Gateway",
+  "topicSlug": "api-gateway",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "microservices",
+  "questions": [
+    {
+      "id": "api-gateway-pattern",
+      "title": "API Gateway Pattern",
+      "slug": "api-gateway-pattern",
+      "question": "What is an API Gateway and what problems does it solve in a microservices architecture?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Single entry point for all client requests \u2014 routes to downstream services**\n- **Cross-cutting concerns: auth, rate limiting, SSL termination, logging**\n- **Spring Cloud Gateway: routes, filters, predicates**\n- **BFF (Backend for Frontend): separate gateway per client type (mobile vs web)**\n- **Risk: single point of failure \u2014 must be highly available and stateless**\n- **Don't put business logic in the gateway \u2014 keep it thin and routing-focused**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "An API Gateway is the single entry point for all client requests. Instead of clients knowing about 10 different microservice URLs, they talk to the gateway, which routes requests to the appropriate service. This solves multiple problems: clients don't need to track service URLs, you can do auth/rate-limiting once at the gateway instead of in every service, and you can do protocol translation (HTTP/2 externally, HTTP/1.1 internally).\n\nSpring Cloud Gateway is the Spring ecosystem's gateway built on Reactor \u2014 it's non-blocking and handles routing via predicates (path matching, header matching) and filters (add/remove headers, rate limiting, circuit breaking).\n\nThe main risk is that the gateway becomes a bottleneck or single point of failure. Keep it stateless, deploy it as multiple instances, and keep business logic out of it \u2014 it should only route and apply cross-cutting concerns."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Spring Cloud Gateway \u2014 Configuration\n\n```yaml\n# application.yml\nspring:\n  cloud:\n    gateway:\n      routes:\n        # Order Service route\n        - id: order-service\n          uri: lb://ORDER-SERVICE     # lb:// = load balancer (via Eureka)\n          predicates:\n            - Path=/api/orders/**\n          filters:\n            - StripPrefix=1           # Remove /api prefix before forwarding\n            - name: RequestRateLimiter\n              args:\n                redis-rate-limiter.replenishRate: 100   # tokens/sec\n                redis-rate-limiter.burstCapacity: 200   # max burst\n            - name: CircuitBreaker\n              args:\n                name: orderCircuitBreaker\n                fallbackUri: forward:/fallback/orders\n\n        # User Service route\n        - id: user-service\n          uri: lb://USER-SERVICE\n          predicates:\n            - Path=/api/users/**\n          filters:\n            - AddRequestHeader=X-Service-Name, gateway\n            - AddResponseHeader=X-Request-Id, #{T(java.util.UUID).randomUUID()}\n\n        # Auth Service \u2014 no JWT filter (it IS the auth service)\n        - id: auth-service\n          uri: lb://AUTH-SERVICE\n          predicates:\n            - Path=/api/auth/**\n```\n\n## JWT Authentication Filter\n\n```java\n@Component\npublic class JwtAuthenticationFilter implements GlobalFilter, Ordered {\n\n    private final JwtTokenProvider jwtProvider;\n\n    // Paths that don't need authentication:\n    private static final List<String> PUBLIC_PATHS = List.of(\n        \"/api/auth/login\",\n        \"/api/auth/register\",\n        \"/api/auth/refresh\"\n    );\n\n    @Override\n    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n        String path = exchange.getRequest().getPath().value();\n\n        if (PUBLIC_PATHS.stream().anyMatch(path::startsWith)) {\n            return chain.filter(exchange);  // Skip auth for public paths\n        }\n\n        String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);\n        if (authHeader == null || !authHeader.startsWith(\"Bearer \")) {\n            return unauthorized(exchange);\n        }\n\n        String token = authHeader.substring(7);\n        try {\n            Claims claims = jwtProvider.validateAndExtract(token);\n\n            // Add user info as headers to downstream services:\n            ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()\n                .header(\"X-User-Id\", claims.getSubject())\n                .header(\"X-User-Role\", claims.get(\"role\", String.class))\n                .build();\n\n            return chain.filter(exchange.mutate().request(mutatedRequest).build());\n        } catch (JwtException e) {\n            return unauthorized(exchange);\n        }\n    }\n\n    private Mono<Void> unauthorized(ServerWebExchange exchange) {\n        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);\n        return exchange.getResponse().setComplete();\n    }\n\n    @Override\n    public int getOrder() { return -1; }  // Run before other filters\n}\n```\n\n## Rate Limiting with Redis\n\n```java\n@Configuration\npublic class GatewayConfig {\n\n    @Bean\n    public KeyResolver userKeyResolver() {\n        // Rate limit per user (from JWT header added by auth filter):\n        return exchange -> Mono.justOrEmpty(\n            exchange.getRequest().getHeaders().getFirst(\"X-User-Id\")\n        ).switchIfEmpty(Mono.just(\"anonymous\"));\n    }\n\n    @Bean\n    public RedisRateLimiter redisRateLimiter() {\n        return new RedisRateLimiter(\n            100,   // Tokens replenished per second\n            200,   // Max burst capacity\n            1      // Requested tokens per request\n        );\n    }\n}\n```\n\n## BFF Pattern (Backend for Frontend)\n\n```\nCLIENT TYPES vs GATEWAY:\n\n  Mobile App\n      \u2193\n  Mobile BFF Gateway   \u2192 aggregates 3 service calls into 1 (bandwidth concern)\n      \u2193  \u2193  \u2193\n  Orders  Users  Products\n\n  Web App\n      \u2193\n  Web BFF Gateway      \u2192 returns full response (bandwidth not a concern)\n      \u2193  \u2193  \u2193\n  Orders  Users  Products\n\n  External Partners\n      \u2193\n  Public API Gateway   \u2192 strict rate limiting, API keys, SLA enforcement\n      \u2193  \u2193  \u2193\n  Same services\n\nBenefit: mobile BFF can reduce 3 round trips to 1 by aggregating.\nDownside: more gateways to maintain.\n```\n\n## Production Reality\n\nDon't put business logic in the gateway \u2014 the moment you do, it becomes hard to test and couples your clients to internal implementation. The gateway should only: route, authenticate JWTs (validate signature and extract claims), rate limit, log request/response metadata, and handle circuit breaking. Service-specific logic stays in services. Deploy the gateway with at least 3 instances and put it behind a load balancer."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "An API Gateway is the single entry point for all client requests.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": ""
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": ""
+          }
+        ],
+        "cap": "Keep it stateless, deploy it as multiple instances, and keep business logic out of it \u2014 it should only route and apply cross-cutting concerns.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

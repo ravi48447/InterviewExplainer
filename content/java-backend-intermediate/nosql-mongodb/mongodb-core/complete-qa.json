@@ -1,0 +1,678 @@
+{
+  "topic": "Mongodb Core",
+  "topicSlug": "mongodb-core",
+  "questions": [
+    {
+      "id": "mdb-core-001",
+      "slug": "mongodb-aggregation-pipeline-match-group-lookup",
+      "question": "How does the MongoDB aggregation pipeline work, and how do you use $match, $group, and $lookup stages in a Java application?",
+      "title": "MongoDB Aggregation Pipeline: $match, $group, $lookup",
+      "direct_answer": "The **aggregation pipeline** is a sequence of stages that transform documents as they flow through — Unix pipes for BSON. **`$match`** filters early (use indexes when it's the first stage). **`$group`** collapses documents by an `_id` expression with accumulators like `$sum`, `$avg`, `$push`, `$addToSet`. **`$lookup`** performs a left-outer join against another collection, producing an array that `$unwind` flattens for 1:1 matches. **`$project` / `$addFields`** reshape output. In Spring Data MongoDB you compose pipelines with the fluent `Aggregation` builder (`match`, `group`, `lookup`, `unwind`, `project`) executed via `MongoTemplate.aggregate()`. **Pipeline order drives performance** — reduce cardinality early; large sorts and groups need `allowDiskUse(true)` past 100MB.",
+      "layout_type": "code-workshop",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Ability to compose non-trivial server-side aggregations and understand stage ordering for performance",
+        "common_mistake": "Placing `$match` after `$group`/`$lookup`, forgetting to `$unwind` after `$lookup`, or pulling documents to Java to aggregate in memory",
+        "to_stand_out": "Name the 100MB sort spill, mention `allowDiskUse`, `$facet` for parallel pipelines, and `$merge` / `$out` for materialized-view output"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "ebay",
+        "datadog",
+        "shopify"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Pipeline Mental Model",
+            "content": "The MongoDB aggregation pipeline is a sequence of **stages**, each a function from a stream of documents to a stream of documents. Documents flow in one end; a transformed stream comes out the other. Each stage is independent and composable — just like Unix pipes for structured data.\n\nThe aggregation framework is MongoDB's answer to SQL's `GROUP BY`, `JOIN`, and window functions.\n- The common core stages are **`$match`** (filter), **`$project`/`$addFields`** (reshape), **`$group`** (aggregate), **`$lookup`** (join), **`$unwind`** (flatten array), and **`$sort`/`$limit`/`$skip`** (ordering and pagination).\n- More advanced stages include **`$facet`** (run multiple pipelines in parallel), **`$bucket`** (histograms), **`$graphLookup`** (recursive joins), and **`$merge`/`$out`** (write results back).\n\n**Order matters** — a `$match` at the start can use an index to skip entire segments of the collection; the same `$match` after a `$group` runs against the full grouped output. Push filters, projections, and limits as early as possible."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Pipeline Stage Flow",
+            "content": "```mermaid\nflowchart LR\n    coll[\"orders collection\"] --> match[\"$match: status, date\"]\n    match --> group[\"$group: by customerId, sum total\"]\n    group --> lookup[\"$lookup: customers\"]\n    lookup --> unwind[\"$unwind: customer\"]\n    unwind --> project[\"$project: reshape fields\"]\n    project --> sort[\"$sort: total desc\"]\n    sort --> limit[\"$limit: 10\"]\n    limit --> out[\"Result stream\"]\n```"
+          },
+          {
+            "type": "step",
+            "title": "`$match` — Filter Early with Indexes",
+            "content": "**Rule: put `$match` first** so MongoDB can use indexes to satisfy it, just like a `find()` query.\n\n```javascript\ndb.orders.aggregate([\n  { $match: {\n      createdAt: { $gte: ISODate(\"2026-04-01\") },\n      status:    { $ne: \"CANCELLED\" }\n  }},\n  { $limit: 10000 }\n]);\n\n// Supporting index\ndb.orders.createIndex({ status: 1, createdAt: -1 });\n```\n\n**Spring Data equivalent**\n\n```java\nMatchOperation match = Aggregation.match(\n    Criteria.where(\"createdAt\").gte(Instant.now().minus(30, DAYS))\n            .and(\"status\").ne(\"CANCELLED\")\n);\n```"
+          },
+          {
+            "type": "step",
+            "title": "`$group` — Aggregate with Accumulators",
+            "content": "**Common accumulators**\n- `$sum`, `$avg`, `$min`, `$max` — numeric aggregates\n- `$push` — collect into array (preserves duplicates)\n- `$addToSet` — collect unique values\n- `$first`, `$last` — first/last value in group order\n- `$count` (4.4+) — simpler than `$sum: 1`\n\n```javascript\ndb.orders.aggregate([\n  { $match: { status: \"SHIPPED\" } },\n  { $group: {\n      _id: \"$customerId\",\n      orderCount: { $sum: 1 },\n      totalSpent: { $sum: \"$totalCents\" },\n      avgBasket:  { $avg: \"$totalCents\" },\n      lastOrderAt:{ $max: \"$createdAt\" },\n      skus:       { $addToSet: \"$items.sku\" }\n  }}\n]);\n```\n\n**Spring Data Java**\n\n```java\nGroupOperation group = Aggregation.group(\"customerId\")\n    .count().as(\"orderCount\")\n    .sum(\"totalCents\").as(\"totalSpent\")\n    .avg(\"totalCents\").as(\"avgBasket\")\n    .max(\"createdAt\").as(\"lastOrderAt\");\n```"
+          },
+          {
+            "type": "step",
+            "title": "`$lookup` — Server-Side Joins",
+            "content": "**Classic equality lookup**\n\n```javascript\ndb.orders.aggregate([\n  { $match: { status: \"SHIPPED\" } },\n  { $lookup: {\n      from:         \"customers\",\n      localField:   \"customerId\",\n      foreignField: \"_id\",\n      as:           \"customer\"\n  }},\n  { $unwind: { path: \"$customer\", preserveNullAndEmptyArrays: true } },\n  { $project: {\n      orderId:   \"$_id\",\n      total:     \"$totalCents\",\n      customerName:  \"$customer.name\",\n      customerEmail: \"$customer.email\"\n  }}\n]);\n```\n\n**Sub-pipeline lookup (3.6+) — filter and project inside the join**\n\n```javascript\n{ $lookup: {\n    from: \"customers\",\n    let:  { cid: \"$customerId\" },\n    pipeline: [\n      { $match: { $expr: { $and: [{ $eq: [\"$_id\", \"$$cid\"] }, { $eq: [\"$vip\", true] }] } } },\n      { $project: { name: 1, email: 1 } }\n    ],\n    as: \"customer\"\n}}\n```\n\n**Spring Data builder**\n\n```java\nLookupOperation lookup = LookupOperation.newLookup()\n    .from(\"customers\").localField(\"customerId\")\n    .foreignField(\"_id\").as(\"customer\");\nUnwindOperation unwind = Aggregation.unwind(\"customer\", true);\n```"
+          },
+          {
+            "type": "step",
+            "title": "Assembling in Spring Data",
+            "content": "**Compose the full pipeline**\n\n```java\n@Service\npublic class OrderAggregationService {\n  private final MongoTemplate mongoTemplate;\n  public OrderAggregationService(MongoTemplate mongoTemplate) { this.mongoTemplate = mongoTemplate; }\n\n  public List<CustomerTotals> topCustomers(Instant since) {\n    MatchOperation     match   = Aggregation.match(Criteria.where(\"createdAt\").gte(since));\n    GroupOperation     group   = Aggregation.group(\"customerId\")\n                                    .count().as(\"orderCount\")\n                                    .sum(\"totalCents\").as(\"totalCents\");\n    LookupOperation    lookup  = LookupOperation.newLookup()\n                                    .from(\"customers\").localField(\"_id\")\n                                    .foreignField(\"_id\").as(\"customer\");\n    UnwindOperation    unwind  = Aggregation.unwind(\"customer\", true);\n    ProjectionOperation project = Aggregation.project(\"orderCount\", \"totalCents\")\n                                    .and(\"customer.name\").as(\"customerName\");\n    SortOperation      sort    = Aggregation.sort(DESC, \"totalCents\");\n    LimitOperation     limit   = Aggregation.limit(10);\n\n    Aggregation pipeline = Aggregation\n        .newAggregation(match, group, lookup, unwind, project, sort, limit)\n        .withOptions(AggregationOptions.builder().allowDiskUse(true).build());\n\n    return mongoTemplate.aggregate(pipeline, \"orders\", CustomerTotals.class).getMappedResults();\n  }\n}\n```\n\n**`allowDiskUse(true)`** lets MongoDB spill large sorts and groups to disk past the 100MB in-memory limit — essential for analytics-scale pipelines."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Performance Considerations",
+            "content": "**When pipelines help:**\n- Server-side aggregation avoids shipping raw documents over the wire\n- `$match` first uses indexes\n- `$merge` / `$out` materialize results for reuse\n\n**When they hurt:**\n- `$lookup` without an index on the foreign key — full-collection scan per input doc\n- Large `$group` without `allowDiskUse` blows past the 100MB limit\n- `$lookup` on sharded collections has historical constraints (check version)\n\n**Watch for:**\n- Stage ordering — always `$match` → `$project` → heavy stages\n- `$unwind` after `$lookup` for 1:1 joins\n- `$facet` for parallel sub-pipelines in one pass\n- `$merge` beats `$out` for incremental materialization"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Pipeline = stream of stages**; each transforms the document stream\n- **`$match` first** to use indexes and shrink the set\n- **`$group`** with accumulators — `$sum`, `$avg`, `$push`, `$addToSet`\n- **`$lookup` + `$unwind`** is the canonical join shape\n- **Sub-pipeline `$lookup`** lets you filter/project inside the join\n- **`allowDiskUse(true)`** for pipelines exceeding 100MB memory\n- **`$merge` / `$out`** materialize results back into a collection"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Frame the pipeline**\n- Sequence of stages; documents stream through\n- Each stage is a function from stream to stream\n\n**Cover the core stages**\n- `$match` first — uses indexes\n- `$group` — collapses by `_id` with accumulators\n- `$lookup` — left-outer join, result arrives as array, `$unwind` flattens\n- `$project`/`$addFields` — reshape output\n\n**Emphasize ordering**\n- Reduce cardinality early\n- Heavy stages last on smallest possible input\n\n**Mention the operational realities**\n- `allowDiskUse(true)` for large pipelines\n- `$merge` / `$out` for materialized views\n- Indexes on foreign fields for `$lookup`\n\n**Close with the Spring Data builder**\n- `Aggregation.newAggregation(match, group, lookup, unwind, project, sort, limit)`\n- Executed via `mongoTemplate.aggregate()`"
+          }
+        ]
+      },
+      "followup_questions": [
+        "When would you pick `$facet` over running two separate pipelines?",
+        "How does `$merge` differ from `$out` for materializing results?",
+        "How do you paginate over an aggregation pipeline reliably?",
+        "Why does `$lookup` without a supporting index on the foreign field perform so poorly?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Aggregation Pipeline: $match, $group, $lookup",
+        "metaDescription": "Master the MongoDB aggregation pipeline — $match, $group, $lookup, $unwind, $project — with Spring Data Aggregation builder examples."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Frame the pipeline Sequence of stages; documents stream through Each stage is a function from stream to stream Cover the core stages $match first — uses indexes $group — collapses by _id with accumula",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The MongoDB aggregation pipeline is a sequence of stages, each a function from a stream of documents to a stream of documents. Documents flow in one end; a transformed stream comes out the other. Each stage is independent and composable — just like Unix pipes for structured data. The aggregation framework is MongoDB's answer to SQL's GROUP BY, JOIN, and window functions. The common core stages are $match (filter), $project/$addFields (reshape), $group (aggregate), $lookup (join), $unwind (flatten array), and $sort/$limit/$skip."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Ability to compose non-trivial server-side aggregations and understand stage ordering for performance"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Pipeline = stream of stages",
+              "each transforms the document stream $match first to use indexes and shrink the set $group with accumulators — $sum, $avg, $push, $addToSet $lookup + $unwind is the canonical join shape Sub-pipeline $lookup lets you filter/project inside the join allowDiskUse(true) for pipelines exceeding 100MB memory $merge / $out materialize results back into a collection"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The MongoDB aggregation pipeline is a sequence of stages, each a function from a stream of documents to a stream of documents. Documents flow in one end; a transformed stream comes out the other. Each stage is independent and composable — just like Unix pipes for structured data. The aggregation framework is MongoDB's answer to SQL's GROUP BY, JOIN, and window functions. The common core stages are $match (filter), $project/$addFields (reshape), $group (aggregate), $lookup (join), $unwind (flatten array), and $sort/$limit/$skip (ordering and pagination). More advanced stages include $facet (run multiple pipelines in parallel), $bucket (histograms), $graphLookup (recursive joins), and $merge/$out (write results back). Order matters — a $match at the start can use an index to skip entire segments of."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Placing $match after $group/$lookup, forgetting to $unwind after $lookup, or pulling documents to Java to aggregate in memory"
+            ]
+          }
+        ],
+        "cap": "Frame the pipeline Sequence of stages; documents stream through Each stage is a function from stream to stream Cover the core stages $match first — uses indexes $group — collapses by _id with accumula",
+        "familiarity_anchors": [
+          "Spring",
+          "MongoDB",
+          "Aggregation"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When would you pick `$facet` over running two separate pipelines?",
+          "How does `$merge` differ from `$out` for materializing results?",
+          "How do you paginate over an aggregation pipeline reliably?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-core-002",
+      "slug": "mongodb-multi-document-acid-transactions",
+      "question": "How does MongoDB support multi-document ACID transactions, and what are the limitations you should be aware of?",
+      "title": "MongoDB Multi-Document ACID Transactions",
+      "direct_answer": "Since **MongoDB 4.0 (replica sets)** and **4.2 (sharded clusters)**, multi-document transactions deliver ACID across documents and collections. They use **snapshot isolation** and **MVCC**; reads inside the transaction see a consistent snapshot from the moment it started, and conflicting concurrent writes raise `WriteConflict` and must retry. In Spring Boot you register a **`MongoTransactionManager`** bean and annotate service methods with **`@Transactional`**. The realities: transactions require a replica set (not standalone), have a default **60-second timeout**, add WiredTiger cache pressure, and should be used only when cross-document atomicity is genuinely required — single-document writes are always atomic natively.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Understanding when MongoDB transactions are genuinely needed and the operational cost of using them",
+        "common_mistake": "Using transactions for every write, or attempting them on a standalone `mongod`",
+        "to_stand_out": "Mention MVCC snapshot isolation, `withTransaction` retry loop on `TransientTransactionError`, the 60s limit, and sharded cluster two-phase commit cost"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "stripe",
+        "robinhood",
+        "ebay"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why and When",
+            "content": "Before 4.0, MongoDB offered only **single-document atomicity** — and that's still the default.\n- Embedded arrays, nested subdocuments, and multi-field updates on one document are atomic without a transaction and without the overhead.\n- The guidance is: **design for single-document atomicity first**; use transactions only when cross-document invariants truly require it.\n\nWhen you do need them, MongoDB transactions provide **full ACID**: atomic commit, consistent snapshot reads, snapshot isolation between concurrent transactions, and durable replication.\n- Under the hood they rely on **MVCC** — writes inside a transaction create versioned snapshots; concurrent transactions touching the same document raise `WriteConflict` and must retry.\n- On sharded clusters, the cluster coordinates **two-phase commit** across shards, paying a latency tax for cross-shard atomicity."
+          },
+          {
+            "type": "step",
+            "title": "Using `withTransaction` from the Driver",
+            "content": "**Node/Mongo shell idiom with automatic retry**\n\n```javascript\nconst session = client.startSession();\ntry {\n  await session.withTransaction(async () => {\n    await accounts.updateOne(\n      { _id: \"A\" }, { $inc: { balance: -100 } }, { session }\n    );\n    await accounts.updateOne(\n      { _id: \"B\" }, { $inc: { balance: 100 } }, { session }\n    );\n    await ledger.insertOne(\n      { from: \"A\", to: \"B\", amount: 100, t: new Date() }, { session }\n    );\n  }, {\n    readConcern:    { level: \"snapshot\" },\n    writeConcern:   { w: \"majority\" },\n    readPreference: \"primary\"\n  });\n} finally {\n  await session.endSession();\n}\n```\n\n**`withTransaction` retries automatically** on `TransientTransactionError` and `UnknownTransactionCommitResult`, up to ~120 seconds total."
+          },
+          {
+            "type": "step",
+            "title": "Spring Boot with `MongoTransactionManager`",
+            "content": "**Register the transaction manager (not auto-configured)**\n\n```java\n@Configuration\n@EnableTransactionManagement\npublic class MongoConfig {\n  @Bean\n  MongoTransactionManager transactionManager(MongoDatabaseFactory dbFactory) {\n    return new MongoTransactionManager(dbFactory);\n  }\n}\n```\n\n**Annotate service methods**\n\n```java\n@Service\npublic class TransferService {\n  private final AccountRepository accounts;\n  private final LedgerRepository  ledger;\n\n  public TransferService(AccountRepository accounts, LedgerRepository ledger) {\n    this.accounts = accounts; this.ledger = ledger;\n  }\n\n  @Transactional\n  public void transfer(String fromId, String toId, long cents) {\n    Account from = accounts.findById(fromId).orElseThrow();\n    Account to   = accounts.findById(toId).orElseThrow();\n    if (from.getBalance() < cents) throw new IllegalStateException(\"Insufficient funds\");\n\n    from.setBalance(from.getBalance() - cents);\n    to.setBalance(to.getBalance() + cents);\n    accounts.save(from);\n    accounts.save(to);\n    ledger.save(new Ledger(fromId, toId, cents, Instant.now()));\n  }\n}\n```\n\n**Retrying `WriteConflict`** — Spring rethrows `UncategorizedMongoDbException`; wrap the call in a retry template or use a driver-level `withTransaction` style helper for automatic retry."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Replica Set vs Sharded Cluster Transactions",
+            "content": "| Aspect | Replica Set (4.0+) | Sharded Cluster (4.2+) |\n|---|---|---|\n| Scope | Multiple docs, multiple collections in one DB/replica set | Docs across shards |\n| Coordination | Primary commits | Two-phase commit coordinator |\n| Latency | Low | Higher — round-trips to shards |\n| Max duration | 60s default (`transactionLifetimeLimitSeconds`) | Same |\n| Write concern | `majority` recommended | `majority` required |\n| Typical use | Cross-collection invariants | Unavoidable cross-shard writes |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Reach for a Transaction",
+            "content": "**When they help:**\n- True cross-document/cross-collection invariants (transfer, reserve + charge)\n- Multi-step workflows that must all succeed\n\n**When they hurt:**\n- Single-document writes — use atomic updates instead\n- Hot paths — transactions add WiredTiger cache pressure\n- Long-running operations inside a transaction — blocks replication\n\n**Watch for:**\n- **60s lifetime limit** — long transactions auto-abort\n- **Standalone mongod** can't use transactions — need replica set\n- **Oplog pressure** on high-rate transactional writes\n- **`TransientTransactionError`** signals a retryable abort — wrap with retry\n- Prefer designing the schema so single-document atomicity covers the invariant (embed small aggregates, use subset pattern)"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Available since 4.0** on replica sets, **4.2+** on sharded clusters\n- **Snapshot isolation via MVCC**; conflicting writes raise `WriteConflict`\n- **`withTransaction`** retries `TransientTransactionError` automatically\n- **Spring `@Transactional`** needs a `MongoTransactionManager` bean\n- **Single-document atomicity** covers most needs — use transactions sparingly\n- **60-second timeout** by default; long transactions auto-abort\n- **`writeConcern: majority`** recommended (required on sharded)"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**State the capability**\n- MongoDB supports multi-document ACID since 4.0 (replica set) and 4.2 (sharded cluster)\n- Snapshot isolation via MVCC\n\n**Give the Spring recipe**\n- Register `MongoTransactionManager` bean\n- Use `@Transactional` on service methods\n- Requires replica set — standalone mongod won't work\n\n**Show the driver idiom**\n- `session.withTransaction(...)` auto-retries transient errors\n- Read concern `snapshot`, write concern `majority`\n\n**Close with the discipline**\n- Single-doc writes are atomic natively — don't wrap every write\n- 60s timeout; keep transactions short\n- Sharded transactions use 2PC — more expensive; design to avoid"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does `withTransaction` decide which errors to retry?",
+        "What happens to replication lag when a long transaction holds an oplog entry?",
+        "When is the subset pattern a better answer than a multi-document transaction?",
+        "How do shard-key choices affect cross-shard transaction latency?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Multi-Document ACID Transactions with Spring Boot",
+        "metaDescription": "MongoDB transactions via withTransaction and @Transactional — snapshot isolation, WriteConflict retries, replica-set and sharded-cluster trade-offs."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "State the capability MongoDB supports multi-document ACID since 4.0 (replica set) and 4.2 (sharded cluster) Snapshot isolation via MVCC Give the Spring recipe Register MongoTransactionManager bean Use",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before 4.0, MongoDB offered only single-document atomicity — and that's still the default. Embedded arrays, nested subdocuments, and multi-field updates on one document are atomic without a transaction and without the overhead. The guidance is: design for single-document atomicity first; use transactions only when cross-document invariants truly require it. When you do need them, MongoDB transactions provide full ACID: atomic commit, consistent snapshot reads, snapshot isolation between concurrent transactions, and durable replication. Under the hood they rely on MVCC —."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding when MongoDB transactions are genuinely needed and the operational cost of using them"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Available since 4",
+              "0 on replica sets, 4",
+              "2+ on sharded clusters Snapshot isolation via MVCC; conflicting writes raise WriteConflict withTransaction retries TransientTransactionError automatically Spring @Transactional needs a MongoTransactionManager bean Single-document atomicity covers most needs — use transactions sparingly 60-second timeout by default; long transactions auto-abort writeConcern: majority recommended (required on sharded)"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before 4.0, MongoDB offered only single-document atomicity — and that's still the default. Embedded arrays, nested subdocuments, and multi-field updates on one document are atomic without a transaction and without the overhead. The guidance is: design for single-document atomicity first; use transactions only when cross-document invariants truly require it. When you do need them, MongoDB transactions provide full ACID: atomic commit, consistent snapshot reads, snapshot isolation between concurrent transactions, and durable replication. Under the hood they rely on MVCC — writes inside a transaction create versioned snapshots; concurrent transactions touching the same document raise WriteConflict and must retry. On sharded clusters, the cluster coordinates two-phase commit across shards, paying a latency tax for cross-shard atomicity."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using transactions for every write, or attempting them on a standalone mongod"
+            ]
+          }
+        ],
+        "cap": "State the capability MongoDB supports multi-document ACID since 4.0 (replica set) and 4.2 (sharded cluster) Snapshot isolation via MVCC Give the Spring recipe Register MongoTransactionManager bean Use",
+        "familiarity_anchors": [
+          "Since",
+          "MongoDB",
+          "WriteConflict"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does `withTransaction` decide which errors to retry?",
+          "What happens to replication lag when a long transaction holds an oplog entry?",
+          "When is the subset pattern a better answer than a multi-document transaction?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-core-003",
+      "slug": "mongodb-performance-explain-query-optimization",
+      "question": "How do you diagnose and optimize slow queries in MongoDB using `explain()` and other performance tools?",
+      "title": "MongoDB Performance: `explain()` and Query Optimization",
+      "direct_answer": "**`explain('executionStats')`** returns the query plan plus runtime metrics — the primary tool for slow-query diagnosis. Look for **`IXSCAN`** (good) vs **`COLLSCAN`** (bad), compare **`totalKeysExamined`** to **`nReturned`** (ratio near 1 is efficient), and watch for in-memory **`SORT`** stages that exceed 100MB. The usual fixes are adding an ESR-compliant compound index, turning a query into a **covered query** (projection + index fully satisfy it), restricting projections, and reducing cardinality early in aggregation pipelines. **Atlas Performance Advisor** and the **database profiler** (`db.setProfilingLevel(1, { slowms: 100 })`) surface which queries to diagnose first.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Ability to use `explain()` end-to-end and translate plan output into actionable index or query changes",
+        "common_mistake": "Only running `explain()` without `executionStats`, or ignoring the `keys examined / returned` ratio when an index exists but is inefficient",
+        "to_stand_out": "Walk through a full `executionStats` tree, call out `FETCH` vs `PROJECTION_COVERED`, the 100MB sort limit + `allowDiskUse`, and the ESR rule"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "uber",
+        "paypal",
+        "cloudflare"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Diagnostic Loop",
+            "content": "Slow MongoDB queries almost always fall into three buckets: **no suitable index (`COLLSCAN`)**, **index exists but scans too many keys** (bad ordering, missing predicate), or **large in-memory sort** that spills past 100MB.\n\nThe workflow is: find the slow query via the **profiler** or **Atlas Performance Advisor**, run **`explain('executionStats')`** to see the plan and runtime stats, and iterate on indexes and query shape until the plan is `IXSCAN` (ideally `PROJECTION_COVERED`) with a key-to-result ratio close to 1.\n\nTwo rules drive most index design. **ESR**: Equality → Sort → Range for compound-index field order. **Cover the query** when possible: include every filter, sort, and projected field in the same index so MongoDB never has to fetch the document."
+          },
+          {
+            "type": "step",
+            "title": "Reading `explain('executionStats')`",
+            "content": "**Run explain**\n\n```javascript\ndb.orders.find(\n  { customerId: \"u9\", status: \"SHIPPED\" }\n).explain(\"executionStats\");\n```\n\n**BAD output — `COLLSCAN`**\n\n```javascript\n{\n  queryPlanner: { winningPlan: { stage: \"COLLSCAN\" } },\n  executionStats: {\n    nReturned:            12,\n    totalKeysExamined:     0,\n    totalDocsExamined:  500000,   // scanned everything\n    executionTimeMillis:  342\n  }\n}\n```\n\n**GOOD output — `IXSCAN` + `FETCH`**\n\n```javascript\n{\n  queryPlanner: {\n    winningPlan: {\n      stage: \"FETCH\",\n      inputStage: {\n        stage: \"IXSCAN\",\n        keyPattern: { customerId: 1, status: 1 }\n      }\n    }\n  },\n  executionStats: {\n    nReturned:            12,\n    totalKeysExamined:    12,     // perfect — keys equal to results\n    totalDocsExamined:    12,\n    executionTimeMillis:    1\n  }\n}\n```\n\n**Fix the missing index**\n\n```javascript\ndb.orders.createIndex({ customerId: 1, status: 1 });\n```"
+          },
+          {
+            "type": "step",
+            "title": "ESR Rule for Compound Indexes",
+            "content": "**Equality → Sort → Range**\n\nFor a query with equality predicates, a sort, and a range predicate, the optimal compound index orders fields in that sequence.\n\n```javascript\n// Query\ndb.orders.find({ status: \"ACTIVE\", total: { $gt: 100 } })\n         .sort({ createdAt: -1 });\n\n// ESR-compliant index\ndb.orders.createIndex({\n  status:    1,   // equality\n  createdAt: -1,  // sort (direction matches)\n  total:     1    // range\n});\n```\n\n**Left-prefix rule reminder**\n- Index `{a,b,c}` serves `{a}`, `{a,b}`, `{a,b,c}` — not `{b}` or `{c}` alone\n- Design for the most common access paths"
+          },
+          {
+            "type": "step",
+            "title": "Covered Queries — Zero FETCH",
+            "content": "**Include every filter, sort, and projected field in the index; drop `_id` from projection**\n\n```javascript\ndb.orders.createIndex({ customerId: 1, status: 1, createdAt: -1, total: 1 });\n\ndb.orders.find(\n  { customerId: \"u9\", status: \"ACTIVE\" },\n  { _id: 0, customerId: 1, status: 1, createdAt: 1, total: 1 }\n).sort({ createdAt: -1 }).explain(\"executionStats\");\n\n// Winning plan: PROJECTION_COVERED wrapping IXSCAN\n// totalDocsExamined: 0 — index alone served the query\n```\n\n**Why it's the fastest shape**\n- No document fetches\n- Working set limited to index pages\n- Index is smaller than full documents; fits in RAM"
+          },
+          {
+            "type": "step",
+            "title": "Profiler, Slow Log, and Atlas Advisor",
+            "content": "**Enable the profiler**\n\n```javascript\n// Log every query taking > 100ms to system.profile\ndb.setProfilingLevel(1, { slowms: 100 });\n\n// Top slow queries in the last hour\ndb.system.profile.find({ ts: { $gt: new Date(Date.now() - 3600000) } })\n                 .sort({ millis: -1 })\n                 .limit(20);\n```\n\n**Aggregate slow queries by shape**\n\n```javascript\ndb.system.profile.aggregate([\n  { $match: { ns: \"mydb.orders\" } },\n  { $group: { _id: \"$queryHash\", count: { $sum: 1 }, avgMs: { $avg: \"$millis\" } } },\n  { $sort: { avgMs: -1 } }, { $limit: 10 }\n]);\n```\n\n**Atlas Performance Advisor** surfaces slow-query patterns and auto-suggests indexes; validate suggestions by running `explain()` before applying."
+          },
+          {
+            "type": "step",
+            "title": "Aggregation Pipeline Optimizations",
+            "content": "**`$match` and `$project` first**\n\n```javascript\ndb.orders.aggregate([\n  { $match: { status: \"SHIPPED\" } },              // uses { status: 1 } index\n  { $project: { customerId: 1, total: 1 } },      // drop unused fields\n  { $group: { _id: \"$customerId\", total: { $sum: \"$total\" } } }\n], { allowDiskUse: true });                        // spill if > 100MB\n```\n\n**Additional tips**\n- Ensure foreign fields used by `$lookup` are indexed\n- Prefer `$merge` / `$out` to materialize expensive results\n- Use `$facet` only when necessary — it runs sub-pipelines in parallel but shares the 100MB limit"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Fix the Right Thing",
+            "content": "**When adding an index helps:**\n- `COLLSCAN` on a frequent query\n- High `totalKeysExamined / nReturned` ratio\n- Sort stages that would exceed 100MB\n\n**When adding an index hurts:**\n- Write-heavy workloads where every extra index slows writes\n- Overlapping indexes (drop older ones after verifying with `$indexStats`)\n\n**Watch for:**\n- **Index not being used** — query predicate types don't match (string vs int)\n- **`FETCH` after `IXSCAN`** when projection could cover\n- **`SORT` stage in plan** — in-memory sort; consider matching index direction\n- **`allowDiskUse`** needed for aggregations spilling past 100MB\n- **Cached plan staleness** — run `explain('allPlansExecution')` when changes don't seem to help"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`explain('executionStats')`** is the primary diagnostic tool\n- **`COLLSCAN` → add index**; **`IXSCAN` with high keys/returned ratio → refine index**\n- **ESR rule** for compound-index field ordering\n- **Covered queries** eliminate `FETCH` — fastest possible read\n- **100MB sort limit**; use `allowDiskUse(true)` for analytics\n- **Profiler + Atlas Advisor** surface slow queries to diagnose\n- **`$indexStats`** audits usage; drop unused indexes to cut write cost"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Start with the tool**\n- `explain('executionStats')` for the plan plus runtime stats\n- Look for `IXSCAN` vs `COLLSCAN` and the keys-to-returned ratio\n\n**Apply ESR**\n- Equality → Sort → Range for compound-index field order\n- Left-prefix rule for derived queries\n\n**Mention covered queries**\n- Include every filter, sort, and projected field in the index\n- Drop `_id` from the projection\n- Plan shows `PROJECTION_COVERED` and `totalDocsExamined: 0`\n\n**Cover the operational tools**\n- Profiler `db.setProfilingLevel(1, { slowms: 100 })`\n- Atlas Performance Advisor\n- `$indexStats` for usage audits\n\n**Close with aggregation tips**\n- `$match` first to use indexes\n- `allowDiskUse(true)` for > 100MB pipelines\n- `$merge` / `$out` for materialized views"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you detect a stale plan cache and force a re-evaluation?",
+        "When is `$indexStats` useful for finding safe-to-drop indexes?",
+        "What does `winningPlan` vs `rejectedPlans` in explain output tell you?",
+        "How do you interpret `executionTimeMillisEstimate` in the execution stats tree?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Performance: explain() and Query Optimization",
+        "metaDescription": "Diagnose MongoDB slow queries with explain('executionStats') — ESR rule, covered queries, profiler, and Atlas Performance Advisor workflow."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Start with the tool explain('executionStats') for the plan plus runtime stats Look for IXSCAN vs COLLSCAN and the keys-to-returned ratio Apply ESR Equality → Sort → Range for compound-index field orde",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Slow MongoDB queries almost always fall into three buckets: no suitable index (COLLSCAN), index exists but scans too many keys (bad ordering, missing predicate), or large in-memory sort that spills past 100MB. The workflow is: find the slow query via the profiler or Atlas Performance Advisor, run explain('executionStats') to see the plan and runtime stats, and iterate on indexes and query shape until the plan is IXSCAN (ideally PROJECTION_COVERED) with a key-to-result ratio close to 1. Two rules drive most."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Ability to use explain() end-to-end and translate plan output into actionable index or query changes"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "explain('executionStats') is the primary diagnostic tool COLLSCAN → add index",
+              "IXSCAN with high keys/returned ratio → refine index ESR rule for compound-index field ordering Covered queries eliminate FETCH — fastest possible read 100MB sort limit",
+              "use allowDiskUse(true) for analytics Profiler + Atlas Advisor surface slow queries to diagnose $indexStats audits usage",
+              "drop unused indexes to cut write cost"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Slow MongoDB queries almost always fall into three buckets: no suitable index (COLLSCAN), index exists but scans too many keys (bad ordering, missing predicate), or large in-memory sort that spills past 100MB. The workflow is: find the slow query via the profiler or Atlas Performance Advisor, run explain('executionStats') to see the plan and runtime stats, and iterate on indexes and query shape until the plan is IXSCAN (ideally PROJECTION_COVERED) with a key-to-result ratio close to 1. Two rules drive most index design. ESR: Equality → Sort → Range for compound-index field order. Cover the query when possible: include every filter, sort, and projected field in the same index so MongoDB never has to fetch the document."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Only running explain() without executionStats, or ignoring the keys examined / returned ratio when an index exists but is inefficient"
+            ]
+          }
+        ],
+        "cap": "Start with the tool explain('executionStats') for the plan plus runtime stats Look for IXSCAN vs COLLSCAN and the keys-to-returned ratio Apply ESR Equality → Sort → Range for compound-index field orde",
+        "familiarity_anchors": [
+          "IXSCAN",
+          "COLLSCAN",
+          "Atlas"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you detect a stale plan cache and force a re-evaluation?",
+          "When is `$indexStats` useful for finding safe-to-drop indexes?",
+          "What does `winningPlan` vs `rejectedPlans` in explain output tell you?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-core-004",
+      "slug": "mongodb-replica-sets-read-preferences",
+      "question": "How do MongoDB replica sets work, and how do read preferences affect how your Spring Boot application reads data?",
+      "title": "MongoDB Replica Sets and Read Preferences",
+      "direct_answer": "A **replica set** is a group of `mongod` processes holding the same data — one **primary** accepts all writes, multiple **secondaries** tail the primary's oplog, and an optional **arbiter** votes in elections but stores no data. On primary failure the set **elects** a new primary within ~10s from the members with the most current oplog position. **Read preferences** route reads: `primary` (strong), `primaryPreferred`, `secondary` (offload, may be stale), `secondaryPreferred`, `nearest` (lowest latency). Combined with **`writeConcern: majority`** and **`readConcern: majority`**, you get durable, read-your-writes behavior. In Spring Boot you set the preference on the `MongoClient` connection string or override per `MongoTemplate`.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Understanding of HA, failover, and the consistency-vs-latency trade-off introduced by secondary reads",
+        "common_mistake": "Using `readPreference: secondary` for read-your-writes, ignoring replication lag, or using arbiters in production voting critical configurations",
+        "to_stand_out": "Explain majority write concern, `maxStalenessSeconds`, election timing, Hidden/Delayed secondary roles, and multi-region read routing"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "expedia",
+        "ibm",
+        "sega"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Replica Set Fundamentals",
+            "content": "A replica set gives you **high availability** and **data redundancy**. The typical shape is three voting members — one primary, two secondaries — on separate hosts and availability zones. **Writes always go to the primary**; secondaries replicate by tailing the primary's **oplog** asynchronously.\n\nWhen the primary fails, the remaining voting members run an **election**. The secondary with the most current oplog wins, typically within 10–12 seconds. During election writes are rejected with `NotPrimary`; drivers auto-retry once a new primary is elected.\n\nMember roles include **secondary** (replicates, can serve reads), **priority 0** (replicates, cannot become primary — useful for analytics), **hidden** (invisible to drivers; used for backups), **delayed** (holds an intentional lag for point-in-time recovery), and **arbiter** (votes, no data — often discouraged in production because it doesn't increase durability)."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Replica Set Topology and Read Routing",
+            "content": "```mermaid\nflowchart TB\n    client[\"Application (driver)\"] --> router[\"Read preference selector\"]\n    subgraph replicaSet[\"Replica Set rs0\"]\n        primary[\"Primary (writes + strong reads)\"]\n        sec1[\"Secondary 1\"]\n        sec2[\"Secondary 2\"]\n        primary -->|\"oplog\"| sec1\n        primary -->|\"oplog\"| sec2\n    end\n    router -->|\"primary / primaryPreferred\"| primary\n    router -->|\"secondary / secondaryPreferred\"| sec1\n    router -->|\"secondary / secondaryPreferred\"| sec2\n    router -->|\"nearest\"| sec1\n    router -->|\"nearest\"| primary\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Read Preference Modes",
+            "content": "| Mode | Routes to | Consistency | Typical Use |\n|---|---|---|---|\n| `primary` | Primary only | Strong, read-your-writes | Default; writes + critical reads |\n| `primaryPreferred` | Primary, fallback secondary | Strong when possible | HA with graceful fallback |\n| `secondary` | Secondaries only | Eventually consistent | Analytics, dashboards |\n| `secondaryPreferred` | Secondaries, fallback primary | Eventually consistent | Offload reads |\n| `nearest` | Lowest-latency member | May be stale | Geo-distributed, latency-critical reads |"
+          },
+          {
+            "type": "step",
+            "title": "Write Concern and Read Concern Recap",
+            "content": "**Write concern** — how many replicas ack before success\n- `w: 1` — primary only; lost on failover\n- `w: \"majority\"` — durable; standard production default\n- `j: true` — fsync journal before ack\n\n**Read concern** — how fresh the read\n- `local` — latest on the queried node (may roll back)\n- `majority` — only majority-committed data\n- `linearizable` — strongest, single-doc only\n- `snapshot` — consistent view inside a transaction\n\n**Combine**: `w: majority` + `readConcern: majority` + `readPreference: primary` is the durable read-your-writes default."
+          },
+          {
+            "type": "step",
+            "title": "Configuring Read Preference in Spring Boot",
+            "content": "**Connection-string level (global default)**\n\n```yaml\nspring:\n  data:\n    mongodb:\n      uri: \"mongodb://host1:27017,host2:27017,host3:27017/mydb?replicaSet=rs0&readPreference=primaryPreferred&w=majority&readConcernLevel=majority\"\n```\n\n**Programmatic `MongoClient` bean**\n\n```java\n@Bean\npublic MongoClient mongoClient() {\n  MongoClientSettings settings = MongoClientSettings.builder()\n      .applyConnectionString(new ConnectionString(\n        \"mongodb://host1:27017,host2:27017,host3:27017/?replicaSet=rs0\"))\n      .readPreference(ReadPreference.primary())\n      .writeConcern(WriteConcern.MAJORITY)\n      .readConcern(ReadConcern.MAJORITY)\n      .build();\n  return MongoClients.create(settings);\n}\n```\n\n**Per-template override for analytics**\n\n```java\n@Bean(name = \"analyticsMongoTemplate\")\npublic MongoTemplate analyticsMongoTemplate(MongoDatabaseFactory factory) {\n  MongoTemplate t = new MongoTemplate(factory);\n  t.setReadPreference(ReadPreference.secondaryPreferred(\n      TagSet.of(new Tag(\"workload\", \"analytics\")),  // optional member tags\n      90_000, TimeUnit.MILLISECONDS));             // maxStalenessSeconds\n  return t;\n}\n```\n\n**Per-query override**\n\n```java\nQuery q = new Query(Criteria.where(\"status\").is(\"SHIPPED\"))\n    .withReadPreference(ReadPreference.secondaryPreferred());\nList<Order> rows = mongoTemplate.find(q, Order.class);\n```"
+          },
+          {
+            "type": "step",
+            "title": "Elections, Lag, and `maxStalenessSeconds`",
+            "content": "**Elections**\n- Triggered by primary stepping down, network partition, or heartbeat timeout\n- Candidate with highest oplog position wins\n- Majority of voting members required for quorum\n- Writes rejected (`NotPrimary`) during election — drivers retry\n\n**Replication lag**\n- Measured via `rs.printSecondaryReplicationInfo()`\n- Normal: milliseconds under healthy load\n- Can grow to seconds/minutes during replication storms or slow secondaries\n\n**Guard against stale secondary reads**\n\n```java\nReadPreference pref = ReadPreference.secondaryPreferred(\n    TagSet.of(),\n    60, TimeUnit.SECONDS);  // refuse a secondary > 60s behind\n```\n\n`maxStalenessSeconds` forces the driver to skip secondaries that have fallen too far behind."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Choosing Preferences Per Workload",
+            "content": "**When `primary` helps:**\n- Read-your-writes\n- Financial, ordering, authoritative reads\n- Anywhere stale data is unacceptable\n\n**When `secondary`/`secondaryPreferred` helps:**\n- Analytics, dashboards, reports\n- Heavy read offload from primary\n- Multi-region read latency improvement\n\n**When `nearest` helps:**\n- Geo-distributed apps where lowest latency matters more than freshness\n- Combined with tagged members for zone-aware routing\n\n**Watch for:**\n- **Replication lag** during secondary reads — use `maxStalenessSeconds`\n- **Arbiters** don't carry data; avoid them in 3-node production sets — prefer 3 data-bearing nodes\n- **Election storms** from flapping networks — tune election timeouts carefully\n- **Reading own writes on a secondary** is almost always a bug — stay on primary or use `readConcern: majority` + read-your-writes session tokens"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Replica set = primary + secondaries** replicating async from the oplog\n- **Elections** pick a new primary in ~10s from members with the freshest oplog\n- **Read preferences** route reads: `primary`, `primaryPreferred`, `secondary`, `secondaryPreferred`, `nearest`\n- **`w: majority` + `readConcern: majority`** is the durable read-your-writes default\n- **`maxStalenessSeconds`** refuses reads from lagging secondaries\n- **Arbiters don't bear data** — avoid in production durability-critical sets\n- **Hidden/delayed members** serve backups and point-in-time recovery"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Describe the topology**\n- Primary + secondaries + optional arbiter\n- Writes to primary, async replication via oplog\n- Election in ~10s on primary failure\n\n**Cover read preferences**\n- `primary` (default), `primaryPreferred`, `secondary`, `secondaryPreferred`, `nearest`\n- Each trades consistency for latency or load offload\n\n**Mention write/read concerns**\n- `w: majority` + `readConcern: majority` for durable read-your-writes\n- `linearizable` read concern for strict recency (single-doc only)\n\n**Call out gotchas**\n- Replication lag on secondaries — use `maxStalenessSeconds`\n- Avoid arbiters where durability matters\n- Retry `NotPrimary` during elections\n\n**Close with Spring config**\n- Connection string or programmatic MongoClient settings\n- Per-template beans for analytics (`secondaryPreferred`)\n- Per-query overrides when needed"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why do arbiters reduce durability despite making elections possible with fewer data nodes?",
+        "How does `readConcern: majority` interact with secondary reads?",
+        "What's the purpose of a delayed secondary and how do you configure one?",
+        "How do you design a replica set for multi-region HA with low write latency?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Replica Sets, Read Preferences, and Consistency",
+        "metaDescription": "How MongoDB replica sets, elections, and read preferences work — primary/secondary/arbiter, write/read concern, maxStalenessSeconds, and Spring Boot config."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Describe the topology Primary + secondaries + optional arbiter Writes to primary, async replication via oplog Election in ~10s on primary failure Cover read preferences primary (default), primaryPrefe",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A replica set gives you high availability and data redundancy. The typical shape is three voting members — one primary, two secondaries — on separate hosts and availability zones. Writes always go to the primary; secondaries replicate by tailing the primary's oplog asynchronously. When the primary fails, the remaining voting members run an election. The secondary with the most current oplog wins, typically within 10–12 seconds. During election writes are rejected with NotPrimary; drivers auto-retry once a new primary is."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of HA, failover, and the consistency-vs-latency trade-off introduced by secondary reads"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Replica set = primary + secondaries replicating async from the oplog Elections pick a new primary in ~10s from members with the freshest oplog Read preferences route reads: primary, primaryPreferred, secondary, secondaryPreferred, nearest w: majority + readConcern: majority is the durable read-your-writes default maxStalenessSeconds refuses reads from lagging secondaries Arbiters don't bear data",
+              "avoid in production durability-critical sets Hidden/delayed members serve backups and point-in-time recovery"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A replica set gives you high availability and data redundancy. The typical shape is three voting members — one primary, two secondaries — on separate hosts and availability zones. Writes always go to the primary; secondaries replicate by tailing the primary's oplog asynchronously. When the primary fails, the remaining voting members run an election. The secondary with the most current oplog wins, typically within 10–12 seconds. During election writes are rejected with NotPrimary; drivers auto-retry once a new primary is elected. Member roles include secondary (replicates, can serve reads), priority 0 (replicates, cannot become primary — useful for analytics), hidden (invisible to drivers; used for backups), delayed (holds an intentional lag for point-in-time recovery), and arbiter (votes, no data —."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using readPreference: secondary for read-your-writes, ignoring replication lag, or using arbiters in production voting critical configurations"
+            ]
+          }
+        ],
+        "cap": "Describe the topology Primary + secondaries + optional arbiter Writes to primary, async replication via oplog Election in ~10s on primary failure Cover read preferences primary (default), primaryPrefe",
+        "familiarity_anchors": [
+          "Combined",
+          "Spring",
+          "MongoClient"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why do arbiters reduce durability despite making elections possible with fewer data nodes?",
+          "How does `readConcern: majority` interact with secondary reads?",
+          "What's the purpose of a delayed secondary and how do you configure one?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-core-005",
+      "slug": "mongodb-sharding-shard-keys-chunks-balancer",
+      "question": "How does MongoDB sharding work — shard keys, chunks, the balancer, zones, and `mongos` routing?",
+      "title": "MongoDB Sharding: Shard Keys, Chunks, Balancer, Zones",
+      "direct_answer": "MongoDB sharding partitions a collection across shards by the **shard key**. Data is split into **chunks** (default 128MB ranges or hashed buckets); the **balancer** moves chunks between shards to keep distribution even. **`mongos`** routers pull metadata from **config servers** and route each query to the right shard(s) — queries including the shard key are **targeted** (one shard); those without it **scatter-gather** across all shards. **Zones** pin ranges to specific shards for data residency or whale isolation. The shard key choice decides everything — high cardinality, low frequency, non-monotonic (or hashed), query-aligned — and bad choices cause the classic **hot-shard** failure mode that `reshardCollection` (5.0+) fixes online.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you understand the cluster topology, the shard-key contract, and the operational realities of sharded MongoDB",
+        "common_mistake": "Picking a monotonic or low-cardinality shard key, assuming sharding adds free scale without access-pattern discipline",
+        "to_stand_out": "Discuss `reshardCollection`, hashed vs compound keys, jumbo chunks, zones, targeted vs scatter-gather, and the role of config servers"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "meta",
+        "uber",
+        "netflix"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Sharding in One Picture",
+            "content": "A sharded MongoDB cluster has three moving parts: **shards** (each a replica set holding a subset of the data), a **config server** replica set (holds cluster metadata — chunks, shard-key ranges, zones), and **`mongos` routers** (stateless query routers in front of the shards).\n\nThe **shard key** is a field (or compound of fields) that MongoDB uses to decide which shard owns each document.\n- The collection's key range is divided into **chunks** — either 128MB byte ranges (ranged sharding) or evenly-distributed hashed buckets (hashed sharding).\n- The **balancer** runs in the background to move chunks between shards when one gets too much data.\n\n**`mongos`** looks up the relevant chunk in the config server, routes the query to the owning shard(s), and merges results. Queries including the shard key are **targeted** (one shard, fast); queries without it **scatter-gather** to all shards (slow, expensive)."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Sharded Cluster Topology",
+            "content": "```mermaid\nflowchart TB\n    app[\"Application\"] --> mongos1[\"mongos router 1\"]\n    app --> mongos2[\"mongos router 2\"]\n    mongos1 --> configRs[\"Config Server Replica Set (metadata)\"]\n    mongos2 --> configRs\n    subgraph shardA[\"Shard A (replica set)\"]\n        pa[\"Primary\"] --> sa1[\"Secondary\"]\n        pa --> sa2[\"Secondary\"]\n    end\n    subgraph shardB[\"Shard B (replica set)\"]\n        pb[\"Primary\"] --> sb1[\"Secondary\"]\n        pb --> sb2[\"Secondary\"]\n    end\n    subgraph shardC[\"Shard C (replica set)\"]\n        pc[\"Primary\"] --> sc1[\"Secondary\"]\n        pc --> sc2[\"Secondary\"]\n    end\n    mongos1 --> pa\n    mongos1 --> pb\n    mongos1 --> pc\n    mongos2 --> pa\n    mongos2 --> pb\n    mongos2 --> pc\n    balancer[\"Balancer (runs on primary mongos)\"] --> configRs\n```"
+          },
+          {
+            "type": "step",
+            "title": "Enabling Sharding and Picking a Shard Key",
+            "content": "**Enable sharding**\n\n```javascript\nuse admin\nsh.enableSharding(\"mydb\");\n\n// Hashed shard key — uniform distribution, no hot spots\ndb.adminCommand({\n  shardCollection: \"mydb.orders\",\n  key: { _id: \"hashed\" }\n});\n\n// Compound range + hash (4.4+) — tenant locality + even distribution within tenant\ndb.adminCommand({\n  shardCollection: \"mydb.orders\",\n  key: { tenantId: 1, _id: \"hashed\" }\n});\n```\n\n**Good shard key characteristics**\n- **High cardinality** — many unique values\n- **Low frequency** — no single value dominates\n- **Non-monotonic** — doesn't always increase (ObjectId, timestamps are monotonic traps)\n- **Query-aligned** — common queries include the shard key so ops are targeted\n- **Immutable** (preferred; 4.2+ allows mutable with cost)\n\n**Anti-patterns**\n- `_id` as ObjectId — timestamp prefix makes it monotonic; latest chunk is always hot\n- Low-cardinality enums (`status`, `country`) — hot shards on dominant values\n- Whale tenants (one customer = 80% of traffic) — requires zones"
+          },
+          {
+            "type": "step",
+            "title": "Chunks, Balancer, and Routing",
+            "content": "**Inspect state**\n\n```javascript\nsh.status({ verbose: true });\ndb.orders.getShardDistribution();\n\nuse config\ndb.chunks.find({ ns: \"mydb.orders\" }).count();\ndb.chunks.find({ jumbo: true });\n```\n\n**Balancer control**\n\n```javascript\nsh.getBalancerState();        // is it enabled?\nsh.isBalancerRunning();       // actively moving chunks?\nsh.startBalancer();\nsh.stopBalancer();\nsh.disableBalancing(\"mydb.orders\");  // per-collection pause\n```\n\n**Manual chunk ops (rare; use for targeted fixes)**\n\n```javascript\nsh.splitAt(\"mydb.orders\", { orderId: \"2026-04-24-mid\" });\nsh.moveChunk(\"mydb.orders\", { orderId: \"ord-100\" }, \"shardB\");\n```\n\n**Targeted vs scatter-gather queries**\n\n```javascript\n// Targeted — mongos reads one shard\ndb.orders.find({ tenantId: \"t1\", _id: \"ord-100\" });\n\n// Scatter-gather — mongos fans out to every shard, merges results\ndb.orders.find({ status: \"SHIPPED\" });\n```\n\n**Design queries to include the shard key** whenever possible."
+          },
+          {
+            "type": "step",
+            "title": "Zones for Residency and Whale Isolation",
+            "content": "**Tag shards and pin ranges to them**\n\n```javascript\n// Zone by region for data residency\nsh.addShardToZone(\"shardEU\", \"EU\");\nsh.addShardToZone(\"shardUS\", \"US\");\n\nsh.updateZoneKeyRange(\"mydb.orders\",\n  { region: \"EU\", _id: MinKey }, { region: \"EU\", _id: MaxKey }, \"EU\");\nsh.updateZoneKeyRange(\"mydb.orders\",\n  { region: \"US\", _id: MinKey }, { region: \"US\", _id: MaxKey }, \"US\");\n\n// Zone a whale tenant onto a dedicated shard\nsh.addShardToZone(\"shardWhale\", \"whale\");\nsh.updateZoneKeyRange(\"mydb.orders\",\n  { tenantId: \"t_whale\", _id: MinKey }, { tenantId: \"t_whale\", _id: MaxKey }, \"whale\");\n```\n\n**Use cases**\n- Data residency (GDPR: EU data stays in EU shards)\n- Whale tenant isolation\n- Tiered hardware (hot data on fast shard, cold on cheap)"
+          },
+          {
+            "type": "step",
+            "title": "Resharding Online (5.0+)",
+            "content": "**`reshardCollection` changes the shard key while live**\n\n```javascript\ndb.adminCommand({\n  reshardCollection: \"mydb.orders\",\n  key: { tenantId: 1, _id: \"hashed\" }\n});\n\ndb.adminCommand({ reshardCollection: \"mydb.orders\", state: 1 });  // progress\ndb.adminCommand({ abortReshardCollection: \"mydb.orders\" });       // abort\n```\n\n**Operational notes**\n- High I/O during resharding — schedule off-peak\n- Pause/resume/abort supported\n- Before 5.0 you had to create a new collection, dual-write, and cut over — a weeks-long manual process"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Sharding Helps and Hurts",
+            "content": "**When it helps:**\n- Working set exceeds single-replica-set capacity (> 2TB)\n- Sustained writes beyond one replica set (> 20K/s)\n- Data residency via zones\n- Multi-tenant workloads with whale isolation\n\n**When it hurts:**\n- Small datasets — vertical scaling is simpler and cheaper\n- Unclear access patterns — shard key becomes structural debt\n- Cross-shard queries dominate — scatter-gather everywhere\n\n**Watch for:**\n- **Jumbo chunks** — single shard-key value exceeds chunk size; can't split or move\n- **Hot shards** — monotonic or whale shard key; fix with `reshardCollection`\n- **Scatter-gather queries** — design queries to include the shard key\n- **Multi-document transactions across shards** are supported but 2PC-costly\n- **Balancer off** — `sh.getBalancerState()` to verify\n- **Config server downtime** — cluster becomes read-only for metadata operations"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Cluster = shards + config servers + `mongos`**\n- **Shard key** decides per-document shard placement; high cardinality + low frequency + non-monotonic\n- **Chunks** are 128MB ranges (ranged) or hashed buckets; **balancer** moves them to keep shards even\n- **Targeted queries** include the shard key; **scatter-gather** queries hit every shard\n- **Zones** pin ranges to tagged shards — residency, whale isolation, tiered hardware\n- **Jumbo chunks** signal a bad shard key\n- **`reshardCollection` (5.0+)** changes the shard key online"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Describe the topology**\n- Shards (replica sets), config servers, `mongos` routers\n- `mongos` is stateless and pulls metadata from config servers\n\n**Explain the shard key**\n- Field(s) that decide which shard owns each document\n- Good = high cardinality, low frequency, non-monotonic, query-aligned\n- Bad = monotonic (ObjectId), low-cardinality, whale values\n\n**Cover chunks and balancer**\n- Chunks 128MB ranges or hashed buckets\n- Balancer moves chunks to keep distribution even\n- Pause per collection during sensitive ops\n\n**Describe routing**\n- Targeted query = one shard, fast\n- Scatter-gather = every shard, slow — design queries to include the shard key\n\n**Mention zones and resharding**\n- Zones pin key ranges to shards for residency or whale isolation\n- `reshardCollection` (5.0+) changes the shard key online\n\n**Close with advice**\n- Don't shard prematurely — vertical scale goes far\n- Test shard distribution with production-scale data before going live"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens to writes during a chunk migration?",
+        "How does `reshardCollection` keep data consistent during the change?",
+        "When does a compound + hashed shard key beat pure hashed?",
+        "How do zones interact with balancer decisions?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Sharding: Shard Keys, Chunks, Balancer, and Zones",
+        "metaDescription": "MongoDB sharding explained — shard keys, chunks, balancer, mongos routing, zones for residency and whale isolation, and reshardCollection."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Describe the topology Shards (replica sets), config servers, mongos routers mongos is stateless and pulls metadata from config servers Explain the shard key Field(s) that decide which shard owns each",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A sharded MongoDB cluster has three moving parts: shards (each a replica set holding a subset of the data), a config server replica set (holds cluster metadata — chunks, shard-key ranges, zones), and mongos routers (stateless query routers in front of the shards). The shard key is a field (or compound of fields) that MongoDB uses to decide which shard owns each document. The collection's key range is divided into chunks — either 128MB byte ranges (ranged sharding) or evenly-distributed."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the cluster topology, the shard-key contract, and the operational realities of sharded MongoDB"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Cluster = shards + config servers + mongos Shard key decides per-document shard placement; high cardinality + low frequency + non-monotonic Chunks are 128MB ranges (ranged) or hashed buckets; balancer moves them to keep shards even Targeted queries include the shard key; scatter-gather queries hit every shard Zones pin ranges to tagged shards — residency, whale isolation, tiered hardware Jumbo chunks signal a bad shard key reshardCollection (5",
+              "0+) changes the shard key online"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A sharded MongoDB cluster has three moving parts: shards (each a replica set holding a subset of the data), a config server replica set (holds cluster metadata — chunks, shard-key ranges, zones), and mongos routers (stateless query routers in front of the shards). The shard key is a field (or compound of fields) that MongoDB uses to decide which shard owns each document. The collection's key range is divided into chunks — either 128MB byte ranges (ranged sharding) or evenly-distributed hashed buckets (hashed sharding). The balancer runs in the background to move chunks between shards when one gets too much data. mongos looks up the relevant chunk in the config server, routes the query to the owning shard(s), and merges."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Picking a monotonic or low-cardinality shard key, assuming sharding adds free scale without access-pattern discipline"
+            ]
+          }
+        ],
+        "cap": "Describe the topology Shards (replica sets), config servers, mongos routers mongos is stateless and pulls metadata from config servers Explain the shard key Field(s) that decide which shard owns each",
+        "familiarity_anchors": [
+          "MongoDB",
+          "Zones"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens to writes during a chunk migration?",
+          "How does `reshardCollection` keep data consistent during the change?",
+          "When does a compound + hashed shard key beat pure hashed?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    }
+  ]
+}

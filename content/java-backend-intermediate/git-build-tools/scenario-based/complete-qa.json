@@ -1,0 +1,129 @@
+{
+  "topic": "Git & Build Tool Scenarios",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "gbt-sc-001",
+      "slug": "accidentally-committed-secret-to-git",
+      "question": "An engineer accidentally committed an AWS access key to git and pushed to GitHub. How do you remediate?",
+      "title": "Secret Committed to Git: Rotate, Purge, Prevent",
+      "direct_answer": "Treat as compromised the moment it hits the remote: (1) **rotate the credential immediately** (deactivate then create new) — invalidating the leaked value is the only real mitigation; (2) **audit usage** via CloudTrail/Audit Logs for unauthorized API calls; (3) **purge from history** with `git filter-repo` or BFG, then force-push (every collaborator must re-clone); (4) **prevent recurrence**: pre-commit hooks (gitleaks, trufflehog), GitHub Push Protection, OIDC instead of static credentials.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Understanding that git history rewrites don't undo a leak — rotation is the only real fix",
+        "common_mistake": "Trying to `git revert` the commit and thinking the secret is gone — the secret is still in history; revert just adds a new commit",
+        "to_stand_out": "Discuss why force-push to public history is irreversible (clones, forks, GitHub events, search indexes), and OIDC as the structural fix"
+      },
+      "company_tags": [
+        "github",
+        "aws",
+        "gitguardian",
+        "stripe"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Once It Hits the Remote, It's Public",
+            "content": "A secret pushed to GitHub is compromised the moment the push completes — secret-scanning bots monitor public repos and the GitHub Events API in real time, indexing new commits within seconds. Even on private repos, you can't rule out the credential being seen by anyone with read access, cached by GitHub's UI, or backed up by integrations.\n\nThe instinct to \"clean it up\" first — reverting the commit, force-pushing, removing from history — is wrong. None of those actions invalidate the leaked credential. The credential is the issue; the git history is just where it leaked. The only mitigation that matters is rotation.\n\n**The correct priority order:**\n1. **Rotate** — invalidate the credential at its source (AWS IAM, Vault, etc.)\n2. **Audit** — check CloudTrail/Audit Logs for unauthorized use\n3. **Purge** — rewrite history to remove the secret, force-push, notify collaborators to re-clone\n4. **Prevent** — pre-commit hooks, push protection, OIDC migration\n\nGetting the order wrong — spending an hour rewriting history before rotating — gives an attacker an hour to use the leaked credential."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Incident Response Flow",
+            "content": "```mermaid\nflowchart TB\n    Detect[Secret committed and pushed] --> P1[1. ROTATE immediately<br/>aws iam deactivate-access-key]\n    P1 --> P2[2. AUDIT CloudTrail<br/>for the leaked key ID]\n    P2 --> Q{Unauthorized<br/>usage?}\n    Q -->|yes| Esc[Escalate to security<br/>incident response]\n    Q -->|no| P3[3. PURGE history]\n    P3 --> P3a[git filter-repo --replace-text or<br/>BFG Repo-Cleaner]\n    P3a --> P3b[git push --force]\n    P3b --> P3c[Notify all collaborators:<br/>delete local clones, re-clone fresh]\n    P3c --> P4[4. PREVENT recurrence]\n    P4 --> P4a[Pre-commit: gitleaks/trufflehog]\n    P4 --> P4b[GitHub Push Protection]\n    P4 --> P4c[Migrate to OIDC]\n    P4 --> P4d[Postmortem with timeline]\n    style P1 fill:#ff8a80\n    style P2 fill:#ffe0b2\n    style P3 fill:#fff9c4\n    style P4 fill:#c8e6c9\n```\n\nRotation is the only mitigation; everything else is hygiene and prevention."
+          },
+          {
+            "type": "step",
+            "title": "The Detailed Response",
+            "content": "**Step 1 — Rotate within 5 minutes.**\n\n```bash\n# AWS access key\naws iam update-access-key --access-key-id AKIA... --status Inactive --user-name <user>\naws iam create-access-key --user-name <user>\n# verify the new key works in your application, then:\naws iam delete-access-key --access-key-id AKIA... --user-name <user>\n```\n\nDeactivate first (reversible if you discover an internal system was using it); delete after confirming nothing legitimate breaks.\n\nFor other credentials: GitHub PAT → settings → developer settings → delete and regenerate; Vault → `vault token revoke <token>`; Stripe API key → dashboard → deactivate.\n\n**Step 2 — Audit CloudTrail (within 30 minutes).**\n\n```bash\naws cloudtrail lookup-events \\\n  --lookup-attributes AttributeKey=AccessKeyId,AttributeValue=AKIA... \\\n  --start-time 2026-04-21T00:00:00Z\n```\n\nLook for: API calls from unfamiliar IPs (especially Tor exits, well-known scanning infrastructure); calls from unexpected regions; large data egress (GetObject, ListBuckets); IAM modifications (create-access-key, attach-user-policy — classic post-compromise patterns where attackers escalate before being detected).\n\nIf you find anything suspicious — escalate to security. If clean, proceed to step 3.\n\n**Step 3 — Purge from git history.**\n\n```bash\n# git filter-repo (recommended; replaces filter-branch which is deprecated)\npip install git-filter-repo\ngit filter-repo --replace-text <(echo 'AKIAIOSFODNN7EXAMPLE==>***REMOVED***')\n\n# alternatively, BFG Repo-Cleaner (faster for large repos)\nbfg --replace-text passwords.txt my-repo.git\n\n# force push the rewritten history\ngit push origin --force --all\ngit push origin --force --tags\n```\n\nNotify all collaborators: \"I rewrote history; delete your local clone and re-clone fresh.\" If they don't, they'll re-introduce the bad commits with their next push or merge.\n\n**Be honest about the limits.** Even after force-push:\n- GitHub may retain the old commit accessible by SHA for some time (cached objects)\n- Forks of the repo still contain the secret in their history\n- The GitHub Events API broadcast the original push; bots have already scraped\n- Anyone who cloned during the leak window has the secret locally\n\n**This is why rotation comes first** — the secret is leaked regardless of whether you can purge it from your repo's main view.\n\n**Step 4 — Prevent recurrence.**\n\nLayered defense — each layer catches what others miss:\n\n*Pre-commit hook (developer machine):*\n```bash\n# install gitleaks via pre-commit framework\npip install pre-commit\ncat > .pre-commit-config.yaml <<'YAML'\nrepos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.18.0\n    hooks:\n      - id: gitleaks\nYAML\npre-commit install\n```\n\nNow `git commit` runs gitleaks; commit aborts if a secret is detected.\n\n*CI scanning (catches what dev hooks missed):*\n```yaml\n- name: gitleaks scan\n  uses: gitleaks/gitleaks-action@v2\n```\n\n*Platform-level (GitHub Push Protection):* enable in repo settings; GitHub blocks pushes containing secrets matching its detection patterns (AWS keys, Stripe keys, GitHub tokens, etc.).\n\n*Structural — OIDC instead of static credentials:* GitHub Actions can federate to AWS without storing any long-lived secret in repo or org. Migrate static credentials to OIDC progressively; the safest secret is the one that doesn't exist."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Common Mistakes",
+            "content": "**`git revert` does NOT remove the secret.** Revert creates a new commit that undoes the changes; the original commit (with the secret) is still in history. Many engineers confuse revert (a normal commit operation) with history rewrite. Only `filter-repo` / `BFG` actually remove from history.\n\n**Force-push to public history is irreversible damage to collaborators.** Anyone who cloned, anyone who has open PRs based on the old history, anyone who made changes — they all get a divergent history that's painful to reconcile. Communicate before force-pushing; coordinate timing if possible.\n\n**Forks are out of your control.** A public repo's history exists in every fork. Even after you purge, forks retain. GitHub provides a process to request fork purging in some cases, but it's manual and slow. Assume the secret is permanent in forks.\n\n**Private repo ≠ safe.** Private repos still have collaborators, integrations (CI tools, IDEs, log forwarders), backups, and people. \"It's private\" is not a reason to skip rotation.\n\n**The cost of habits.** Engineers who get burned once on a leaked secret install gitleaks pre-commit hooks for life. The lesson is: make secret-scanning automatic, not optional, on every machine. Pre-commit installations should be part of repo bootstrap.\n\n**OIDC is the structural cure.** Long-lived secrets in CI are an inherent risk — they leak in logs, sit in repo configs, sprawl across systems. OIDC federation issues short-lived tokens per workflow run; no long-lived secret to leak. Migration is the strategic answer; pre-commit hooks are tactical.\n\n**Blameless culture matters.** An engineer who admits the leak immediately (so rotation can happen fast) deserves thanks, not punishment. Punitive cultures delay reporting, which delays rotation, which extends exposure."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Rotate first** — the only mitigation that actually invalidates the leaked credential; everything else is hygiene\n- **`git revert` doesn't remove the secret** — only `git filter-repo` or BFG rewrite history; revert just adds an undo commit\n- **Force-push has irreversible costs** — collaborators must re-clone; forks retain history; GitHub Events broadcast the original push\n- **Audit CloudTrail** — check if the leaked key was used by unauthorized actors; look for IAM modifications, unusual regions, data egress\n- **Layered prevention**: pre-commit gitleaks (dev machine) + CI scanning + GitHub Push Protection + OIDC migration\n- **OIDC is the structural fix** — short-lived tokens per workflow run eliminate long-lived secrets from CI/repo entirely"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Once a secret is pushed to GitHub, it's compromised — secret-scanning bots monitor public repos and the GitHub Events API in real time, indexing new commits within seconds. Even on private repos, the credential may be cached by GitHub's UI, backed up by integrations, or seen by collaborators. The instinct to \"clean it up first\" before rotating is wrong; rotation is the only real mitigation.\n\n**The correct order**\n\n*Step 1 — rotate within 5 minutes*\n- AWS: `aws iam update-access-key --status Inactive`, then create a new one; deactivate before deleting in case an internal system was using it legitimately\n- Other credentials: GitHub PAT regenerate, Vault token revoke, Stripe key deactivate\n\n*Step 2 — audit CloudTrail within 30 minutes*\n- Query for use of the leaked key ID; look at every API call made with it\n- Watch for IAM modifications, unusual regions, data egress — classic post-compromise patterns where attackers escalate before being detected\n- If anything suspicious, escalate to security incident response\n\n*Step 3 — purge from git history*\n- Use `git filter-repo` (recommended, replaces deprecated filter-branch) or BFG Repo-Cleaner to rewrite history removing the secret\n- Force-push all branches and tags; notify all collaborators to delete local clones and re-clone fresh\n- Be honest about limits: GitHub may retain the old commit accessible by SHA for some time; forks of the repo still contain the secret; the Events API already broadcast the push; anyone who cloned during the leak window has it locally\n\n*Step 4 — prevent recurrence with layered defense*\n- Pre-commit hook on every developer machine: gitleaks via pre-commit framework; commit aborts if a secret is detected\n- CI scanning catches what dev hooks missed (developer disabled hooks, new contributor without setup)\n- GitHub Push Protection blocks pushes containing detected secrets (AWS keys, Stripe keys, GitHub tokens)\n- Structural fix: migrate to OIDC — GitHub Actions can federate to AWS without storing any long-lived secret in repo or org; the safest secret is the one that doesn't exist\n\n**The confusion to clear up**\n- `git revert` does NOT remove the secret; revert creates a new commit that undoes changes; the original commit with the secret is still in history\n- Only history rewrite (filter-repo, BFG) actually removes the secret from history\n- Even after rewrite, the secret is leaked to anyone who saw it in the rewrite window\n\n**The cultural piece**\n- Blameless reporting matters — an engineer who admits the leak immediately enables fast rotation; punitive cultures delay reporting, which extends exposure\n- Make secret-scanning automatic, not optional — pre-commit installation should be part of repo bootstrap so new contributors get protected by default\n\n**The strategic answer is OIDC**\n- Long-lived secrets in CI are an inherent risk — they leak in logs, sit in repo configs, sprawl across systems\n- OIDC eliminates long-lived secrets entirely; tokens are short-lived and request-scoped via repo and branch claims\n- Pre-commit hooks are tactical; OIDC migration is the strategic structural fix every team should be on the path to"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is `git filter-repo` preferred over `git filter-branch`?",
+        "How does GitHub Push Protection work and what does it block?",
+        "What is OIDC federation between GitHub Actions and AWS?",
+        "How do you handle a secret leaked to a public repo with hundreds of forks?"
+      ],
+      "seo": {
+        "metaTitle": "Secret Committed to Git: Rotate, Purge, Prevent | InterviewExplainer",
+        "metaDescription": "Step-by-step remediation when a secret is committed and pushed to git. Rotate first, audit, purge with filter-repo, prevent with OIDC + push protection."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "Once a secret is pushed to GitHub, it's compromised — secret-scanning bots monitor public repos and the GitHub Events API in real time, indexing new commits within seconds.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A secret pushed to GitHub is compromised the moment the push completes — secret-scanning bots monitor public repos and the GitHub Events API in real time, indexing new commits within seconds. Even on private repos, you can't rule out the credential being seen by anyone with read access, cached by GitHub's UI, or backed up by integrations. The instinct to \"clean it up\" first — reverting the commit, force-pushing, removing from history — is wrong. None of those actions invalidate the leaked credential. The credential is the issue; the git."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Step 1 — Rotate within 5 minutes.",
+              "``bash AWS access key aws iam update-access-key --access-key-id AKIA...",
+              "--status Inactive --user-name <user> aws iam create-access-key --user-name <user> verify the new key works in your application, then: aws iam delete-access-key --access-key-id AKIA...",
+              "--user-name <user> ` Deactivate first (reversible if you discover an internal system was using it); delete after confirming nothing legitimate breaks.",
+              "For other credentials: GitHub PAT → settings → developer settings → delete and regenerate; Vault → vault token revoke <token>; Stripe API key → dashboard → deactivate.",
+              "Step 2 — Audit CloudTrail (within 30 minutes)."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Rotate first — the only mitigation that actually invalidates the leaked credential",
+              "everything else is hygiene git revert doesn't remove the secret — only git filter-repo or BFG rewrite history",
+              "revert just adds an undo commit Force-push has irreversible costs — collaborators must re-clone",
+              "forks retain history",
+              "GitHub Events broadcast the original push Audit CloudTrail — check if the leaked key was used by unauthorized actors",
+              "look for IAM modifications, unusual regions, data egress Layered prevention: pre-commit gitleaks (dev machine) + CI scanning + GitHub Push Protection + OIDC migration OIDC is the structural fix — short-lived tokens per workflow run eliminate long-lived secrets from CI/repo entirely"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Trying to git revert the commit and thinking the secret is gone — the secret is still in history; revert just adds a new commit"
+          }
+        ],
+        "cap": "The correct order Step 1 — rotate within 5 minutes AWS: aws iam update-access-key --status Inactive, then create a new one; deactivate before deleting in case an internal system was using it legitimat",
+        "familiarity_anchors": [
+          "Treat",
+          "CloudTrail",
+          "Audit"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is `git filter-repo` preferred over `git filter-branch`?",
+          "How does GitHub Push Protection work and what does it block?",
+          "What is OIDC federation between GitHub Actions and AWS?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java project managed with Git and Gradle"
+      }
+    }
+  ]
+}

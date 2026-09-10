@@ -1,0 +1,382 @@
+{
+  "topic": "AWS RDS with Spring Boot",
+  "topicSlug": "rds-spring",
+  "questions": [
+    {
+      "id": "rds-setup-spring",
+      "title": "Setting Up RDS PostgreSQL with Spring Boot",
+      "slug": "rds-setup-spring",
+      "question": "How do you set up and connect a Spring Boot application to AWS RDS PostgreSQL?",
+      "difficulty": "easy",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- RDS: managed database service \u2014 AWS handles patching, backups, failover\n- Multi-AZ: synchronous standby in another AZ for high availability\n- Connect via endpoint URL (not IP \u2014 IP changes during failover)\n- DB subnet group: RDS lives in private subnets\n- Parameter group: database-level configuration (max_connections, timezone, etc.)\n- Spring Boot: spring.datasource.url with RDS endpoint, credentials from Secrets Manager\n- Connection pooling: HikariCP connects to the RDS endpoint; during Multi-AZ failover, reconnects automatically"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "RDS is Amazon's managed relational database service. You provision a PostgreSQL instance and AWS handles the operational overhead \u2014 patching the database engine, taking automated backups, monitoring disk space, and managing Multi-AZ failover. Your application just connects to it like any other PostgreSQL database, using the endpoint DNS name.\n\nThe important distinction is always using the endpoint DNS name, never the IP address. During a Multi-AZ failover event, the standby gets promoted to primary and the DNS name switches to point to the new primary. If you hardcoded an IP, your application would fail permanently. With the DNS name, your connection pool reconnects automatically after a brief disruption.\n\nFor security, always put RDS in private subnets. Only your application security group should be able to reach the RDS security group on port 5432. Store credentials in Secrets Manager and read them at startup \u2014 never hardcode database passwords in your configuration files."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Spring Boot Configuration\n\n```yaml\n# application.yml (production)\nspring:\n  config:\n    import: \"aws-secretsmanager:/prod/myapp/db-credentials\"\n  datasource:\n    url: jdbc:postgresql://${rds_host}:5432/${rds_dbname}\n    username: ${rds_username}\n    password: ${rds_password}\n    driver-class-name: org.postgresql.Driver\n    hikari:\n      maximum-pool-size: 10\n      minimum-idle: 3\n      connection-timeout: 30000\n      idle-timeout: 600000\n      max-lifetime: 1800000\n  jpa:\n    database-platform: org.hibernate.dialect.PostgreSQLDialect\n    show-sql: false\n    hibernate:\n      ddl-auto: validate\n  flyway:\n    enabled: true\n    locations: classpath:db/migration\n\n# RDS endpoint format:\n# mydb.xxxxxxxxxx.ap-south-1.rds.amazonaws.com\n```\n\n## Handling Multi-AZ Failover\n\n```yaml\n# HikariCP reconnects automatically when DNS changes (failover ~60s)\nspring:\n  datasource:\n    hikari:\n      # Reconnect quickly after failover\n      connection-timeout: 5000        # fail fast if connection attempt hangs\n      validation-timeout: 3000        # validate connection quickly\n      keepalive-time: 30000           # prevent idle connection drops\n      connection-test-query: SELECT 1  # validate before lending\n```\n\n## Read Replica Endpoint\n\n```yaml\n# RDS provides separate endpoints for read replicas\n# Primary (read/write): mydb.xxxxx.rds.amazonaws.com\n# Read replica: mydb-replica.xxxxx.rds.amazonaws.com\n\nspring:\n  datasource:\n    url: jdbc:postgresql://mydb.xxxxx.rds.amazonaws.com:5432/appdb  # writes\n\n# Add read-only datasource for read replicas\n# Use AbstractRoutingDataSource to route @Transactional(readOnly=true) to replica\n```\n\n## RDS Parameter Group for Spring Boot\n\n```sql\n-- Custom parameter group settings for a Java app:\n-- max_connections = 200 (but use PgBouncer to keep actual connections < this)\n-- shared_buffers = {DBInstanceClassMemory/4} (25% RAM via formula)\n-- log_min_duration_statement = 1000 (log slow queries)\n-- timezone = 'UTC'\n-- random_page_cost = 1.1 (for SSD storage \u2014 default 4.0 is for HDD)\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "RDS is Amazon's managed relational database service.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Store credentials in Secrets Manager and read them at startup \u2014 never hardcode database passwords in your configuration files.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "rds-backup-restore",
+      "title": "RDS Backup, Restore and Point-in-Time Recovery",
+      "slug": "rds-backup-restore",
+      "question": "How do RDS automated backups work and how do you perform point-in-time recovery?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Automated backups: daily snapshot + continuous transaction log backup to S3\n- Retention period: 1-35 days \u2014 backups deleted after retention period\n- Point-in-Time Recovery (PITR): restore to any second within retention period\n- Manual snapshots: persist indefinitely (until you delete), not affected by retention period\n- Restore creates a NEW RDS instance \u2014 your app must update its endpoint\n- Promote read replica: can be used for testing backups without affecting production\n- RDS backup window: brief I/O pause during snapshot on single-AZ; no impact on Multi-AZ"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "RDS automated backups work in two parts. Every day during a backup window, RDS takes a full snapshot of your database. Continuously, RDS also copies transaction logs to S3. Together, these allow point-in-time recovery to any second within your retention period \u2014 if someone accidentally deletes a table at 2:37 PM, you can restore the database to how it looked at 2:36 PM.\n\nThe important operational detail is that restoring creates a completely new RDS instance with a new endpoint. You don't restore in-place. This means after a restore, you need to update your application's connection string \u2014 either manually or by updating the Secrets Manager secret and restarting the app. This is why testing your recovery process regularly is important \u2014 you don't want to discover you have the wrong steps during an actual incident.\n\nFor critical databases, take manual snapshots before major deployments. Automated backups have a retention period and will be deleted. Manual snapshots persist until you explicitly delete them. If a deployment causes data corruption and you need to roll back, a pre-deployment snapshot gives you a clean restore point."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Backup Strategy\n\n```\nRDS Automated Backup System:\n\u251c\u2500\u2500 Daily Snapshot (during backup window, e.g., 02:00-03:00 UTC)\n\u2502   \u2514\u2500\u2500 Stored in S3 (managed by AWS, encrypted)\n\u251c\u2500\u2500 Continuous Transaction Logs (WAL)\n\u2502   \u2514\u2500\u2500 Copied to S3 every 5 minutes\n\u2514\u2500\u2500 Retention: 7-35 days (recommend 14 for production)\n\nPoint-in-Time Recovery:\nAny second within retention period can be restored to a new instance.\n```\n\n## Restore via AWS CLI\n\n```bash\n# Point-in-Time Recovery (PITR) to a specific timestamp\naws rds restore-db-instance-to-point-in-time \\\n  --source-db-instance-identifier prod-database \\\n  --target-db-instance-identifier prod-database-restored \\\n  --restore-time 2024-12-15T14:36:00Z \\\n  --db-instance-class db.t3.large \\\n  --db-subnet-group-name prod-subnet-group \\\n  --vpc-security-group-ids sg-xxxxxxxxx\n\n# After restore completes (~10-30 min), update connection string\n# New endpoint: prod-database-restored.xxxxx.rds.amazonaws.com\n```\n\n## Pre-Deployment Manual Snapshot\n\n```bash\n# Before a risky deployment\naws rds create-db-snapshot \\\n  --db-instance-identifier prod-database \\\n  --db-snapshot-identifier pre-deployment-v2-3-0-$(date +%Y%m%d)\n\n# Wait for snapshot to complete\naws rds wait db-snapshot-completed \\\n  --db-snapshot-identifier pre-deployment-v2-3-0-20241215\n\necho \"Snapshot complete. Safe to deploy.\"\n```\n\n## Copy Snapshot Cross-Region (Disaster Recovery)\n\n```bash\n# Copy snapshot to another region for geo-redundancy\naws rds copy-db-snapshot \\\n  --source-db-snapshot-identifier arn:aws:rds:ap-south-1:123456:snapshot:pre-deploy \\\n  --target-db-snapshot-identifier backup-dr-copy \\\n  --kms-key-id arn:aws:kms:us-east-1:123456:key/xxx \\\n  --region us-east-1\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "RDS automated backups work in two parts.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "If a deployment causes data corruption and you need to roll back, a pre-deployment snapshot gives you a clean restore point.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "rds-performance-insights",
+      "title": "RDS Performance Insights and Monitoring",
+      "slug": "rds-performance-insights",
+      "question": "How do you use RDS Performance Insights to diagnose database performance problems?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Performance Insights: visual dashboard showing database load over time, broken down by wait events\n- AAS (Average Active Sessions): key metric \u2014 > 1 AAS per vCPU indicates database is a bottleneck\n- Top wait events: what sessions are waiting on (CPU, Lock, IO \u2014 indicates root cause)\n- Top SQL: which queries contribute most to load \u2014 direct link to query text\n- Enhanced Monitoring: per-second OS-level metrics (CPU per process, memory, disk)\n- CloudWatch for RDS: CPUUtilization, DatabaseConnections, FreeStorageSpace, ReadIOPS/WriteIOPS\n- Alert on: FreeStorageSpace < 20%, DatabaseConnections approaching max"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Performance Insights is a game-changer for diagnosing database issues. Instead of guessing what's slow, it shows you a timeline of database load measured in Average Active Sessions \u2014 the number of queries running or waiting at any given moment. If AAS is consistently above your vCPU count, the database is overwhelmed.\n\nThe breakdown by wait events tells you the root cause. If the dominant wait event is CPU, you have query optimization work to do. If it's locks, you have contention \u2014 long-running transactions or deadlocks. If it's I/O, your working set doesn't fit in the buffer cache and you need more RAM or faster storage.\n\nThe Top SQL view shows exactly which queries are contributing to the load. Click a query and you see its full text, its execution count, average latency, and which wait events it's experiencing. This takes you from knowing the database is slow to knowing which specific query to optimize \u2014 usually in minutes."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## RDS CloudWatch Alerts to Set Up\n\n```bash\n# Alert: CPU > 80% for 10 minutes\naws cloudwatch put-metric-alarm \\\n  --alarm-name rds-high-cpu \\\n  --namespace AWS/RDS \\\n  --metric-name CPUUtilization \\\n  --dimensions Name=DBInstanceIdentifier,Value=prod-database \\\n  --period 300 --evaluation-periods 2 \\\n  --statistic Average --threshold 80 \\\n  --comparison-operator GreaterThanThreshold \\\n  --alarm-actions arn:aws:sns:...:db-alerts\n\n# Alert: Free Storage < 20GB (for 100GB instance)\naws cloudwatch put-metric-alarm \\\n  --alarm-name rds-low-storage \\\n  --metric-name FreeStorageSpace \\\n  --namespace AWS/RDS \\\n  --dimensions Name=DBInstanceIdentifier,Value=prod-database \\\n  --period 300 --evaluation-periods 1 \\\n  --statistic Minimum --threshold 21474836480 \\ # 20GB in bytes\n  --comparison-operator LessThanThreshold \\\n  --alarm-actions arn:aws:sns:...:db-alerts\n```\n\n## Connection Count Monitoring\n\n```bash\n# Max connections for db.t3.medium (4GB RAM):\n# max_connections = LEAST({DBInstanceClassMemory/9531392}, 5000)\n# ~400 connections for db.t3.medium\n\n# Alert when connection count approaches max (> 350 for db.t3.medium)\naws cloudwatch put-metric-alarm \\\n  --alarm-name rds-connections-high \\\n  --metric-name DatabaseConnections \\\n  --namespace AWS/RDS \\\n  --dimensions Name=DBInstanceIdentifier,Value=prod-database \\\n  --period 60 --evaluation-periods 3 \\\n  --statistic Average --threshold 350 \\\n  --comparison-operator GreaterThanThreshold \\\n  --alarm-actions arn:aws:sns:...:db-alerts\n# Solution: use PgBouncer connection pooler\n```\n\n## Spring Actuator DB Health Check\n\n```java\n// Spring Boot auto-configures DB health indicator\n// GET /actuator/health returns:\n{\n  \"status\": \"UP\",\n  \"components\": {\n    \"db\": {\n      \"status\": \"UP\",\n      \"details\": {\n        \"database\": \"PostgreSQL\",\n        \"validationQuery\": \"isValid()\"\n      }\n    }\n  }\n}\n// Hook this into your load balancer health check and CloudWatch\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Performance Insights is a game-changer for diagnosing database issues.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "This takes you from knowing the database is slow to knowing which specific query to optimize \u2014 usually in minutes.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "rds-vs-aurora",
+      "title": "RDS vs Aurora PostgreSQL",
+      "slug": "rds-vs-aurora",
+      "question": "What is the difference between RDS PostgreSQL and Amazon Aurora PostgreSQL and when should you choose each?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Aurora: AWS-proprietary engine compatible with PostgreSQL \u2014 not PostgreSQL itself\n- Storage: Aurora storage auto-scales in 10GB increments up to 128TB; RDS requires manual scaling\n- Replicas: Aurora up to 15 read replicas vs 5 for RDS; Aurora replicas share same storage\n- Failover: Aurora fails over in 30s (replicas share storage); RDS Multi-AZ ~60s (standby sync)\n- Aurora Serverless v2: scales compute capacity automatically \u2014 good for variable workloads\n- Aurora Global: cross-region replication with < 1 second lag\n- Cost: Aurora typically 20-30% more than RDS for same instance size \u2014 justify with scale needs\n- Compatibility: Aurora is mostly but not 100% compatible \u2014 test before migrating"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Aurora is Amazon's proprietary database engine that is compatible with PostgreSQL syntax but uses a completely different storage layer. Instead of each replica having its own copy of data, all Aurora replicas \u2014 up to 15 \u2014 share the same distributed storage across six storage nodes in three AZs. This means promotions and read replica lag are much better than standard RDS.\n\nFor most applications starting out, RDS PostgreSQL is simpler, slightly cheaper, and perfectly adequate. Aurora makes sense when you need more than 5 read replicas, when you need Aurora Serverless for variable or intermittent workloads, or when you need Aurora Global Database for cross-region replication with very low lag.\n\nAurora Serverless v2 is worth highlighting for specific use cases. It scales compute capacity up and down almost instantly based on load, measured in Aurora Capacity Units rather than fixed instance sizes. For applications with highly variable load \u2014 a SaaS that's busy during business hours and idle at night \u2014 this can be more cost-effective than provisioning for peak."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## RDS vs Aurora Comparison\n\n| Feature | RDS PostgreSQL | Aurora PostgreSQL |\n|---------|---------------|-------------------|\n| Engine | Standard PostgreSQL | AWS-proprietary (PG compatible) |\n| Max read replicas | 5 | 15 |\n| Replica lag | Seconds | Tens of milliseconds |\n| Storage | Fixed, manual scale | Auto-scales to 128TB |\n| Failover time | ~60s (Multi-AZ) | ~30s |\n| Serverless option | No | Yes (Serverless v2) |\n| Global database | No | Yes (<1s cross-region lag) |\n| Cost (same spec) | Baseline | ~20-30% higher |\n\n## Aurora Serverless v2 \u2014 Spring Boot Connection\n\n```yaml\nspring:\n  datasource:\n    url: jdbc:postgresql://mydb.cluster-xxxxx.ap-south-1.rds.amazonaws.com:5432/appdb\n    # Aurora cluster endpoint \u2014 automatically points to primary\n    hikari:\n      maximum-pool-size: 10\n      # Aurora Serverless scales up capacity when connections arrive\n      # Keep pool-size reasonable \u2014 don't over-provision and force scale-up\n      connection-timeout: 10000  # Aurora cold start may take a few seconds\n      initialization-fail-timeout: -1  # don't fail on startup if DB is paused\n```\n\n## When to Choose\n\n| Scenario | Choose |\n|----------|--------|\n| Startup, small team | RDS (simpler, cheaper) |\n| Need 5+ read replicas | Aurora |\n| Variable/intermittent load | Aurora Serverless v2 |\n| Cross-region replication < 1s | Aurora Global |\n| Strict PG compatibility needed | RDS |\n| < 1TB data, proven workload | RDS |\n| > 1TB or unpredictable growth | Aurora (auto-scaling storage) |"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Aurora is Amazon's proprietary database engine that is compatible with PostgreSQL syntax but uses a completely different storage layer.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": ""
+          }
+        ],
+        "cap": "For applications with highly variable load \u2014 a SaaS that's busy during business hours and idle at night \u2014 this can be more cost-effective than provisioning for peak.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "rds-connection-pooling",
+      "title": "RDS Connection Pooling and HikariCP",
+      "slug": "rds-connection-pooling",
+      "question": "How do you configure HikariCP connection pooling for RDS in a Spring Boot application?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- HikariCP: default Spring Boot connection pool \u2014 fast, lightweight\n- Pool size: not bigger = faster; too large overwhelms DB with connections\n- Formula: connections = (core_count \u00d7 2) + effective_spindle_count \u2014 Hikari recommendation\n- maximumPoolSize: max connections per application instance\n- minimumIdle: kept warm connections\n- connectionTimeout: time to wait for a pool connection before throwing exception\n- idleTimeout: how long idle connections kept before closing\n- RDS max_connections: PostgreSQL limits connections; pool \u00d7 instances must stay below limit\n- RDS Proxy: connection multiplexing \u2014 reduces connection overhead on RDS"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "HikariCP is the default connection pool in Spring Boot, and it's excellent. The most important configuration is the pool size. Counter-intuitively, smaller pools often perform better than larger ones. If you have too many connections, the database spends time context-switching between them rather than executing queries.\n\nHikari's recommendation for PostgreSQL is core_count \u00d7 2 plus effective_spindle_count. For an RDS instance with 4 vCPUs and SSD storage, that's roughly 8-10 connections per application instance. If you run 5 app instances, that's 40-50 total connections, well within RDS's limit.\n\nRDS Proxy is worth knowing for serverless or highly variable workloads. It multiplexes many application connections onto fewer actual database connections, handling the connection overhead at the proxy layer. It's particularly useful when you have Lambda functions or many app instances that would otherwise exhaust the database's connection limit."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## HikariCP Configuration\n\n```yaml\n# application.yml\nspring:\n  datasource:\n    url: jdbc:postgresql://${DB_HOST}:5432/${DB_NAME}\n    username: ${DB_USERNAME}\n    password: ${DB_PASSWORD}\n    hikari:\n      maximum-pool-size: 10       # max connections to DB from this instance\n      minimum-idle: 5             # warm connections always ready\n      connection-timeout: 30000   # 30s: time to get connection from pool (throws if exceeded)\n      idle-timeout: 600000        # 10min: close idle connections\n      max-lifetime: 1800000       # 30min: replace connections before RDS kills them\n      keepalive-time: 60000       # ping idle connections to prevent stale detection\n      validation-timeout: 5000    # 5s: validate connection before using\n      connection-test-query: SELECT 1  # for JDBC4 drivers this isn't needed\n      pool-name: HikariPool-OrderService\n      leak-detection-threshold: 60000  # warn if connection held > 60s (detect leaks)\n```\n\n## Pool Size Calculation\n\n```\nRDS Instance: db.t3.large (2 vCPU)\nHikari formula: connections = (2 \u00d7 2) + 1 = 5 per instance\n\nApp instances: 3 (ECS tasks)\nTotal connections: 5 \u00d7 3 = 15\n\nRDS max_connections for db.t3.large: ~170\n15 << 170 \u2192 well within limit\n\nIf scaling to 10 instances: 5 \u00d7 10 = 50 \u2192 still fine\n\nCheck RDS max_connections:\nSELECT current_setting('max_connections');\n-- 170 (varies by instance class)\n```\n\n## Monitoring Pool Health\n\n```yaml\n# Expose Hikari metrics via Actuator\nmanagement:\n  endpoints:\n    web:\n      exposure:\n        include: health,metrics\n  metrics:\n    tags:\n      application: order-service\n```\n\n```bash\n# Metrics available:\n# hikaricp.connections.active    \u2014 connections currently in use\n# hikaricp.connections.idle      \u2014 available connections\n# hikaricp.connections.pending   \u2014 threads waiting for a connection\n# hikaricp.connections.timeout   \u2014 timeout events (alert if > 0)\n\n# If pending > 0 regularly: pool too small, or queries too slow\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "HikariCP is the default connection pool in Spring Boot, and it's excellent.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "It's particularly useful when you have Lambda functions or many app instances that would otherwise exhaust the database's connection limit.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "rds-read-replicas",
+      "title": "RDS Read Replicas and Spring Boot Routing",
+      "slug": "rds-read-replicas",
+      "question": "How do you use RDS read replicas to scale read traffic in a Spring Boot application?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Read replica: async replication copy of primary \u2014 read-only, eventual consistency\n- Replication lag: replica may be milliseconds to seconds behind primary\n- Use cases: reporting queries, analytics, search indexing, read-heavy endpoints\n- @Transactional(readOnly=true): Spring can route to replica with AbstractRoutingDataSource\n- Spring DataSource routing: AbstractRoutingDataSource + @Transactional(readOnly) \u2192 replica\n- Aurora: reader endpoint automatically load-balances across multiple replicas\n- Trade-off: reads may see slightly stale data \u2014 acceptable for non-critical reads"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Read replicas receive asynchronous copies of all writes from the primary. They're read-only but handle the same SQL queries as the primary. For read-heavy applications, offloading reporting queries, dashboards, and search operations to replicas significantly reduces the load on the primary.\n\nThe key trade-off is replication lag. Replicas are eventually consistent with the primary \u2014 typically milliseconds behind, but potentially seconds under heavy write load. This makes replicas unsuitable for reads that must immediately see a previous write, like verifying a newly placed order. Use the primary for those. Use replicas for reports, analytics, and reads where seconds of staleness is acceptable.\n\nSpring Boot supports DataSource routing with AbstractRoutingDataSource. You configure two data sources \u2014 primary and replica \u2014 and route @Transactional(readOnly=true) operations to the replica automatically. This keeps the routing logic in one place and transparent to service layer code."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Read-Replica DataSource Routing\n\n```java\n// Routing key holder\npublic class DataSourceContextHolder {\n    private static final ThreadLocal<String> context = new ThreadLocal<>();\n\n    public static void useReplica()  { context.set(\"replica\"); }\n    public static void usePrimary()  { context.set(\"primary\"); }\n    public static void clear()       { context.remove(); }\n    public static String getCurrent() { return context.get(); }\n}\n\n// Routing data source\n@Bean\npublic DataSource dataSource(\n        @Qualifier(\"primaryDataSource\") DataSource primary,\n        @Qualifier(\"replicaDataSource\") DataSource replica) {\n\n    return new AbstractRoutingDataSource() {\n        @Override\n        protected Object determineCurrentLookupKey() {\n            return DataSourceContextHolder.getCurrent();\n        }\n        @Override\n        public void afterPropertiesSet() {\n            setDefaultTargetDataSource(primary);\n            setTargetDataSources(Map.of(\"primary\", primary, \"replica\", replica));\n            super.afterPropertiesSet();\n        }\n    };\n}\n\n// AOP: route readOnly transactions to replica\n@Aspect\n@Component\npublic class ReplicaRoutingAspect {\n    @Around(\"@annotation(tx)\")\n    public Object route(ProceedingJoinPoint pjp, Transactional tx) throws Throwable {\n        if (tx.readOnly()) {\n            DataSourceContextHolder.useReplica();\n        } else {\n            DataSourceContextHolder.usePrimary();\n        }\n        try {\n            return pjp.proceed();\n        } finally {\n            DataSourceContextHolder.clear();\n        }\n    }\n}\n```\n\n```yaml\n# application.yml\napp:\n  datasource:\n    primary:\n      url: jdbc:postgresql://primary.xxxx.ap-south-1.rds.amazonaws.com:5432/appdb\n    replica:\n      url: jdbc:postgresql://replica.xxxx.ap-south-1.rds.amazonaws.com:5432/appdb\n      # Aurora reader endpoint (load balances across all replicas):\n      # url: jdbc:postgresql://cluster.cluster-ro-xxxx.ap-south-1.rds.amazonaws.com:5432/appdb\n```\n\n```java\n// Service usage \u2014 transparent to developer\n@Service\npublic class ProductService {\n\n    @Transactional(readOnly = true)  // routed to replica\n    public List<ProductDTO> search(String keyword) {\n        return productRepo.findByNameContaining(keyword);\n    }\n\n    @Transactional  // routed to primary (write)\n    public Product create(CreateProductRequest req) {\n        return productRepo.save(Product.from(req));\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Read replicas receive asynchronous copies of all writes from the primary.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "This keeps the routing logic in one place and transparent to service layer code.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

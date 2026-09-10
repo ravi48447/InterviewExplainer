@@ -1,0 +1,119 @@
+{
+  "topic": "Performance Optimization",
+  "topicSlug": "performance-optimization",
+  "questions": [
+    {
+      "id": "redis-015",
+      "slug": "redis-memory-optimization",
+      "question": "How do you optimize Redis memory usage and configure eviction policies for a production Spring Boot application?",
+      "title": "Redis Memory Optimization: Eviction Policies and maxmemory Configuration",
+      "direct_answer": "Redis memory optimization combines the right eviction policy, appropriate data structure choices, key expiry discipline, and maxmemory limits. The eviction policy determines what Redis does when it hits its memory limit \u2014 allkeys-lru evicts the least-recently-used key regardless of TTL, while volatile-lru only evicts keys that have a TTL set. For a cache-only Redis, allkeys-lru is the standard choice; for a mixed cache and persistent data store, volatile-lru protects keys without TTLs from eviction.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Operational awareness of Redis memory management, eviction policies, and the implications of hitting maxmemory for application behavior.",
+        "common_mistake": "Not setting maxmemory at all, allowing Redis to consume all available RAM and trigger OOM kills, or using the default noeviction policy with a cache workload.",
+        "to_stand_out": "Mention Redis's memory encoding optimizations (ziplist/listpack for small collections), the OBJECT ENCODING command to inspect encodings, and Redis 7's listpack replacing ziplist."
+      },
+      "company_tags": [
+        "Netflix",
+        "Twitter",
+        "Cloudflare",
+        "Fastly",
+        "Akamai"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Memory management: the operational backbone of production Redis",
+            "content": "Redis stores everything in RAM, so memory management is not optional \u2014 it is the most critical operational concern. Without a `maxmemory` setting, Redis will consume all available RAM until the operating system's OOM killer terminates the process, causing an unplanned outage. Setting `maxmemory` to 70\u201380% of available RAM leaves headroom for the OS page cache, replication buffers, and the memory overhead of `BGSAVE`/`BGREWRITEAOF` forks (which can temporarily double memory usage via copy-on-write).\n\nThe eviction policy determines what happens when Redis hits the memory ceiling. The default `noeviction` policy returns an error on write commands, which is appropriate for session stores or queues where silent data loss is unacceptable. For pure caches, `allkeys-lru` is the standard: it evicts the least recently used key from the entire keyspace. `allkeys-lfu` (least frequently used) performs better under power-law access distributions where a small set of hot keys should never be evicted despite being accessed less recently than a burst of cold keys. `volatile-lru` and `volatile-lfu` restrict eviction to keys that have a TTL set, which is useful when Redis serves as both a cache (keys with TTL) and a persistent store (keys without TTL).\n\nBeyond eviction policy, data structure choice is the biggest memory lever. Redis uses compact internal encodings \u2014 listpack (replacing ziplist in Redis 7) \u2014 for small Hashes, Lists, Sets, and ZSets. A Hash with fewer than `hash-max-listpack-entries` (128 by default) fields uses a flat array that consumes roughly 10\u00d7 less memory than a full hash table. Storing a user's attributes as one Hash instead of N separate String keys saves both the per-key overhead (~70 bytes each) and enables the compact encoding. Monitoring `OBJECT ENCODING <key>` and `MEMORY USAGE <key>` helps identify keys that have outgrown their compact encoding.\n\nSerialization format also matters: JDK serialization stores class metadata and is 2\u20133\u00d7 larger than JSON, which is in turn larger than binary formats like Protobuf or Kryo. For high-cardinality caches, switching serializers can reduce Redis memory by 30\u201350%. Combine compact serialization with short key names (abbreviate when key count is in the millions) and mandatory TTLs on every key to keep memory predictable."
+          },
+          {
+            "type": "overview",
+            "title": "Eviction Policies Explained",
+            "content": "Redis offers 8 eviction policies, grouped by scope:\n\n**All-keys policies** (operate on the entire keyspace):\n- **`allkeys-lru`** \u2014 Evicts the least recently used key. Best for general-purpose caching where you want hot data retained.\n- **`allkeys-lfu`** \u2014 Evicts the least frequently used key. Better than LRU when access follows a power-law distribution (few very hot keys).\n- **`allkeys-random`** \u2014 Evicts a random key. Fast but unpredictable \u2014 rarely the right choice.\n\n**Volatile policies** (only evict keys with a TTL set):\n- **`volatile-lru`** \u2014 LRU among keys with `EXPIRE`. Protects keys without TTL from eviction.\n- **`volatile-lfu`** \u2014 LFU among keys with `EXPIRE`.\n- **`volatile-random`** \u2014 Random eviction among keys with `EXPIRE`.\n- **`volatile-ttl`** \u2014 Evicts the key closest to expiration. Useful when short-TTL keys are least valuable.\n\n**No eviction:**\n- **`noeviction`** (default) \u2014 Returns an error on writes when `maxmemory` is reached. Appropriate for session stores or queues where silent data loss is unacceptable.\n\n**Decision framework:**\n- Pure cache \u2192 `allkeys-lru` or `allkeys-lfu`\n- Mixed cache + persistent data \u2192 `volatile-lru` (protects persistent keys)\n- Session store \u2192 `noeviction` (fail loudly, don't lose sessions)\n- Short-lived data \u2192 `volatile-ttl` (evict nearest-to-expire first)"
+          },
+          {
+            "type": "code_example",
+            "title": "Redis Memory Configuration",
+            "content": "```bash\n# redis.conf \u2014 Memory management\nmaxmemory 6gb                       # 70-80% of available RAM\nmaxmemory-policy allkeys-lru        # Evict least recently used\nmaxmemory-samples 10                # Sample size for LRU approximation (default 5)\n\n# Lazy eviction \u2014 free memory in background thread\nlazyfree-lazy-eviction yes\nlazyfree-lazy-expire yes\nlazyfree-lazy-server-del yes\n\n# Compact encoding thresholds\nhash-max-listpack-entries 128       # Hash uses listpack below this field count\nhash-max-listpack-value 64          # Hash uses listpack below this value size\nlist-max-listpack-size -2           # ~8 KB per listpack node\nzset-max-listpack-entries 128\nzset-max-listpack-value 64\nset-max-intset-entries 512\n```\n\nMonitor memory usage and eviction rates:\n\n```bash\n# Check current memory stats\nredis-cli INFO memory | grep -E \"used_memory_human|maxmemory_human|mem_fragmentation\"\n\n# Watch eviction rate in real-time\nredis-cli INFO stats | grep evicted_keys\n\n# Inspect encoding of a specific key\nredis-cli OBJECT ENCODING user:42\nredis-cli MEMORY USAGE user:42\n```"
+          },
+          {
+            "type": "code_example",
+            "title": "Memory Optimization Tips in Java",
+            "content": "Memory-efficient patterns for Java/Spring Boot applications:\n\n```java\n@Configuration\npublic class RedisMemoryConfig {\n\n    @Bean\n    public RedisCacheManager cacheManager(RedisConnectionFactory cf) {\n        // Use JSON serializer (2-3\u00d7 smaller than JDK serialization)\n        GenericJackson2JsonRedisSerializer jsonSerializer =\n            new GenericJackson2JsonRedisSerializer(\n                new ObjectMapper()\n                    .setSerializationInclusion(JsonInclude.Include.NON_NULL)\n                    .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS));\n\n        // Short key prefixes save memory at scale\n        RedisCacheConfiguration config = RedisCacheConfiguration\n            .defaultCacheConfig()\n            .computePrefixWith(name -> name + \":\")\n            .serializeValuesWith(\n                SerializationPair.fromSerializer(jsonSerializer))\n            .entryTtl(Duration.ofMinutes(15));\n\n        return RedisCacheManager.builder(cf)\n            .cacheDefaults(config)\n            .build();\n    }\n}\n```\n\n**Key memory optimization tips:**\n\n1. **Use Hash instead of separate Strings** \u2014 One Hash with 20 fields uses ~10\u00d7 less RAM than 20 String keys due to per-key overhead (~70 bytes each) and listpack encoding.\n\n2. **Set TTL on every key** \u2014 Keys without TTL accumulate forever. Even if you use `@CacheEvict`, bugs or missed events can orphan entries.\n\n3. **Shorten key names at scale** \u2014 `u:42:p` instead of `user:42:profile` saves bytes across millions of keys.\n\n4. **Avoid storing large blobs** \u2014 Multi-MB values spike latency and are expensive to evict. Use an object store (S3) for payloads and Redis for metadata.\n\n5. **Monitor `OBJECT ENCODING`** \u2014 If a Hash shows `hashtable` instead of `listpack`, it exceeded the threshold and uses significantly more memory."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`allkeys-lru` for pure caches** \u2014 evicts least recently used key regardless of TTL; the right default when all cached data has equal priority and memory is the bottleneck\n- **`volatile-lru` for mixed persistent and cache data** \u2014 only evicts keys with TTL set; protects persistent data (sessions, locks) from eviction when used on the same Redis instance as cache data\n- **`noeviction` for queues and session stores** \u2014 rejects writes when memory is full; requires capacity monitoring and alerting; prevents silent data loss at the cost of write failures\n- **Hash encoding with ziplist saves memory** \u2014 keep Hash fields below 128 and values short to stay in compact ziplist encoding; one Hash key with N fields uses less memory than N separate String keys\n- **`MEMORY USAGE key` and `MEMORY DOCTOR`** \u2014 diagnose memory consumption per key and get a Redis-generated diagnosis of memory pressure causes; run before scaling up instance size"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Memory management is one of the most operationally important aspects of running Redis in production. Redis stores all data in RAM, so running out of memory stops it from accepting new writes \u2014 and the eviction policy determines what happens at that point.\n\n**Eviction policies \u2014 what to evict when memory is full**\n- `allkeys-lru` evicts the least recently used key across all keys \u2014 the right default for a cache where all data has equal priority; Redis automatically removes cold data as memory fills\n- `volatile-lru` evicts the LRU key only among keys with a TTL set \u2014 protects keys without TTL from eviction; useful when the same Redis instance holds both cached data (TTL set) and persistent data (no TTL)\n- `noeviction` rejects new writes with an error when memory is full \u2014 appropriate for a session store or queue where losing any data would be catastrophic; requires monitoring to prevent hitting the limit\n- `allkeys-lfu` evicts the least frequently used key \u2014 better than LRU for access patterns where old keys are still popular; Redis 4.0+\n\n**Data structure choices affect memory**\n- A Hash with fewer than 128 fields and small values is stored as a compact ziplist in memory \u2014 much more memory-efficient than storing each field as a separate String key; `HSET user:123 name Alice email alice@example.com` uses less memory than `SET user:123:name Alice` + `SET user:123:email alice@example.com`\n- Lists, Sets, and Sorted Sets also use compact encoding below configured size thresholds; stay below `hash-max-listpack-entries` (128) to keep ziplist encoding\n\n**Key expiry and memory pressure**\n- Redis expires keys lazily (checked on access) and actively (periodic scan of a sample of expiring keys) \u2014 memory isn't immediately reclaimed when a key's TTL passes; under memory pressure, set aggressive expiry policies\n- Use `OBJECT ENCODING key` to check a specific key's encoding; `MEMORY USAGE key` to see how much memory one key consumes; `MEMORY DOCTOR` for a high-level diagnosis of memory issues"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between LRU and LFU eviction and when does LFU perform better?",
+        "How does Redis's lazyfree feature prevent eviction from blocking the main thread?",
+        "What internal encoding does Redis use for a small Hash and what size thresholds trigger a switch to a hash table?"
+      ],
+      "seo": {
+        "metaTitle": "Redis Memory Optimization and Eviction Policies | Java Interview Guide",
+        "metaDescription": "Configure Redis memory limits, eviction policies (allkeys-lru, volatile-lru, LFU), and optimize memory usage in Spring Boot applications with practical examples."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Memory management is one of the most operationally important aspects of running Redis in production.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Redis stores everything in RAM, so memory management is not optional \u2014 it is the most critical operational concern. Without a maxmemory setting, Redis will consume all available RAM until the operating system's OOM killer terminates the process, causing an unplanned outage. Setting maxmemory to 70\u201380% of available RAM leaves headroom for the OS page cache, replication buffers, and the memory overhead of BGSAVE/BGREWRITEAOF forks (which can temporarily double memory usage via copy-on-write). The eviction policy determines what happens when Redis hits the memory ceiling. The default noeviction policy returns."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Redis stores everything in RAM, so memory management is not optional \u2014 it is the most critical operational concern.",
+              "Without a maxmemory setting, Redis will consume all available RAM until the operating system's OOM killer terminates the process, causing an unplanned outage.",
+              "Setting maxmemory to 70\u201380% of available RAM leaves headroom for the OS page cache, replication buffers, and the memory overhead of BGSAVE/BGREWRITEAOF forks (which can temporarily double memory usage via copy-on-write).",
+              "The eviction policy determines what happens when Redis hits the memory ceiling.",
+              "The default noeviction policy returns an error on write commands, which is appropriate for session stores or queues where silent data loss is unacceptable.",
+              "For pure caches, allkeys-lru is the standard: it evicts the least recently used key from the entire keyspace."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "allkeys-lru for pure caches \u2014 evicts least recently used key regardless of TTL; the right default when all cached data has equal priority and memory is the bottleneck volatile-lru for mixed persistent and cache data \u2014 only evicts keys with TTL set; protects persistent data (sessions, locks) from eviction when used on the same Redis instance as cache data noeviction for queues and session stores \u2014 rejects writes when memory is full; requires capacity monitoring and alerting; prevents silent data loss at the cost of write failures Hash encoding with ziplist saves memory \u2014 keep Hash fields below 128 and values short to stay in compact ziplist encoding; one Hash key with N fields uses less memory than N separate String keys MEMORY USAGE key and MEMORY DOCTOR \u2014 diagnose memory consumption per key and get a Redis-generated diagnosis of memory pressure causes; run before scaling up instance size"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Not setting maxmemory at all, allowing Redis to consume all available RAM and trigger OOM kills, or using the default noeviction policy with a cache workload."
+          }
+        ],
+        "cap": "Eviction policies \u2014 what to evict when memory is full allkeys-lru evicts the least recently used key across all keys \u2014 the right default for a cache where all data has equal priority; Redis automatica",
+        "familiarity_anchors": [
+          "Redis"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between LRU and LFU eviction and when does LFU perform better?",
+          "How does Redis's lazyfree feature prevent eviction from blocking the main thread?",
+          "What internal encoding does Redis use for a small Hash and what size thresholds trigger a switch to a hash table?"
+        ]
+      }
+    }
+  ]
+}

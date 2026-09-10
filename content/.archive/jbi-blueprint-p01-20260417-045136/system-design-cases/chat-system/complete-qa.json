@@ -1,0 +1,143 @@
+{
+  "topic": "Chat System",
+  "topicSlug": "chat-system",
+  "questions": [
+    {
+      "id": "sdh-001",
+      "slug": "design-chat-messaging-system",
+      "question": "Design a chat/messaging system like WhatsApp that supports one-on-one and group messaging.",
+      "title": "Design a Chat/Messaging System (WhatsApp)",
+      "direct_answer": "Use WebSocket connections for real-time message delivery with a message queue (Kafka) for reliability. Store messages in Cassandra partitioned by conversation ID. Maintain a presence service in Redis for online/offline status. Fan-out on write for small groups, fan-out on read for large broadcast channels.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Real-time messaging architecture, WebSocket management, message ordering and delivery guarantees, storage partitioning",
+        "common_mistake": "Polling HTTP for new messages instead of persistent connections \u2014 adds seconds of latency and wastes server resources at scale",
+        "to_stand_out": "Discuss message ordering with vector clocks or server-assigned sequence numbers, end-to-end encryption trade-offs, and graceful offline message queuing with delivery receipts"
+      },
+      "company_tags": [
+        "Meta",
+        "WhatsApp",
+        "Slack",
+        "Discord",
+        "Telegram"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why HTTP Polling Is a Non-Starter at Messaging Scale",
+            "content": "A WhatsApp-scale system handles **2 billion registered users**, roughly **100 million daily active**, each sending ~40 messages per day. That is **4 billion messages daily \u00f7 86,400 seconds \u2248 46,000 messages/second** average, with peaks at 3\u20135\u00d7 during evening hours \u2014 **~200K msg/sec**. The real bottleneck is not message throughput but **connection count**: 100 million concurrent WebSocket connections across a fleet of gateway servers.\n\nThe most common design mistake is using **HTTP polling** \u2014 clients repeatedly ask \"any new messages?\" every few seconds. With 100M users polling every 5 seconds, that is **20 million requests/second**, of which 95% return nothing. This wastes server capacity and adds 2\u20135 seconds of artificial latency to every message. Persistent **WebSocket connections** solve both problems: the server pushes messages the instant they arrive, delivering sub-300ms latency.\n\nStorage requirements compound the challenge: 4B messages/day \u00d7 500 bytes average = **2TB/day** of message data. With 1-year retention, that is **730TB** \u2014 ruling out any single-node relational database. Messages are write-heavy and read-sequentially (chat history scrollback), pointing to **Cassandra** or a similar LSM-tree store optimized for append-heavy workloads with partition-key locality."
+          },
+          {
+            "type": "step",
+            "title": "WebSocket Gateways and the Session Registry Pattern",
+            "content": "Each client opens a **persistent WebSocket connection** to a gateway server. Modern gateway servers using epoll-based I/O can hold **500K\u20131M idle connections** on a single machine (32GB RAM, Linux kernel tuned with increased file descriptor limits). For 100M concurrent users, the system needs **100\u2013200 gateway instances** behind a load balancer.\n\nWhen a client connects, the gateway registers a session mapping in **Redis**: `session:{userId} \u2192 {gatewayId}`. When User A sends a message to User B, the message service looks up B's gateway in Redis \u2014 an O(1) operation \u2014 and forwards the message to that specific gateway, which pushes it down B's WebSocket. If User B has no Redis entry (offline), the message is persisted to the durable store and a **push notification** (FCM for Android, APNs for iOS) fires to wake the device.\n\nThe architecture keeps routing stateless even though connections are stateful.\n\n```\nClient A \u2500\u2500WebSocket\u2500\u2500\u2192 Gateway-3\n                           \u2502\n                     \u250c\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n                     \u2502  Message   \u2502\n                     \u2502  Service   \u2502\n                     \u2514\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                           \u2502 lookup user B \u2192 Redis \u2192 gateway-7\n                           \u2502\n                     Gateway-7 \u2500\u2500WebSocket\u2500\u2500\u2192 Client B\n                           \u2502\n                     If offline \u2192 Cassandra + Push Notification\n```\n\nGateway servers are **stateful** (they hold connections), but the message routing service is **stateless** \u2014 any instance can route any message by querying Redis. This separation matters for operations: you can roll gateway servers with connection draining while message services deploy independently and instantly."
+          },
+          {
+            "type": "step",
+            "title": "Cassandra for Message Storage: Partitioned by Conversation",
+            "content": "Messages need a storage engine that excels at **high write throughput** and sequential reads (chat history scrollback). **Cassandra** fits naturally: its LSM-tree architecture is optimized for append-heavy workloads, and leaderless replication with tunable consistency gives multi-datacenter availability without complex shard management.\n\nThe schema places all messages for one conversation in a single partition, ordered chronologically by a time-ordered UUID.\n\n```sql\nCREATE TABLE messages (\n    conversation_id  UUID,\n    message_id       TIMEUUID,\n    sender_id        UUID,\n    content          TEXT,\n    content_type     TEXT,\n    media_url        TEXT,\n    status           TEXT,\n    created_at       TIMESTAMP,\n    PRIMARY KEY (conversation_id, message_id)\n) WITH CLUSTERING ORDER BY (message_id DESC);\n```\n\nReading the last 50 messages is a single partition read with `LIMIT 50` \u2014 the most efficient query Cassandra can execute. Write consistency uses `LOCAL_QUORUM` (2 of 3 replicas in the local datacenter acknowledge) while reads use `LOCAL_ONE` for lower latency, since chat history tolerates brief staleness.\n\n**Why not PostgreSQL?** At 46K writes/second average with 200K peaks, a single Postgres instance would need aggressive sharding from day one. Cassandra's built-in partitioning eliminates shard management overhead, and its leaderless design avoids single-writer bottlenecks. Each conversation's messages are co-located on the same partition, so scrollback reads never span multiple nodes."
+          },
+          {
+            "type": "step",
+            "title": "Message Ordering: Sequence Numbers Beat Vector Clocks",
+            "content": "Message ordering in a distributed system is subtle. Network reordering, multi-datacenter replication, and concurrent messages can cause messages to arrive out of sequence at the gateway.\n\n**Vector clocks** are the textbook answer for causal ordering in distributed systems, but they add complexity that isn't needed here. Each conversation is a single logical stream \u2014 not a multi-writer concurrent data structure. A simpler approach works: the server assigns a **monotonically increasing sequence number** per conversation using Redis `INCR` on `seq:{conversationId}`.\n\nWhen the message service receives a message, it atomically increments the conversation's counter and stamps the message with that sequence number. Clients track the highest sequence number they've seen per conversation. If a client receives message 47 but their latest is 44, they know messages 45 and 46 are missing and fetch them from the API.\n\n```java\n@Service\npublic class MessageService {\n    private final StringRedisTemplate redis;\n    private final CassandraTemplate cassandra;\n\n    public Message send(UUID conversationId, UUID senderId, String content) {\n        long seqNum = redis.opsForValue()\n            .increment(\"seq:\" + conversationId);\n\n        Message msg = Message.builder()\n            .conversationId(conversationId)\n            .senderId(senderId)\n            .content(content)\n            .sequenceNumber(seqNum)\n            .build();\n\n        cassandra.insert(msg);\n        return msg;\n    }\n}\n```\n\nThis trades perfect causal ordering for operational simplicity. In the rare case where two messages are sent to the same conversation simultaneously from different senders, the server-assigned sequence resolves the order deterministically. Gap detection with a 5-second timeout triggers a fetch-from-API fallback, ensuring clients self-heal without manual intervention."
+          },
+          {
+            "type": "step",
+            "title": "Group Messaging: When Fan-Out on Write Becomes Expensive",
+            "content": "Group messaging introduces the **fan-out problem**: when User A sends a message to a 200-member group, how does it reach everyone?\n\n**Fan-out on write** copies a message reference to each member's inbox. Reads are fast \u2014 each user reads from their own partition. The cost: a 200-member group means 200 writes per message, and large broadcast channels with 10,000+ subscribers make this prohibitively expensive.\n\n**Fan-out on read** stores the message once in the group's timeline. Members query the group timeline when they open the chat. One write per message, but read contention grows with group popularity.\n\n**The hybrid model** balances both. Small groups (\u2264 100 members) use fan-out on write for instant delivery. Large channels and broadcast groups use fan-out on read, with only online members notified in real-time via their WebSocket connections.\n\n```java\n@Service\npublic class GroupDispatcher {\n    private static final int FANOUT_THRESHOLD = 100;\n\n    public void dispatch(Message msg, Group group) {\n        cassandra.save(msg);\n\n        if (group.getMemberCount() <= FANOUT_THRESHOLD) {\n            group.getMembers().stream()\n                .filter(id -> !id.equals(msg.getSenderId()))\n                .forEach(id -> {\n                    inboxWriter.append(id, msg.getMessageId());\n                    pushToGateway(id, msg);\n                });\n        } else {\n            notifyOnlineMembers(group, msg);\n        }\n    }\n}\n```\n\nThe 100-member threshold is tunable. WhatsApp limits groups to 1,024 and uses write-fan-out for all of them since even 1,024 writes per message is manageable. Discord, with channels exceeding 100,000 members, must use read-fan-out with efficient gateway-level push for online users."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes: What Breaks and How the System Self-Heals",
+            "content": "**Gateway crash** \u2014 the user's WebSocket drops. The client reconnects (with exponential backoff and jitter) to any available gateway, re-registers in Redis, and pulls missed messages by sequence number. Messages queued during disconnection are durable in Cassandra, so nothing is lost.\n\n**Redis (session registry) down** \u2014 gateways can't route messages to specific peers. The fallback is **topic-based broadcasting**: publish the message to a Kafka topic partitioned by user ID, and let each gateway consume messages for its connected users. Slower but functional. Redis Sentinel or Cluster provides HA to minimize this scenario's duration.\n\n**Cassandra node failure** \u2014 replication factor 3 means losing one node has zero impact on reads or writes at `LOCAL_QUORUM`. Cassandra's hinted handoff and repair handle node recovery automatically with no operator intervention.\n\n**Thundering herd on reconnection** \u2014 after a major outage, millions of clients reconnect simultaneously. Rate-limit reconnection with **jittered backoff** on the client side, and use connection admission control on gateways (reject with `Retry-After` header if at capacity). Without this, the reconnection storm can crash the gateways that just recovered.\n\n**Message ordering violation** \u2014 network reordering can cause messages to arrive out of sequence. The per-conversation sequence number lets clients reorder locally. If a gap persists beyond 5 seconds, the client fetches missing messages from the REST API as a self-healing fallback."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **WebSocket + Redis session map for O(1) routing** \u2014 persistent connections deliver sub-300ms latency.\n- **Cassandra partitioned by conversation_id** \u2014 LSM-tree architecture handles append-heavy message writes.\n- **Server-assigned sequence numbers per conversation** \u2014 Redis INCR gives monotonically increasing IDs per conversation.\n- **Fan-out on write for groups <100; fan-out on read for larger** \u2014 small groups copy message references to each member inbox (fast reads).\n- **Offline message queue with 30-day retention** \u2014 Kafka topic per user for undelivered messages; consumer is the gateway.\n- **End-to-end encryption: Signal Protocol** \u2014 X3DH key agreement on session establishment; Double Ratchet for forward secrecy."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A WhatsApp-scale chat system handles 100 million daily active users generating roughly 46,000 messages per second average, peaking at 200,000 during evening hours. The most important design decision is transport \u2014 HTTP polling disqualifies itself immediately because it requires 95% of requests to return empty responses and adds seconds of latency.\n\n**The WebSocket gateway and routing:**\n- Each client opens a persistent WebSocket connection to a gateway server; modern Linux servers with epoll-based I/O can hold 500K\u20131M idle connections with tuned file descriptor limits; 100M concurrent users needs 100\u2013200 gateway instances\n- When a client connects, the gateway registers a session mapping in Redis: `userId \u2192 gatewayId`; when User A sends to User B, the message service does an O(1) Redis lookup and forwards directly to B's gateway without broadcasting to all gateways\n- Message delivery latency is consistently sub-300ms end-to-end with this architecture\n\n**Storage \u2014 Cassandra for the message log:**\n- Cassandra's LSM-tree architecture handles append-heavy write workloads; partition by conversation_id so all messages for one chat are co-located; cluster by TIMEUUID for chronological ordering\n- 4 billion messages/day at ~1KB each = 4TB/day; with replication factor 3, that's 12TB/day of total storage; Cassandra scales horizontally by adding nodes, each absorbing 1/N of the new data\n\n**The hard problems:**\n- Message ordering: the server assigns a monotonically increasing sequence number per conversation using Redis INCR; clients detect gaps and request missing messages; simpler and sufficient compared to vector clocks\n- Group fan-out: groups under 100 members use fan-out-on-write (pre-deliver to each member inbox); larger groups and broadcast channels use fan-out-on-read (store once, deliver on access) to avoid 10,000-write amplification per message\n- Offline delivery: messages are retained in Cassandra; reconnecting clients replay from their last acknowledged sequence number\n\nI recommend WebSocket gateways with Redis session routing, Cassandra for message storage, server-assigned sequence numbers for ordering, and the hybrid fan-out strategy with a configurable threshold between write and read fan-out."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement end-to-end encryption and what trade-offs does it introduce?",
+        "How do you handle message ordering in a distributed system with multiple data centers?",
+        "How would you design the notification system for offline users without draining battery?"
+      ],
+      "seo": {
+        "metaTitle": "Design Chat Messaging System WhatsApp \u2014 Java System Design Interview",
+        "metaDescription": "Chat messaging system design with WebSockets, Cassandra storage, Redis presence, fan-out strategies for groups, and offline message delivery."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A WhatsApp-scale chat system handles 100 million daily active users generating roughly 46,000 messages per second average, peaking at 200,000 during evening hours.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "A WhatsApp-scale system handles 2 billion registered users, roughly 100 million daily active, each sending ~40 messages per day. That is 4 billion messages daily \u00f7 86,400 seconds \u2248 46,000 messages/second average, with peaks at 3\u20135\u00d7 during evening hours \u2014 ~200K msg/sec. The real bottleneck is not message throughput but connection count: 100 million concurrent WebSocket connections across a fleet of gateway servers. The most common design mistake is using HTTP polling \u2014 clients repeatedly ask \"any new messages?\" every few seconds. With 100M users polling every 5 seconds, that is 20 million requests/second, of which 95% return nothing. This wastes server capacity and adds 2\u20135 seconds of artificial latency to every message. Persistent WebSocket connections solve both problems: the."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "A WhatsApp-scale system handles 2 billion registered users, roughly 100 million daily active, each sending ~40 messages per day. That is 4 billion messages daily \u00f7 86,400 seconds \u2248 46,000 messages/second average, with peaks at 3\u20135\u00d7 during evening hours \u2014 ~200K msg/sec. The real bottleneck is not message throughput but connection count: 100 million concurrent WebSocket connections across a fleet of gateway servers. The most common design mistake is using HTTP polling \u2014 clients repeatedly ask \"any new messages?\" every few seconds. With 100M users polling every 5 seconds, that is 20 million requests/second, of which 95% return nothing. This wastes server capacity and adds 2\u20135 seconds of artificial latency."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Each client opens a persistent WebSocket connection to a gateway server",
+              "Modern gateway servers using epoll-based I/O can hold 500K\u20131M idle connections on a single machine (32GB RAM, Linux kernel tuned with increased file descriptor limits)",
+              "For 100M concurrent users, the system needs 100\u2013200 gateway instances behind a load balancer",
+              "When a client connects, the gateway registers a session mapping in Redis: session:{userId} \u2192 {gatewayId}",
+              "When User A sends a message to User B, the message service looks up B's gateway in Redis \u2014 an O(1) operation \u2014 and forwards the message to that specific gateway, which pushes it down B's WebSocket"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "A WhatsApp-scale system handles 2 billion registered users, roughly 100 million daily active, each sending ~40 messages per day. That is 4 billion messages daily \u00f7 86,400 seconds \u2248 46,000 messages/second average, with peaks at 3\u20135\u00d7 during evening hours \u2014 ~200K msg/sec. The real bottleneck is not message throughput but connection count: 100 million concurrent WebSocket connections across a fleet of gateway servers. The most common design mistake is using HTTP polling \u2014 clients repeatedly ask \"any new messages?\" every few seconds. With 100M users polling every 5 seconds, that is 20 million requests/second, of which 95% return nothing. This wastes server capacity and adds 2\u20135 seconds of artificial latency to every message. Persistent WebSocket connections solve both problems: the."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "A WhatsApp-scale system handles 2 billion registered users, roughly 100 million daily active, each sending ~40 messages per day. That is 4 billion messages daily \u00f7 86,400 seconds \u2248 46,000 messages/second average, with peaks at 3\u20135\u00d7 during evening hours \u2014 ~200K msg/sec. The real bottleneck is not message throughput but connection count: 100 million concurrent WebSocket connections across a fleet of gateway servers. The most common design mistake is using HTTP polling \u2014 clients repeatedly ask \"any new messages?\" every few seconds. With 100M users polling every 5 seconds, that is 20 million requests/second, of which 95% return nothing. This wastes server capacity and adds 2\u20135 seconds of artificial latency to every message. Persistent WebSocket connections solve both problems: the."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Polling HTTP for new messages instead of persistent connections \u2014 adds seconds of latency and wastes server resources at scale"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "WebSocket + Redis session map for O(1) routing \u2014 persistent connections deliver sub-300ms latency. Cassandra partitioned by conversation_id \u2014 LSM-tree architecture handles append-heavy message writes. Server-assigned sequence numbers per conversation \u2014 Redis INCR gives monotonically increasing IDs per conversation. Fan-out on write for groups <100; fan-out on read for larger \u2014 small groups copy message references to each member inbox (fast reads). Offline message queue with 30-day retention \u2014 Kafka topic per user for undelivered messages; consumer is the gateway. End-to-end encryption: Signal Protocol \u2014."
+          }
+        ],
+        "cap": "The WebSocket gateway and routing: Each client opens a persistent WebSocket connection to a gateway server; modern Linux servers with epoll-based I/O can hold 500K\u20131M idle connections with tuned file",
+        "familiarity_anchors": [
+          "WebSocket",
+          "Kafka",
+          "Store"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement end-to-end encryption and what trade-offs does it introduce?",
+          "How do you handle message ordering in a distributed system with multiple data centers?",
+          "How would you design the notification system for offline users without draining battery?"
+        ]
+      }
+    }
+  ]
+}

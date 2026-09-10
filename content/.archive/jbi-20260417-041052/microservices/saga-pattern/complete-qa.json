@@ -1,0 +1,73 @@
+{
+  "topic": "Saga Pattern",
+  "topicSlug": "saga-pattern",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "microservices",
+  "questions": [
+    {
+      "id": "saga-distributed-transactions",
+      "title": "Saga Pattern for Distributed Transactions",
+      "slug": "saga-distributed-transactions",
+      "question": "How do you handle distributed transactions in microservices using the Saga pattern?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Sagas replace ACID distributed transactions with compensating transactions**\n- **Choreography: services react to events \u2014 no central coordinator**\n- **Orchestration: central saga orchestrator sends commands to services**\n- **Compensating transaction: undo a completed step when later step fails**\n- **Eventual consistency \u2014 sagas guarantee 'eventually consistent', not ACID**\n- **Outbox pattern: publish events reliably with local DB transaction**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "In microservices, you can't use a single ACID transaction that spans multiple services, because each service has its own database. The Saga pattern breaks a distributed transaction into a sequence of local transactions in each service, connected by events or commands. If a step fails, previously completed steps are undone using compensating transactions.\n\nThere are two approaches: choreography, where each service publishes events and other services react, and orchestration, where a central saga orchestrator sends commands to each service in sequence. Choreography is simpler to implement but harder to visualize and debug. Orchestration gives you a clear control flow and is easier to reason about, at the cost of a central coordinator that becomes a critical component.\n\nThe key limitation to acknowledge: sagas provide eventual consistency, not ACID. Between step 2 completing and step 3 starting, the data is in a temporarily inconsistent state. Your business rules must tolerate this."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Order Creation Saga \u2014 Orchestration\n\n```\nSAGA STEPS (happy path):\n1. Create Order (OrderService)       \u2192 status: PENDING\n2. Reserve Inventory (InventoryService) \u2192 items reserved\n3. Process Payment (PaymentService)  \u2192 charged\n4. Schedule Shipping (ShippingService) \u2192 scheduled\n5. Confirm Order (OrderService)      \u2192 status: CONFIRMED\n\nCOMPENSATING TRANSACTIONS (if step 4 fails):\n  Undo step 3: Refund payment (PaymentService)\n  Undo step 2: Release inventory reservation (InventoryService)\n  Undo step 1: Cancel order (OrderService) \u2192 status: CANCELLED\n```\n\n## Orchestration Implementation\n\n```java\n@Component\n@Slf4j\npublic class CreateOrderSaga {\n\n    private final InventoryServiceClient inventoryClient;\n    private final PaymentServiceClient paymentClient;\n    private final ShippingServiceClient shippingClient;\n    private final OrderRepository orderRepository;\n\n    @Transactional\n    public void execute(CreateOrderCommand command) {\n        Order order = null;\n        boolean inventoryReserved = false;\n        PaymentResult paymentResult = null;\n\n        try {\n            // Step 1: Create order\n            order = createOrder(command);\n            log.info(\"Saga step 1 complete: order {} created\", order.getId());\n\n            // Step 2: Reserve inventory\n            inventoryClient.reserve(command.getItems(), order.getId());\n            inventoryReserved = true;\n            log.info(\"Saga step 2 complete: inventory reserved for order {}\", order.getId());\n\n            // Step 3: Process payment\n            paymentResult = paymentClient.charge(command.getPaymentDetails(), order.getTotal());\n            log.info(\"Saga step 3 complete: payment {} for order {}\",\n                paymentResult.getTransactionId(), order.getId());\n\n            // Step 4: Schedule shipping\n            shippingClient.schedule(order.getId(), command.getShippingAddress());\n            log.info(\"Saga step 4 complete: shipping scheduled for order {}\", order.getId());\n\n            // Step 5: Confirm\n            order.setStatus(OrderStatus.CONFIRMED);\n            orderRepository.save(order);\n            log.info(\"Saga complete: order {} confirmed\", order.getId());\n\n        } catch (ShippingException e) {\n            log.error(\"Saga step 4 failed. Compensating...\", e);\n            compensate(order, inventoryReserved, paymentResult, command);\n        } catch (PaymentDeclinedException e) {\n            log.error(\"Saga step 3 failed (payment declined). Compensating...\", e);\n            compensate(order, inventoryReserved, null, command);\n        } catch (InventoryException e) {\n            log.error(\"Saga step 2 failed (inventory). Compensating...\", e);\n            compensate(order, false, null, command);\n        }\n    }\n\n    private void compensate(Order order, boolean inventoryReserved,\n                             PaymentResult payment, CreateOrderCommand command) {\n        // Compensate in REVERSE order:\n        if (payment != null) {\n            paymentClient.refund(payment.getTransactionId());\n            log.info(\"Compensation: refunded payment {}\", payment.getTransactionId());\n        }\n        if (inventoryReserved) {\n            inventoryClient.releaseReservation(command.getItems(), order.getId());\n            log.info(\"Compensation: inventory released for order {}\", order.getId());\n        }\n        if (order != null) {\n            order.setStatus(OrderStatus.CANCELLED);\n            orderRepository.save(order);\n            log.info(\"Compensation: order {} cancelled\", order.getId());\n        }\n    }\n}\n```\n\n## Choreography via Events\n\n```java\n// OrderService \u2014 emits event, doesn't know who handles it:\n@Service\npublic class OrderService {\n    public Order createOrder(CreateOrderRequest request) {\n        Order order = orderRepository.save(buildOrder(request));\n        // Publish via Kafka/RabbitMQ:\n        eventPublisher.publish(new OrderPlacedEvent(order.getId(), order.getItems()));\n        return order;\n    }\n}\n\n// InventoryService \u2014 reacts to event:\n@Component\npublic class InventoryEventHandler {\n    @KafkaListener(topics = \"order-placed\")\n    public void handleOrderPlaced(OrderPlacedEvent event) {\n        try {\n            inventoryService.reserve(event.getItems(), event.getOrderId());\n            eventPublisher.publish(new InventoryReservedEvent(event.getOrderId()));\n        } catch (InventoryException e) {\n            eventPublisher.publish(new InventoryReservationFailedEvent(event.getOrderId()));\n        }\n    }\n\n    // Handle compensation event if payment fails later:\n    @KafkaListener(topics = \"payment-failed\")\n    public void handlePaymentFailed(PaymentFailedEvent event) {\n        inventoryService.releaseReservation(event.getOrderId());\n    }\n}\n// PaymentService similarly listens to InventoryReservedEvent, etc.\n```\n\n## Outbox Pattern \u2014 Reliable Event Publishing\n\n```java\n// Problem: saving order and publishing event can fail independently\n// Solution: save event to same DB in same transaction, publish asynchronously\n\n@Transactional\npublic Order createOrder(CreateOrderRequest request) {\n    Order order = orderRepository.save(buildOrder(request));\n\n    // Save event to outbox table IN SAME TRANSACTION:\n    OutboxEvent outboxEvent = OutboxEvent.builder()\n        .aggregateId(order.getId().toString())\n        .eventType(\"OrderPlaced\")\n        .payload(objectMapper.writeValueAsString(new OrderPlacedEvent(order)))\n        .status(OutboxEvent.Status.PENDING)\n        .build();\n    outboxRepository.save(outboxEvent);\n\n    return order;\n    // Both order and outbox event saved atomically\n    // Separate scheduler picks up pending events and publishes to Kafka\n}\n\n// Outbox publisher (runs every few seconds):\n@Scheduled(fixedDelay = 5000)\n@Transactional\npublic void publishPendingEvents() {\n    List<OutboxEvent> pending = outboxRepository.findByStatus(PENDING);\n    for (OutboxEvent event : pending) {\n        try {\n            kafkaTemplate.send(event.getEventType(), event.getPayload());\n            event.setStatus(PUBLISHED);\n        } catch (Exception e) {\n            event.incrementRetryCount();\n        }\n        outboxRepository.save(event);\n    }\n}\n```\n\n## Production Reality\n\nSagas are complex \u2014 only use them when you actually need cross-service consistency. Many distributed transaction problems can be avoided by better service design (fewer cross-service operations) or by accepting eventual consistency and handling it at the UI layer (\"your order is being processed\"). When you do need sagas, prefer orchestration for complex flows (easier to visualize and debug) and choreography for simple reactive flows. Always implement the outbox pattern for event publishing \u2014 it's the difference between \"at-least-once delivery\" and data loss."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "In microservices, you can't use a single ACID transaction that spans multiple services, because each service has its own database.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Your business rules must tolerate this.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

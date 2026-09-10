@@ -1,0 +1,236 @@
+{
+  "topic": "Jwt",
+  "topicSlug": "jwt",
+  "questions": [
+    {
+      "id": "ss-003",
+      "slug": "jwt-authentication-spring-security",
+      "question": "How do you implement JWT authentication from scratch in Spring Security?",
+      "title": "How to Implement JWT Authentication from Scratch in Spring Security",
+      "direct_answer": "JWT authentication in Spring Security requires three things: a custom filter that extracts and validates the JWT from the Authorization header, a UserDetailsService to load the user after validation, and SecurityFilterChain configuration that disables sessions and registers your filter before UsernamePasswordAuthenticationFilter. The JWT itself is signed so the server can verify authenticity without a database lookup on every request.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Hands-on knowledge of stateless authentication \u2014 can the candidate wire up a complete JWT flow without scaffolding?",
+        "common_mistake": "Storing JWTs in localStorage without understanding XSS risk, or forgetting to set SessionCreationPolicy.STATELESS, causing sessions to be created unnecessarily.",
+        "to_stand_out": "Discuss token expiry, refresh token strategy, signing algorithms (HS256 vs RS256), and token revocation challenges."
+      },
+      "company_tags": [
+        "Netflix",
+        "Uber",
+        "Twitter",
+        "Coinbase"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Building JWT Auth Without Understanding the Security Implications Is Worse Than Using Sessions",
+            "content": "Implementing JWT authentication in Spring Security is mechanically straightforward \u2014 generate a token at login, validate it on every request. The security mistakes are where real applications break. **Storing tokens in localStorage exposes them to XSS** \u2014 any JavaScript on the page (including injected malicious scripts) can read `localStorage`. **Forgetting `sessionCreationPolicy(STATELESS)`** means Spring creates sessions alongside JWT, wasting memory and misleading developers who think session-based revocation is working. **Using a weak HS256 secret** makes tokens forgeable by anyone who can brute-force the key.\n\nBefore writing a custom implementation, consider Spring Security 6's built-in OAuth2 Resource Server support (`spring-boot-starter-oauth2-resource-server`). **For most applications that validate tokens but don't issue them**, the built-in support requires zero custom filter code \u2014 just configuration. The custom implementation path is for applications that ARE the token issuer (not using Keycloak, Auth0, or another external authorization server).\n\nThe complete custom implementation has four components:\n- A `JwtUtil` class for token generation and validation (wrapping a JWT library like `jjwt` or `nimbus-jose-jwt`)\n- A `OncePerRequestFilter` subclass that extracts and validates the token on each request\n- A login endpoint that calls `AuthenticationManager`, generates the token on success, and returns it\n- A `SecurityFilterChain` that disables sessions, disables CSRF, registers the filter, and protects endpoints\n\nEach of these has a failure mode that's easy to miss."
+          },
+          {
+            "type": "step",
+            "title": "Token Generation at Login \u2014 Claims, Signing Algorithm, and Expiry Strategy",
+            "content": "At the login endpoint, after `AuthenticationManager` validates credentials, generate a signed JWT with the user's identity and authorities as claims.\n\n```java\npublic String generateToken(Authentication authentication) {\n    Instant now = Instant.now();\n    List<String> roles = authentication.getAuthorities().stream()\n        .map(GrantedAuthority::getAuthority)\n        .toList();\n\n    return Jwts.builder()\n        .subject(authentication.getName())       // user identifier\n        .claim(\"roles\", roles)                    // authorities for authorization\n        .issuedAt(Date.from(now))\n        .expiration(Date.from(now.plus(15, ChronoUnit.MINUTES))) // short-lived\n        .signWith(secretKey)                      // HS256 with injected key\n        .compact();\n}\n```\n\n**15\u201330 minutes is the production standard for access token expiry.** A stolen token is usable until expiry \u2014 there is no way to invalidate a valid JWT without a blocklist. Short expiry limits the damage window. Pair short-lived access tokens with a **refresh token** (hours or days, stored in an HttpOnly cookie, rotated on each use) to maintain sessions without frequent re-authentication. The refresh token can be stored server-side and validated against a database \u2014 this is acceptable because refresh is an infrequent operation.\n\n**Never put sensitive data in JWT claims.** The payload is Base64URL-encoded, not encrypted. Anyone who holds the token can decode the payload without the secret key. Store only identifiers and roles \u2014 never passwords, PII, or internal system IDs that reveal infrastructure details.\n\nFor signing algorithm selection: HS256 uses one shared secret (simpler, works for single services). RS256 uses a private key for signing and a public key for verification (the public key can be distributed to all resource servers without exposing the signing capability). For any microservice architecture, prefer RS256 \u2014 it eliminates secret distribution."
+          },
+          {
+            "type": "step",
+            "title": "The Authentication Filter \u2014 Validating Tokens on Every Request Without Hitting the Database",
+            "content": "The filter runs on every request, extracts the Bearer token, validates it, and sets the authentication in the security context. Extending `OncePerRequestFilter` guarantees single execution per request even if the filter chain re-dispatches.\n\n```java\n@Override\nprotected void doFilterInternal(HttpServletRequest request,\n                                HttpServletResponse response,\n                                FilterChain chain) throws IOException, ServletException {\n    String authHeader = request.getHeader(\"Authorization\");\n    if (authHeader == null || !authHeader.startsWith(\"Bearer \")) {\n        chain.doFilter(request, response); // no token \u2014 let security chain handle it\n        return;\n    }\n\n    String token = authHeader.substring(7);\n    Claims claims = jwtUtil.validateAndParse(token); // throws SignatureException or ExpiredJwtException\n\n    List<GrantedAuthority> authorities = ((List<String>) claims.get(\"roles\")).stream()\n        .map(SimpleGrantedAuthority::new)\n        .toList();\n\n    // credential is null \u2014 the signed token IS the proof, credentials not needed after auth\n    UsernamePasswordAuthenticationToken auth =\n        new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);\n\n    SecurityContextHolder.getContext().setAuthentication(auth);\n    chain.doFilter(request, response);\n}\n```\n\n**The filter does not call `loadUserByUsername()`** \u2014 that would be a database hit on every request. The JWT carries the authorities directly as claims. The tradeoff is that role changes don't take effect until the current token expires. If you need immediate role propagation, you must either use very short token expiry or add a token version check against the database (reintroducing the round-trip).\n\n**Do not catch JWT exceptions in the filter.** Let `SignatureException` and `ExpiredJwtException` propagate. `ExceptionTranslationFilter` catches them and sends a 401 response with the appropriate headers. Catching them and calling `chain.doFilter()` with an empty security context means the request continues unauthenticated \u2014 a security bypass."
+          },
+          {
+            "type": "step",
+            "title": "SecurityFilterChain Configuration \u2014 Three Settings That Must All Be Correct",
+            "content": "The security configuration ties the pieces together. Three settings are all essential and all easy to get wrong:\n\n```java\n@Bean\npublic SecurityFilterChain securityFilterChain(HttpSecurity http,\n                                               JwtAuthFilter jwtAuthFilter) throws Exception {\n    return http\n        .csrf(csrf -> csrf.disable())            // safe \u2014 no session cookies to exploit\n        .sessionManagement(session -> session\n            .sessionCreationPolicy(SessionCreationPolicy.STATELESS))  // no sessions\n        .authorizeHttpRequests(auth -> auth\n            .requestMatchers(\"/auth/login\", \"/auth/register\").permitAll()\n            .anyRequest().authenticated())\n        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)\n        .build();\n}\n```\n\n**`SessionCreationPolicy.STATELESS`** prevents Spring Security from creating HTTP sessions. Without this, every authenticated request creates a session object. The session does nothing useful (JWT is stateless), but it consumes memory. On a busy server handling 1000 requests/second, this adds significant garbage collection pressure.\n\n**`csrf.disable()`** is safe because JWT tokens in the `Authorization` header cannot be included in cross-site requests \u2014 browsers don't automatically attach headers the way they attach cookies. If you later move JWT storage to an HttpOnly cookie instead of the `Authorization` header, you must re-enable CSRF. This is a nuanced decision that the `to_stand_out` guidance highlights.\n\n**`addFilterBefore`** placement is critical. The JWT filter must run before `UsernamePasswordAuthenticationFilter` to populate the `SecurityContext` before authorization decisions are made. The filter is registered as a bean \u2014 no `@Component` needed; registering it in the `SecurityFilterChain` is sufficient and prevents it from being applied twice (Spring Boot auto-registers all `Filter` beans, which would double-apply this filter without the exclusion)."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JWT filter must run before `UsernamePasswordAuthenticationFilter`** \u2014 use `addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)` so the JWT is parsed and the `SecurityContext` is populated before the standard auth filter runs.\n- **Store JWTs in `httpOnly` cookies, not `localStorage`** \u2014 `httpOnly` cookies are inaccessible to JavaScript, preventing XSS theft; `localStorage` is vulnerable to any script running on the page.\n- **Short `exp` + refresh token rotation** \u2014 access token TTL: 15 minutes; refresh token: 7-30 days in `httpOnly` cookie; rotation: issue a new refresh token on each use and invalidate the old one.\n- **Verify `alg`, `iss`, `aud` claims** \u2014 a JWT with `alg: none` has no signature; verify the algorithm matches your expected one; `iss` and `aud` claims bind the token to the expected issuer and audience.\n- **Do not store user data in the JWT** \u2014 the payload is base64-visible; store only `sub` (user ID), `iss`, `exp`, `iat`, and required authorization claims; fetch sensitive user data by ID from a service."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Implementing JWT authentication in Spring Security means writing a custom filter that validates the token and populates the `SecurityContext` before the rest of the filter chain runs.\n\n**The filter implementation**\n- Extend `OncePerRequestFilter`\n- Extract `Authorization: Bearer <token>` header\n- Validate the JWT: signature, `exp`, `alg`, `iss`, `aud`\n- Load `UserDetails` by the `sub` claim and create a `UsernamePasswordAuthenticationToken`\n- Set it in `SecurityContextHolder.getContext().setAuthentication(auth)`\n- Register: `http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)`\n\n**Token storage**\n- `httpOnly` cookie \u2014 inaccessible to JavaScript; XSS-safe; needs CSRF protection if used with session cookies\n- `localStorage` \u2014 vulnerable to XSS; any script on the page can read and send the token\n- For SPAs: short-lived access token in memory + long-lived refresh token in `httpOnly` cookie\n\n**Refresh token rotation**\n- Access token: 15-minute TTL; client refreshes silently when expired\n- Refresh token: 7-day TTL stored in `httpOnly` cookie; on use, issue a new refresh token and revoke the old one\n- Rotation limits the window of damage if a refresh token is stolen \u2014 re-use of a revoked token signals theft"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement token refresh without forcing the user to log in again?",
+        "What are the security implications of HS256 vs RS256 signing, and when would you choose each?",
+        "How do you handle JWT revocation if a user logs out or their account is compromised?"
+      ],
+      "seo": {
+        "metaTitle": "JWT Authentication in Spring Security \u2014 Step-by-Step Java Guide",
+        "metaDescription": "Learn how to implement JWT authentication from scratch in Spring Security: JwtUtil, OncePerRequestFilter, stateless SecurityFilterChain, and a login endpoint \u2014 with full code examples."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Implementing JWT authentication in Spring Security means writing a custom filter that validates the token and populates the SecurityContext before the rest of the filter chain runs.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Implementing JWT authentication in Spring Security is mechanically straightforward \u2014 generate a token at login, validate it on every request. The security mistakes are where real applications break. Storing tokens in localStorage exposes them to XSS \u2014 any JavaScript on the page (including injected malicious scripts) can read localStorage. Forgetting sessionCreationPolicy(STATELESS) means Spring creates sessions alongside JWT, wasting memory and misleading developers who think session-based revocation is working. Using a weak HS256 secret makes tokens forgeable by anyone who can brute-force the key. Before writing a custom implementation, consider Spring."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "At the login endpoint, after AuthenticationManager validates credentials, generate a signed JWT with the user's identity and authorities as claims.",
+              "``java public String generateToken(Authentication authentication) { Instant now = Instant.now(); List<String> roles = authentication.getAuthorities().stream() .map(GrantedAuthority::getAuthority) .toList(); return Jwts.builder() .subject(authentication.getName()) // user identifier .claim(\"roles\", roles) // authorities for authorization .issuedAt(Date.from(now)) .expiration(Date.from(now.plus(15, ChronoUnit.MINUTES))) // short-lived .signWith(secretKey) // HS256 with injected key .compact(); } `` 15\u201330 minutes is the production standard for access token expiry.",
+              "A stolen token is usable until expiry \u2014 there is no way to invalidate a valid JWT without a blocklist.",
+              "Short expiry limits the damage window.",
+              "Pair short-lived access tokens with a refresh token (hours or days, stored in an HttpOnly cookie, rotated on each use) to maintain sessions without frequent re-authentication.",
+              "The refresh token can be stored server-side and validated against a database \u2014 this is acceptable."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "JWT filter must run before UsernamePasswordAuthenticationFilter \u2014 use addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter",
+              "class) so the JWT is parsed and the SecurityContext is populated before the standard auth filter runs",
+              "Store JWTs in httpOnly cookies, not localStorage \u2014 httpOnly cookies are inaccessible to JavaScript, preventing XSS theft; localStorage is vulnerable to any script running on the page",
+              "Short exp + refresh token rotation \u2014 access token TTL: 15 minutes; refresh token: 7-30 days in httpOnly cookie; rotation: issue a new refresh token on each use and invalidate the old one",
+              "Verify alg, iss, aud claims \u2014 a JWT with alg: none has no signature; verify the algorithm matches your expected one; iss and aud claims bind the token to the expected issuer and audience"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Storing JWTs in localStorage without understanding XSS risk, or forgetting to set SessionCreationPolicy.STATELESS, causing sessions to be created unnecessarily."
+          }
+        ],
+        "cap": "The filter implementation Extend OncePerRequestFilter Extract Authorization: Bearer <token> header Validate the JWT: signature, exp, alg, iss, aud Load UserDetails by the sub claim and create a Userna",
+        "familiarity_anchors": [
+          "Spring",
+          "Security",
+          "Authorization"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement token refresh without forcing the user to log in again?",
+          "What are the security implications of HS256 vs RS256 signing, and when would you choose each?",
+          "How do you handle JWT revocation if a user logs out or their account is compromised?"
+        ]
+      }
+    },
+    {
+      "id": "sec-005",
+      "slug": "jwt-security-signing-expiry-refresh",
+      "question": "What are the security considerations for JWT \u2014 signing algorithms, expiry, and refresh token rotation?",
+      "title": "JWT Security \u2014 Signing, Expiry, and Refresh Token Rotation",
+      "direct_answer": "JWTs must be signed with a strong algorithm (RS256 or HS256 with a secure key) to prevent forgery. Access tokens should be short-lived (5\u201315 minutes) to limit exposure if stolen; refresh tokens enable session continuity without re-authentication. Refresh token rotation \u2014 issuing a new refresh token on every use and invalidating the old one \u2014 prevents token theft from going undetected.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands JWT's stateless nature, the implications of not being able to revoke tokens, and strategies to mitigate token theft.",
+        "common_mistake": "Using the 'none' algorithm, setting very long expiry times, or storing JWTs in localStorage without understanding XSS risk.",
+        "to_stand_out": "Discuss the algorithm confusion attack (RS256 vs HS256 key confusion), token blocklist for logout, and the security trade-off of short-lived tokens."
+      },
+      "company_tags": [
+        "saas",
+        "fintech",
+        "startup",
+        "enterprise"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "A JWT Signed With 'none' Is an Unsigned Postcard \u2014 Anyone Can Write Anything On It",
+            "content": "JWT security has multiple layers, and each one has a known attack vector. The **algorithm confusion attack** is the most subtle: some JWT libraries accept the algorithm from the token's own header without validation. An attacker takes a valid RS256 token, changes the `alg` header to `HS256`, and signs the modified payload with the server's public key \u2014 which is, by definition, publicly available. If the library uses whatever algorithm the token header specifies and treats the public key as the HS256 symmetric secret, the forged token validates. The fix is simple but must be explicit: **always enforce the expected algorithm server-side** and never trust the `alg` header from an incoming token.\n\nThe `none` algorithm disables signature verification entirely. A token with `\"alg\": \"none\"` carries no signature \u2014 anyone can modify the payload. Modern libraries reject `none` by default, but older versions and misconfigured setups don't. Always configure your JWT validator with a specific expected algorithm and reject anything else.\n\n**Expiry management is the second critical concern.** JWTs cannot be revoked until they expire \u2014 this is the fundamental statelessness trade-off. A 24-hour access token means a stolen token is usable for up to 24 hours with no recourse. **Short-lived access tokens (15\u201330 minutes)** paired with **longer-lived refresh tokens** (days, stored in HttpOnly cookies) balance security with usability. The access token's short life limits the stolen-token window. The refresh token, stored HttpOnly, is not accessible to JavaScript.\n\n**Token storage determines XSS exposure.** `localStorage` is readable by any JavaScript on the page \u2014 one XSS vulnerability means all tokens are stolen. HttpOnly cookies are never accessible from JavaScript. The browser attaches them automatically, which reintroduces CSRF risk (but CSRF is manageable with `SameSite=Lax` or CSRF tokens). For browser clients, HttpOnly cookie storage is the stronger security choice."
+          },
+          {
+            "type": "comparison_table",
+            "title": "HS256 vs RS256 \u2014 Choosing the Right Signing Algorithm",
+            "content": "The signing algorithm determines how tokens are verified and who can do it.\n\n| Aspect | HS256 (HMAC-SHA256) | RS256 (RSA-SHA256) |\n|---|---|---|\n| **Key type** | Symmetric \u2014 one secret for both signing and verification | Asymmetric \u2014 private key signs, public key verifies |\n| **Key sharing** | Every service that validates tokens needs the secret | Only the auth server needs the private key |\n| **Key compromise risk** | Single secret compromise breaks everything | Private key stays on auth server; public key is safe to share |\n| **Performance** | Faster \u2014 HMAC hash operation | Slower \u2014 RSA cryptographic operation |\n| **JWKS support** | Not standard | Yes \u2014 public key published at `/.well-known/jwks.json` |\n| **Multi-service** | Secret must be securely distributed to each service | Public key distributed freely; no security risk |\n| **Best for** | Single service, controlled environment | Microservices, OAuth2, public APIs |\n\nHS256 is simpler and faster. The problem is **secret distribution** \u2014 every service that validates tokens must have the same secret, and that secret must be kept secure everywhere it exists. In microservices with ten services validating tokens, you have ten places where the secret can leak.\n\nRS256 solves distribution: the private key never leaves the authorization server. Resource servers download the public key from the JWKS endpoint and cache it. No secret to share, no secret to accidentally commit to Git, no secret to rotate across ten services simultaneously. **Use RS256 for any multi-service architecture.** HS256 is acceptable only for monoliths or tightly controlled single-service environments.\n\nKey rotation: RS256 keys can be rotated by publishing a new key at the JWKS endpoint. JWTs include a `kid` (key ID) claim that tells the validator which key to use for verification, enabling seamless rotation without service restarts."
+          },
+          {
+            "type": "step",
+            "title": "Refresh Token Rotation and Token Blocklists \u2014 Production Patterns for the Revocation Problem",
+            "content": "JWT's fundamental limitation is the inability to revoke tokens before expiry. Two production patterns address this without abandoning statelessness.\n\n**Refresh token rotation** provides automatic compromise detection. On every refresh operation, the server issues a new refresh token and invalidates the old one. Store refresh tokens in the database with a status flag. If an attacker steals a refresh token and uses it first, the legitimate user's next refresh attempt presents the old (now-invalidated) token \u2014 the server detects the reuse and can invalidate the entire session. The user gets logged out; the attacker's stolen token stops working. This is proactive compromise detection without a blocklist for access tokens.\n\nFor logout and account compromise scenarios, a **token blocklist** in Redis handles access token revocation. The `jti` (JWT ID) claim uniquely identifies each token \u2014 add it at token generation time with `UUID.randomUUID().toString()`. On logout, store the `jti` in Redis with a TTL matching the token's remaining validity. On each request, check the `jti` against Redis before accepting the token.\n\nThe blocklist remains small because entries expire naturally: a 15-minute access token's blocklist entry exists for at most 15 minutes. Redis TTL handles cleanup automatically. For a service with 10,000 concurrent users and 15-minute access tokens, the blocklist holds at most 10,000 entries \u2014 trivial for Redis.\n\n**Never store sensitive data in JWT claims.** The payload is Base64URL-encoded, not encrypted. Any holder of the token can decode the payload with `atob()` in JavaScript or any base64 decoder. Store only identifiers (user ID), roles, and non-sensitive metadata. PII, financial data, or internal system identifiers must never appear in JWT claims."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **HS256 (symmetric) vs RS256/ES256 (asymmetric)** \u2014 HS256: same secret signs and verifies; all parties need the secret; RS256: private key signs, public key verifies; resource servers only need the public key.\n- **Algorithm confusion attack: never trust `alg` from the token header** \u2014 `alg: none` disables signature verification; explicitly specify the expected algorithm in your JWT library, never accept what the token declares.\n- **Short expiry + refresh token rotation prevents long-window compromise** \u2014 access token: 15 min; a stolen token expires quickly; refresh token rotation (invalidate on use) detects theft by re-use.\n- **Token blacklisting with Redis JTI** \u2014 store `jti` (JWT ID) of revoked tokens in Redis with TTL matching the token's remaining valid time; check on every request; enables logout and forced revocation.\n- **`nbf` (not before) and `iat` (issued at) claims prevent replay** \u2014 validate `nbf` \u2264 current time \u2264 `exp`; validate `iat` is not in the future; reject tokens with implausible timestamps."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "JWT security goes beyond 'validate the signature'. The real risks are algorithm confusion, long-lived tokens, and the inability to revoke without a blocklist.\n\n**Signing algorithm choice**\n- **HS256** (HMAC-SHA256): symmetric \u2014 same secret for signing and verification; all services that verify tokens must share the secret; simpler for single-service setups\n- **RS256** (RSA-SHA256): asymmetric \u2014 authorization server signs with private key; resource servers verify with public key from JWKS endpoint; private key never leaves the auth server\n- **ES256** (ECDSA-SHA256): asymmetric, smaller key size, faster than RSA; increasingly preferred\n\n**Algorithm confusion attack**\n- An attacker crafts a token with `{\"alg\": \"none\"}` \u2014 no signature needed\n- Vulnerable libraries accept it if they derive the algorithm from the token header\n- Fix: always specify the expected algorithm explicitly in your JWT library configuration\n\n**Expiry strategy**\n- Access token: 15-minute TTL \u2014 short window of exposure\n- Refresh token: 7-30 day TTL, stored in `httpOnly` cookie\n- Refresh token rotation: every use issues a new refresh token and revokes the old; re-use of a revoked token is a theft signal \u2192 revoke the entire family\n\n**Revocation**\n- Store revoked `jti` values in Redis with TTL = remaining valid time of the token\n- Check on every request \u2014 one Redis lookup; enables instant logout and compromise response"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the algorithm confusion attack in JWT and how do you prevent it?",
+        "How would you implement logout for a stateless JWT-based system?",
+        "What is the difference between storing JWTs in localStorage vs HttpOnly cookies from a security perspective?"
+      ],
+      "seo": {
+        "title": "JWT Security Signing Expiry Refresh Token Rotation \u2014 Spring Boot Interview",
+        "description": "Deep dive into JWT security for Java developers: RS256 vs HS256, short-lived tokens, refresh token rotation, and token reuse detection patterns."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "JWT security goes beyond 'validate the signature'.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "JWT security has multiple layers, and each one has a known attack vector. The algorithm confusion attack is the most subtle: some JWT libraries accept the algorithm from the token's own header without validation. An attacker takes a valid RS256 token, changes the alg header to HS256, and signs the modified payload with the server's public key \u2014 which is, by definition, publicly available. If the library uses whatever algorithm the token header specifies and treats the public key as."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands JWT's stateless nature, the implications of not being able to revoke tokens, and strategies to mitigate token theft."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "HS256 (symmetric) vs RS256/ES256 (asymmetric) \u2014 HS256: same secret signs and verifies; all parties need the secret; RS256: private key signs, public key verifies; resource servers only need the public key",
+              "Algorithm confusion attack: never trust alg from the token header \u2014 alg: none disables signature verification; explicitly specify the expected algorithm in your JWT library, never accept what the token declares",
+              "Short expiry + refresh token rotation prevents long-window compromise \u2014 access token: 15 min; a stolen token expires quickly; refresh token rotation (invalidate on use) detects theft by re-use",
+              "Token blacklisting with Redis JTI \u2014 store jti (JWT ID) of revoked tokens in Redis with TTL matching the token's remaining valid time; check on every request; enables logout and forced revocation",
+              "nbf (not before) and iat (issued at) claims prevent replay \u2014 validate nbf \u2264 current time \u2264 exp; validate iat is not in the future; reject tokens with implausible timestamps"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "JWT security has multiple layers, and each one has a known attack vector. The algorithm confusion attack is the most subtle: some JWT libraries accept the algorithm from the token's own header without validation. An attacker takes a valid RS256 token, changes the alg header to HS256, and signs the modified payload with the server's public key \u2014 which is, by definition, publicly available. If the library uses whatever algorithm the token header specifies and treats the public key as the HS256 symmetric secret, the forged token validates. The fix is simple but must be explicit: always enforce the expected algorithm server-side and never trust the alg header from an incoming token. The none algorithm disables signature verification entirely. A."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using the 'none' algorithm, setting very long expiry times, or storing JWTs in localStorage without understanding XSS risk"
+            ]
+          }
+        ],
+        "cap": "Signing algorithm choice HS256 (HMAC-SHA256): symmetric \u2014 same secret for signing and verification; all services that verify tokens must share the secret; simpler for single-service setups RS256 (RSA-",
+        "familiarity_anchors": [
+          "Access",
+          "Refresh"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the algorithm confusion attack in JWT and how do you prevent it?",
+          "How would you implement logout for a stateless JWT-based system?",
+          "What is the difference between storing JWTs in localStorage vs HttpOnly cookies from a security perspective?"
+        ]
+      }
+    }
+  ]
+}

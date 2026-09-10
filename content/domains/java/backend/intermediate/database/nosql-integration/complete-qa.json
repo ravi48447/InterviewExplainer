@@ -1,0 +1,73 @@
+{
+  "topic": "NoSQL Integration",
+  "topicSlug": "nosql-integration",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "database",
+  "questions": [
+    {
+      "id": "redis-caching-patterns",
+      "title": "Redis Caching in Spring Boot",
+      "slug": "redis-caching-patterns",
+      "question": "How do you integrate Redis caching in a Spring Boot application?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **`@Cacheable`, `@CacheEvict`, `@CachePut`: Spring cache abstraction**\n- **Cache-aside: application loads from cache, falls back to DB on miss**\n- **TTL (Time-To-Live): auto-expire stale data \u2014 always set TTL in production**\n- **Cache invalidation: hardest problem \u2014 evict on update or use short TTL**\n- **Redis beyond cache: sessions, rate limiting, pub/sub, distributed locks**\n- **Don't cache everything: cache read-heavy, infrequently-changed, expensive-to-compute data**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Redis is the most popular caching layer for Java backends. Spring Boot's cache abstraction lets you add caching to service methods with simple annotations: `@Cacheable` caches the result on the first call and returns the cached value on subsequent calls with the same arguments. `@CacheEvict` removes entries when data changes. This abstraction works with Redis, Caffeine, or any other cache provider without changing business code.\n\nThe most important operational concern is TTL. Always set a time-to-live on cached values \u2014 without it, stale data can live in the cache indefinitely, causing subtle bugs that are hard to reproduce. The TTL should balance freshness requirements against DB load reduction.\n\nRedis is also used for more than caching: distributed session storage, rate limiting counters, distributed locks with Redisson, and pub/sub messaging. Understanding these secondary use cases shows depth."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Spring Boot Redis Cache Setup\n\n```xml\n<!-- pom.xml -->\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-data-redis</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-cache</artifactId>\n</dependency>\n```\n\n```yaml\n# application.yml\nspring:\n  redis:\n    host: localhost\n    port: 6379\n    password: ${REDIS_PASSWORD}\n    lettuce:\n      pool:\n        max-active: 8\n        max-idle: 8\n        min-idle: 0\n  cache:\n    type: redis\n    redis:\n      time-to-live: 600000  # 10 minutes default TTL\n      cache-null-values: false  # Don't cache null (optional)\n```\n\n```java\n@Configuration\n@EnableCaching\npublic class CacheConfig {\n\n    @Bean\n    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {\n        // Per-cache TTL configuration:\n        Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();\n\n        // Product catalog: changes rarely \u2192 long TTL\n        cacheConfigs.put(\"products\", RedisCacheConfiguration.defaultCacheConfig()\n            .entryTtl(Duration.ofHours(24))\n            .serializeValuesWith(serializationPair()));  // Use JSON\n\n        // User sessions: medium TTL\n        cacheConfigs.put(\"userSessions\", RedisCacheConfiguration.defaultCacheConfig()\n            .entryTtl(Duration.ofMinutes(30))\n            .serializeValuesWith(serializationPair()));\n\n        // Exchange rates: change frequently \u2192 short TTL\n        cacheConfigs.put(\"exchangeRates\", RedisCacheConfiguration.defaultCacheConfig()\n            .entryTtl(Duration.ofMinutes(5))\n            .serializeValuesWith(serializationPair()));\n\n        return RedisCacheManager.builder(connectionFactory)\n            .cacheDefaults(RedisCacheConfiguration.defaultCacheConfig()\n                .entryTtl(Duration.ofMinutes(10))  // Default\n                .serializeValuesWith(serializationPair()))\n            .withInitialCacheConfigurations(cacheConfigs)\n            .build();\n    }\n\n    private RedisSerializationContext.SerializationPair<Object> serializationPair() {\n        return RedisSerializationContext.SerializationPair\n            .fromSerializer(new GenericJackson2JsonRedisSerializer());\n    }\n}\n```\n\n## @Cacheable, @CacheEvict, @CachePut\n\n```java\n@Service\npublic class ProductService {\n\n    // @Cacheable: cache result; return cache on subsequent calls\n    @Cacheable(value = \"products\", key = \"#productId\")\n    public Product findById(Long productId) {\n        log.info(\"Cache MISS \u2014 loading from DB for product {}\", productId);\n        return productRepository.findById(productId)\n            .orElseThrow(() -> new NotFoundException(\"Product \" + productId));\n        // First call: hits DB, stores in Redis as: products::42 \u2192 {Product JSON}\n        // Subsequent calls: returns from Redis, DB never called\n    }\n\n    // Conditional caching \u2014 don't cache non-existent:\n    @Cacheable(value = \"products\", key = \"#productId\", unless = \"#result == null\")\n    public Product findByIdOrNull(Long productId) {\n        return productRepository.findById(productId).orElse(null);\n    }\n\n    // @CacheEvict: remove from cache when data changes\n    @CacheEvict(value = \"products\", key = \"#product.id\")\n    @Transactional\n    public Product update(Product product) {\n        return productRepository.save(product);\n        // After save, Redis entry products::42 is deleted\n        // Next findById(42) will reload from DB\n    }\n\n    // @CachePut: always calls method AND updates cache\n    @CachePut(value = \"products\", key = \"#product.id\")\n    @Transactional\n    public Product updateAndCache(Product product) {\n        return productRepository.save(product);\n        // Different from @CacheEvict: updates cache with new value immediately\n        // No stale window \u2014 cache has the latest value right away\n    }\n\n    // Evict entire cache region:\n    @CacheEvict(value = \"products\", allEntries = true)\n    @Scheduled(cron = \"0 0 * * * *\")  // Hourly\n    public void clearProductCache() {\n        log.info(\"Clearing entire product cache\");\n    }\n}\n```\n\n## Cache-Aside Pattern (Manual Control)\n\n```java\n@Service\npublic class InventoryService {\n\n    private final RedisTemplate<String, InventoryStatus> redisTemplate;\n    private final InventoryRepository inventoryRepository;\n\n    public InventoryStatus getStatus(String productId) {\n        String key = \"inventory:\" + productId;\n\n        // 1. Check cache:\n        InventoryStatus cached = redisTemplate.opsForValue().get(key);\n        if (cached != null) {\n            return cached;  // Cache HIT\n        }\n\n        // 2. Cache MISS \u2014 load from DB:\n        InventoryStatus status = inventoryRepository.findByProductId(productId);\n\n        // 3. Store in cache with TTL:\n        redisTemplate.opsForValue().set(key, status, Duration.ofMinutes(5));\n\n        return status;\n    }\n\n    public void updateInventory(String productId, int quantity) {\n        inventoryRepository.updateQuantity(productId, quantity);\n\n        // Invalidate cache:\n        redisTemplate.delete(\"inventory:\" + productId);\n        // Next getStatus() will reload from DB\n    }\n}\n```\n\n## Distributed Lock with Redisson\n\n```java\n// Preventing duplicate processing:\n@Service\npublic class PaymentService {\n\n    private final RedissonClient redisson;\n\n    public PaymentResult processPayment(String orderId, PaymentRequest request) {\n        // Distributed lock: only one instance processes this order at a time\n        RLock lock = redisson.getLock(\"payment-lock:\" + orderId);\n\n        try {\n            // Try to acquire lock, wait max 5s, hold max 30s:\n            boolean acquired = lock.tryLock(5, 30, TimeUnit.SECONDS);\n            if (!acquired) {\n                throw new PaymentInProgressException(\"Payment already being processed\");\n            }\n\n            // Check idempotency first:\n            if (paymentRepository.existsByOrderId(orderId)) {\n                return paymentRepository.findByOrderId(orderId);\n            }\n\n            return chargeAndSave(request);\n        } catch (InterruptedException e) {\n            Thread.currentThread().interrupt();\n            throw new PaymentException(\"Interrupted while acquiring lock\");\n        } finally {\n            if (lock.isHeldByCurrentThread()) {\n                lock.unlock();\n            }\n        }\n    }\n}\n```\n\n## Production Reality\n\nAlways serialize to JSON (not Java serialization) \u2014 JSON survives code refactoring and can be read externally for debugging. Monitor cache hit rate via Redis INFO stats or Spring Boot Actuator (`cache.gets` metric tagged with `result=hit/miss`). A hit rate below 80% suggests the TTL is too short or you're caching the wrong things. Watch Redis memory usage \u2014 set `maxmemory` and an eviction policy (`allkeys-lru` is safe for caches) so Redis doesn't run out of memory."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Redis is the most popular caching layer for Java backends.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Understanding these secondary use cases shows depth.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "topic": "Database Migrations",
+  "topicSlug": "database-migrations",
+  "questions": [
+    {
+      "id": "sql-mig-001",
+      "slug": "flyway-vs-liquibase-zero-downtime-schema-changes",
+      "question": "How do you do zero-downtime database migrations in Spring Boot — Flyway vs Liquibase, expand-contract, online DDL?",
+      "title": "Zero-Downtime DB Migrations: Flyway, Liquibase, Expand–Contract",
+      "direct_answer": "Safe production DB migrations require two things: a **versioned migration tool** (Flyway or Liquibase) managed in Git + CI, and **a pattern that keeps old and new schemas working simultaneously during rollout — expand–contract**. Flyway is the pragmatic default (SQL-first, simple, fast); Liquibase is more flexible (XML/YAML/JSON, preconditions, rollback DSL) but heavier. For zero downtime: **expand** the schema (add new nullable columns, dual-write), **migrate** the data (backfill), **contract** (remove old columns after all code switched). Use **online DDL** features (`CREATE INDEX CONCURRENTLY` in Postgres, `ALGORITHM=INPLACE LOCK=NONE` in MySQL 8, `gh-ost` / `pg_squeeze` for large ALTERs) so production stays up. Never couple deploy and schema change atomically on large tables — split them.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Production DB migration discipline; understanding online DDL and expand-contract",
+        "common_mistake": "Breaking changes tied to code deploy; long ALTERs on big tables; no backfill plan; missing rollback",
+        "to_stand_out": "Discuss expand-contract precisely, online DDL tools, blue-green + schema split deploy, CDC for backfill, out-of-band schema changes"
+      },
+      "company_tags": [
+        "github",
+        "shopify",
+        "planetscale",
+        "stripe",
+        "cockroach"
+      ],
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Migrations Are a Source of Incidents",
+            "content": "DB migrations cause more production outages than people expect. The usual failure modes:\n\n- **Long ALTER** on a large table locks writes for minutes; requests time out\n- **Breaking schema change** shipped in same deploy as incompatible code → old replicas running old code crash or new code crashes on old schema\n- **Unreviewed migration** runs in prod with data loss\n- **No rollback path** — schema changes are harder to revert than code\n- **Missing backfill** — new column is empty for existing rows; reads fail\n\nThe fix is not 'be careful'. It's a **versioned tool + expand–contract pattern + online DDL + CI gates**.\n\n**Versioned tool:**\n- Migrations live in Git alongside code\n- Each migration is an immutable, versioned file\n- CI runs them against a test DB\n- Tool tracks which migrations have been applied (Flyway: `flyway_schema_history`; Liquibase: `DATABASECHANGELOG`)\n- Tool applies new migrations on startup (Spring Boot default) or via CLI (safer for prod)\n\n**Spring Boot integrates both:**\n\n```xml\n<dependency>\n  <groupId>org.flywaydb</groupId>\n  <artifactId>flyway-core</artifactId>\n</dependency>\n<!-- or -->\n<dependency>\n  <groupId>org.liquibase</groupId>\n  <artifactId>liquibase-core</artifactId>\n</dependency>\n```\n\nSpring Boot auto-runs pending migrations at startup (configurable; for large prod systems, disable auto-run and apply manually via CI pipeline)."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Expand–Migrate–Contract Flow",
+            "content": "```mermaid\nflowchart TB\n    Start[Initial:<br/>old schema + old code] --> Expand[Expand:<br/>add new columns nullable<br/>ship code that dual-writes]\n    Expand --> Backfill[Backfill:<br/>populate new columns<br/>from existing data]\n    Backfill --> Switch[Switch reads:<br/>new code reads from new columns<br/>still writes both]\n    Switch --> Validate[Validate:<br/>shadow-compare old vs new]\n    Validate --> StopOld[Stop writing old:<br/>new code writes only new columns]\n    StopOld --> Contract[Contract:<br/>drop old columns<br/>after all instances rolled]\n    classDef safe fill:#c8e6c9\n    classDef risky fill:#ffcdd2\n    class Expand,Backfill,Switch,Validate,StopOld safe\n    class Contract risky\n```"
+          },
+          {
+            "type": "step",
+            "title": "Flyway vs Liquibase",
+            "content": "**Flyway (pragmatic default):**\n- SQL-first (`V1__init.sql`, `V2__add_email.sql`); plain DDL you can copy-paste\n- Versioning: `V<version>__<description>.sql`; sorted numerically\n- Also supports `R__` repeatable (for views) and `U__` undo (paid tier)\n- Simpler; lower ceremony; fast to learn\n- Less flexible for complex conditional logic\n- `flyway_schema_history` table tracks applied migrations\n- Spring Boot autoconfigures; just drop SQL files in `src/main/resources/db/migration/`\n\n```sql\n-- V1__create_order_table.sql\nCREATE TABLE orders (\n    id BIGSERIAL PRIMARY KEY,\n    customer_id BIGINT NOT NULL,\n    status VARCHAR(20) NOT NULL,\n    created_at TIMESTAMPTZ DEFAULT now()\n);\n\nCREATE INDEX idx_orders_customer ON orders(customer_id);\n```\n\n**Liquibase:**\n- XML / YAML / JSON / SQL changelogs\n- Rich DSL: preconditions, rollback tags, contexts, labels\n- Stronger built-in rollback\n- More verbose; steeper learning curve\n- Better for enterprise environments with complex governance\n- `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables\n- Spring Boot autoconfigures via `db/changelog/db.changelog-master.yaml`\n\n```yaml\n# db.changelog-master.yaml\ndatabaseChangeLog:\n  - changeSet:\n      id: 1\n      author: ravi\n      changes:\n        - createTable:\n            tableName: orders\n            columns:\n              - column: {name: id, type: BIGSERIAL, constraints: {primaryKey: true}}\n              - column: {name: customer_id, type: BIGINT, constraints: {nullable: false}}\n              - column: {name: status, type: VARCHAR(20), constraints: {nullable: false}}\n      rollback:\n        - dropTable: {tableName: orders}\n```\n\n**Decision heuristic:**\n- Small/medium teams, Postgres/MySQL, fast iteration → **Flyway**\n- Enterprise, multi-DB support, strict rollback/preconditions required → **Liquibase**\n- Both are fine; the discipline around them matters more than the tool.\n\n**Production guardrails (either tool):**\n\n1. **Never auto-run migrations in prod via app startup** at scale — a crash loop applies a bad migration then fails. Apply migrations explicitly from CI/CD before starting app instances.\n2. **Disable `spring.flyway.clean-disabled=false`** (default in Boot is disabled; keep it).\n3. **Lock prod DB user** to DDL-capable only during migration window; runtime user is DML-only.\n4. **CI runs migrations against a clean DB** to validate; also against a snapshot of prod schema to catch 'only works on empty DB' bugs.\n5. **Immutable migrations**: never edit a merged migration. Add a new one."
+          },
+          {
+            "type": "step",
+            "title": "Expand–Contract: Zero-Downtime Pattern",
+            "content": "**The golden rule**: Never deploy a code change that's incompatible with the currently-running code's schema. Deploy schema additive-first, code-aware-of-both, then remove.\n\n**Example: Renaming `orders.status` to `orders.order_status`.**\n\nNaive (breaks production):\n- ALTER TABLE orders RENAME COLUMN status TO order_status;\n- Old replicas crash on first query.\n\n**Expand–Contract:**\n\n**Phase 1: Expand** — add new column alongside old\n\n```sql\n-- V10__add_order_status.sql\nALTER TABLE orders ADD COLUMN order_status VARCHAR(20);\nCREATE INDEX CONCURRENTLY idx_orders_order_status ON orders(order_status);\n```\n\nDeploy code that **writes to both columns** and **reads from old column** (behavior unchanged for users; both columns populated going forward).\n\n**Phase 2: Backfill** — populate new column for existing rows\n\n```sql\n-- Run async in batches (not as migration)\nUPDATE orders SET order_status = status WHERE order_status IS NULL AND id BETWEEN 1 AND 1000000;\n-- loop in chunks to avoid long locks\n```\n\nFor big tables, use a script that runs in chunks (10k rows at a time, sleep between batches). Monitor replication lag.\n\n**Phase 3: Switch reads** — deploy code that reads from new column, still writes both\n\nThis is the risky deploy; verify backfill completion first. Use feature flag if possible to gradually shift read traffic.\n\n**Phase 4: Stop writing old** — deploy code that writes only new column\n\nWait for all instances to roll before proceeding.\n\n**Phase 5: Contract** — drop old column\n\n```sql\n-- V13__drop_status.sql\nALTER TABLE orders DROP COLUMN status;\n```\n\nUsually wait days or weeks between Phase 4 and 5 to preserve rollback ability.\n\n**Shortcut for simple cases:** `ALTER ... RENAME` in a DB with fast metadata-only rename is *almost* safe if the app code handles both names simultaneously (via view or alias). Postgres `RENAME COLUMN` is fast. But deploy timing with app code must still be handled carefully.\n\n**Adding NOT NULL with default:**\n- Old way (slow, locks): `ALTER TABLE t ADD COLUMN c VARCHAR DEFAULT 'x' NOT NULL;`\n- Postgres 11+: `ALTER TABLE t ADD COLUMN c VARCHAR DEFAULT 'x' NOT NULL;` is now fast (metadata-only default)\n- Older DBs: add nullable with default, backfill, then `SET NOT NULL`\n\n**Changing column type:**\n- Can't safely in place at scale\n- Add new column, dual-write, backfill, switch, drop (same as rename pattern)\n\n**Splitting one column into many:**\n- Same expand–contract; each new column nullable; backfill; switch code.\n\n**Foreign keys at scale:**\n- Adding FK validates existing rows — takes locks on big tables\n- Postgres: add `NOT VALID` then `VALIDATE CONSTRAINT` (online)\n- MySQL: plan carefully\n\n**Dropping tables / columns:**\n- Ship code that doesn't reference them; wait for full rollout\n- Then drop; keep the migration even if long-delayed"
+          },
+          {
+            "type": "step",
+            "title": "Online DDL and Large-Table Strategies",
+            "content": "**Postgres online DDL features:**\n\n- `CREATE INDEX CONCURRENTLY` — doesn't block writes; slower; best-practice always\n- `ALTER TABLE ... ADD COLUMN` with default (11+) — metadata-only; fast\n- `ALTER TABLE ... SET NOT NULL` — requires scan; do after backfill, possibly via constraint trick:\n  ```sql\n  ALTER TABLE t ADD CONSTRAINT t_c_not_null CHECK (c IS NOT NULL) NOT VALID;\n  ALTER TABLE t VALIDATE CONSTRAINT t_c_not_null;  -- online\n  ALTER TABLE t ALTER COLUMN c SET NOT NULL;       -- now fast\n  ALTER TABLE t DROP CONSTRAINT t_c_not_null;\n  ```\n- `DROP INDEX CONCURRENTLY`\n- `REINDEX CONCURRENTLY` (12+)\n- `pg_squeeze` or `pg_repack` for online table bloat cleanup\n- `lock_timeout` + retry — set `SET lock_timeout = '2s';` before DDL; retry if blocked\n\n**MySQL online DDL:**\n\n- `ALGORITHM=INPLACE LOCK=NONE` when supported (most adds/drops 8.0+)\n- `ALGORITHM=INSTANT` (8.0.12+) for many metadata-only changes\n- `ALGORITHM=COPY` is the old slow path; avoid on big tables\n- Tools: **gh-ost** (GitHub's online schema migration), **pt-online-schema-change** (Percona Toolkit). These create a ghost table, copy rows in chunks, keep it in sync with triggers/binlog, then atomic rename. Used at massive scale.\n\n**CockroachDB:**\n- Schema changes are online by design (background job)\n- Safe to rename columns, add indexes without blocking\n- Slow operations surfaced in Admin UI; cancellable\n\n**Aurora:**\n- Postgres-compatible: same online DDL features\n- MySQL-compatible: ALGORITHM=INPLACE/INSTANT supported\n- Aurora fast clones for test migrations: clone prod, run DDL, measure time, tune\n\n**Planetscale:**\n- Branching model: create a branch, apply schema change, merge with zero downtime via Vitess\n- Powerful for MySQL at scale without gh-ost\n\n**General pattern for large tables (hundreds of millions+ rows):**\n\n1. Test migration on a clone of production (Aurora fast clone is great for this)\n2. Estimate runtime; if > 10 min, use tool (gh-ost, pg_squeeze) or break up\n3. Use `lock_timeout` or `SET statement_timeout` to avoid hung sessions\n4. Run during low-traffic window; announce to team\n5. Monitor replication lag; pause if lag grows\n6. Backfill in chunks with progress tracking; idempotent\n7. Verify data integrity with shadow reads or checksum\n\n**Rollback strategy:**\n\n- **Small change**: add a backout migration (`V11__rollback_V10.sql`)\n- **Expand–contract**: keep old column until safe; revert code, old column still works\n- **Destructive change (dropped column)**: require full DB restore from backup — much worse; this is why expand–contract is worth it\n- **Liquibase rollback tags**: can auto-generate rollback SQL (best-effort)\n- **Test rollback in CI** for critical migrations\n\n**Blue-green with schema:**\n- Don't point blue and green at the same DB if schema differs\n- Either: both run on same DB with compatible schemas (expand–contract), or\n- Snapshot DB for green, run migration on green; switch at cutover (rare; used for major rewrites)"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Gotchas",
+            "content": "**Auto-migrate on Spring Boot startup is dangerous at scale.** Fine for dev; for prod, apply migrations from CI before starting app instances. A failing migration in a crash-loop pod applies partial changes.\n\n**Immutable migrations.** Once merged, never edit a migration file. Checksums verify; mismatch = drift. Add a new migration instead. Flyway and Liquibase both enforce.\n\n**`V` versioning collisions.** Two PRs adding V11 — merge conflict. Team practice: use timestamp-based versions (`V20260422_1130__...`) or branch names; rebase before merge.\n\n**Long migrations block deploy pipelines.** A 30-minute index build blocks release. Solutions: run DDL out-of-band (not tied to app deploy), use online tools (`CREATE INDEX CONCURRENTLY`), or have CI skip running long migrations and run them separately.\n\n**Seed data should not be in migrations.** Migrations are for schema; data fixtures for tests/dev. Tying prod seeds to schema migrations pollutes and makes rollback harder.\n\n**Environment drift.** Dev schema different from prod. Caused by: people running ad-hoc DDL, skipped migrations, failed and ignored migrations. Fix: block non-migration DDL in prod; rebuild dev from prod schema periodically; Flyway `validateMigrationNaming`.\n\n**Read-replica lag during migration.** Long DDL on primary replicates slowly to replicas; replicas lag; read traffic sees old schema. Monitor replication lag during DDL; throttle if needed.\n\n**Cross-service schema coordination.** Multiple services sharing DB (antipattern) complicates migrations enormously — every service must be aware. Fix: database-per-service.\n\n**Ordering issues with multiple teams.** Teams merge migrations independently; ordering matters. Use CI to run all migrations against a test DB on each merge — catches ordering bugs early.\n\n**Destructive changes.** Dropping column with production code still referencing = outage. Process gate: require review + wait period + confirm no references via static analysis (`rg` in code + logs).\n\n**Repeatable migrations (Flyway `R__`)** rerun on every checksum change; great for views, procedures; bad for data mutations.\n\n**Migrations and feature flags:**\n- Expand schema always\n- Backfill data always\n- Gate new code path behind feature flag\n- Flag on → validate → flip\n- Contract later\n\n**Testcontainers for CI:** spin up real Postgres/MySQL in CI, run migrations, run tests. Don't test migrations against H2 or other fake DB.\n\n**Schema diff tools**: `schemacrawler`, `liquibase diff`, `migra`, `atlas` — generate migrations from schema changes. Useful for review; never commit diffs blindly.\n\n**Zero-downtime is a practice, not a feature.** Requires culture: small migrations, expand–contract, review discipline, monitoring. Tools help; process decides.\n\n**Large ALTER cost estimation:**\n- Table size in MB / disk throughput = rough lower bound\n- Indexes usually add 1.5–3×\n- Test on clone; add safety margin\n\n**CDC as a migration tool:**\n- Debezium streaming to new system during migration\n- Enables dual-running old and new backends on live data\n- Powerful for DB-level moves (Postgres → Aurora, MySQL → CockroachDB)\n\n**Policy you want on day 1:**\n- All DDL via migrations in Git\n- Reviewed PRs; at least one DBA-aware reviewer\n- CI runs migrations on clean DB + prod schema snapshot\n- Prod migrations run from CI, not app startup\n- Online DDL by default (`CREATE INDEX CONCURRENTLY` etc.)\n- Expand–contract for anything touching columns apps use\n- Backfill in chunks with progress\n- Rollback plan (even if it's 'restore from backup')\n- Communication: team knows when schema changes ship\n\n**The strategic answer:** the tool (Flyway or Liquibase) is the easy part. The hard part is discipline: expand–contract always; online DDL always; test on production-like data; automate; never couple deploy and schema atomically on big tables."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Versioned tool + Git + CI** is non-negotiable; Flyway or Liquibase\n- **Expand–Contract**: add new, dual-write, backfill, switch reads, stop old writes, drop old\n- **Online DDL**: `CREATE INDEX CONCURRENTLY` (Postgres), `ALGORITHM=INPLACE/INSTANT` (MySQL 8)\n- **Large table migrations**: gh-ost, pt-online-schema-change, pg_squeeze, Planetscale branching\n- **Don't auto-migrate on Spring Boot startup in prod** — run from CI before starting app\n- **Immutable migrations** — never edit merged; add new\n- **Backfill in chunks** — idempotent, track progress, monitor replica lag\n- **Destructive changes need wait period** — ensure no code references\n- **CI runs migrations on clean + prod-like schema** — catches drift early\n- **Feature flags gate new code paths** — safer than coupling schema + code atomically"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Safe production DB migrations require two things: a versioned migration tool managed in Git and CI, and a pattern that keeps old and new schemas working simultaneously during rollout — expand-contract.\n\n**Flyway vs Liquibase**\n\n*Flyway — pragmatic default*\n- SQL-first: V1__init.sql, V2__add_email.sql\n- Plain DDL you can copy-paste\n- Simpler; lower ceremony; fast to learn\n- flyway_schema_history tracks applied migrations\n\n*Liquibase*\n- XML, YAML, JSON, or SQL changelogs\n- Rich DSL: preconditions, rollback tags, contexts\n- Stronger built-in rollback\n- More verbose; steeper learning curve\n- Better for enterprise with complex governance\n\n*Decision*\n- Small/medium teams, Postgres/MySQL, fast iteration: Flyway\n- Enterprise, multi-DB support, strict rollback/preconditions: Liquibase\n- Discipline around them matters more than tool choice\n\n**Production guardrails**\n- Never auto-run migrations in prod via app startup at scale\n- Apply migrations explicitly from CI/CD before starting app instances\n- Lock prod DB user to DDL-capable only during migration window\n- CI runs migrations against clean DB plus prod schema snapshot\n- Immutable migrations: never edit merged; add new\n\n**Expand-Contract pattern — zero-downtime golden rule**\n\nNever deploy a code change that's incompatible with currently-running code's schema.\n\n*Phase 1: Expand*\n- Add new column alongside old, nullable\n- Create new index CONCURRENTLY\n- Deploy code that dual-writes both columns and reads from old\n\n*Phase 2: Backfill*\n- Populate new column for existing rows\n- Run async in batches (10k at a time, sleep between)\n- Monitor replication lag\n\n*Phase 3: Switch reads*\n- Deploy code that reads new column, still writes both\n- Use feature flag for gradual shift\n\n*Phase 4: Stop writing old*\n- Deploy code that writes only new column\n- Wait for all instances to roll\n\n*Phase 5: Contract*\n- Drop old column\n- Usually wait days or weeks between Phase 4 and 5 to preserve rollback\n\n**Adding NOT NULL safely**\n- Postgres 11+: ALTER ADD COLUMN with DEFAULT is now fast (metadata-only)\n- Older: add nullable with default, backfill, SET NOT NULL via CHECK NOT VALID then VALIDATE trick\n\n**Changing column type or renaming**\n- Can't in place at scale\n- Add new column, dual-write, backfill, switch, drop (expand-contract)\n\n**Foreign keys at scale**\n- Adding FK validates existing rows; locks\n- Postgres: NOT VALID then VALIDATE CONSTRAINT (online)\n\n**Online DDL features**\n\n*Postgres*\n- CREATE INDEX CONCURRENTLY\n- ALTER TABLE ADD COLUMN with default (11+)\n- DROP INDEX CONCURRENTLY\n- REINDEX CONCURRENTLY (12+)\n- pg_squeeze or pg_repack for online bloat cleanup\n- lock_timeout plus retry pattern\n\n*MySQL*\n- ALGORITHM=INPLACE LOCK=NONE\n- ALGORITHM=INSTANT (8.0.12+) for metadata-only\n- gh-ost (GitHub), pt-online-schema-change (Percona) for large tables\n\n*CockroachDB*\n- Schema changes online by design; background jobs\n\n*Planetscale*\n- Branching model: branch, apply schema, merge with zero downtime via Vitess\n\n**Large table strategy (hundreds of millions of rows)**\n- Test on clone of production (Aurora fast clone)\n- Estimate runtime; if over 10 min, use tool or break up\n- Set lock_timeout or statement_timeout\n- Run during low-traffic window\n- Monitor replication lag; pause if lag grows\n- Backfill in chunks with progress tracking; idempotent\n- Verify integrity with shadow reads or checksum\n\n**Rollback strategy**\n- Small change: backout migration file\n- Expand-contract: keep old column until safe; revert code works\n- Destructive change (dropped column): full DB restore from backup\n- Liquibase rollback tags auto-generate (best-effort)\n- Test rollback in CI for critical migrations\n\n**Common failure modes**\n- Long ALTER locks table for minutes; requests time out\n- Breaking schema change shipped with incompatible code: replicas crash\n- Unreviewed migration runs in prod with data loss\n- No rollback path; schema harder to revert than code\n- Missing backfill; new column empty; reads fail\n\n**Gotchas**\n- Auto-migrate on Spring Boot startup dangerous at scale (crash loop applies partial)\n- V versioning collisions: use timestamp or rebase before merge\n- Long migrations block deploy pipelines: run out-of-band\n- Seed data should not be in migrations\n- Environment drift from ad-hoc DDL; block in prod\n- Read-replica lag during DDL; throttle\n- Cross-service schema coordination painful (antipattern); use DB-per-service\n- Destructive changes: review + wait period + confirm no references\n\n**CDC as migration tool**\n- Debezium streaming to new system during migration\n- Enables dual-running old and new backends\n- Powerful for DB moves (Postgres to Aurora, MySQL to CockroachDB)\n\n**Testcontainers for CI**\n- Spin up real Postgres/MySQL in CI\n- Run migrations and tests\n- Don't test against H2 or fake DB\n\n**Policy on day 1**\n- All DDL via migrations in Git\n- Reviewed PRs; DBA-aware reviewer\n- CI runs on clean and prod schema snapshot\n- Prod migrations from CI, not app startup\n- Online DDL by default\n- Expand-contract for column changes\n- Backfill in chunks with progress\n- Rollback plan always\n- Team comm on schema changes\n\n**The strategic answer**\n- Tool is easy part; discipline is hard part\n- Expand-contract always\n- Online DDL always\n- Test on production-like data\n- Automate from CI\n- Never couple deploy and schema atomically on big tables\n- Feature flags gate new code paths\n- Zero-downtime is a practice, not a feature"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does gh-ost achieve online schema migrations in MySQL?",
+        "Walk through expand-contract for a column rename without downtime in Postgres",
+        "What's the safest way to add a NOT NULL column to a 500M-row table?",
+        "How do you handle migrations in a multi-region distributed SQL deployment?"
+      ],
+      "seo": {
+        "meta_title": "Zero-Downtime Database Migrations: Flyway, Liquibase, Expand-Contract",
+        "meta_description": "Production DB migrations: Flyway vs Liquibase, expand-contract pattern, online DDL in Postgres and MySQL, gh-ost, Planetscale branching, rollback.",
+        "keywords": [
+          "database migration",
+          "flyway",
+          "liquibase",
+          "expand contract pattern",
+          "zero downtime migration",
+          "online ddl"
+        ],
+        "metaDescription": "Safe production DB migrations require two things: a versioned migration tool (Flyway or Liquibase) managed in Git + CI, and a pattern that keeps old and new sc.",
+        "metaTitle": "Zero-Downtime DB Migrations: Flyway, Liquibase, Expand–Contract"
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "Safe production DB migrations require two things: a versioned migration tool managed in Git and CI, and a pattern that keeps old and new schemas working simultaneously during rollout — expand-contract.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "DB migrations cause more production outages than people expect. The usual failure modes: Long ALTER on a large table locks writes for minutes; requests time out Breaking schema change shipped in same deploy as incompatible code → old replicas running old code crash or new code crashes on old schema Unreviewed migration runs in prod with data loss No rollback path — schema changes are harder to revert than code."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Auto-migrate on Spring Boot startup is dangerous at scale",
+              "Fine for dev; for prod, apply migrations from CI before starting app instances",
+              "A failing migration in a crash-loop pod applies partial changes",
+              "Immutable migrations",
+              "Once merged, never edit a migration file"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Auto-migrate on Spring Boot startup is dangerous at scale. Fine for dev; for prod, apply migrations from CI before starting app instances. A failing migration in a crash-loop pod applies partial changes. Immutable migrations. Once merged, never edit a migration file. Checksums verify; mismatch = drift. Add a new migration instead. Flyway and Liquibase both enforce. V versioning collisions. Two PRs adding V11 — merge conflict. Team practice: use timestamp-based versions (V20260422_1130__...) or branch names; rebase before merge. Long migrations block deploy pipelines. A 30-minute index build blocks release. Solutions."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "DB migrations cause more production outages than people expect. The usual failure modes: Long ALTER on a large table locks writes for minutes; requests time out Breaking schema change shipped in same deploy as incompatible code → old replicas running old code crash or new code crashes on old schema Unreviewed migration runs in prod with data loss No rollback."
+          }
+        ],
+        "cap": "Phase 1: Expand Add new column alongside old, nullable Create new index CONCURRENTLY Deploy code that dual-writes both columns and reads from old Phase 2: Backfill Populate new column for existing row",
+        "familiarity_anchors": [
+          "Flyway",
+          "Liquibase",
+          "CREATE"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does gh-ost achieve online schema migrations in MySQL?",
+          "Walk through expand-contract for a column rename without downtime in Postgres",
+          "What's the safest way to add a NOT NULL column to a 500M-row table?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with JPA over a relational database"
+      }
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "topic": "Replication",
+  "topicSlug": "replication",
+  "questions": [
+    {
+      "id": "mysql-006",
+      "slug": "mysql-replication-primary-replica",
+      "question": "How does MySQL primary-replica replication work and how does it affect a Spring Boot application's read/write strategy?",
+      "title": "MySQL Replication: Primary-Replica Setup",
+      "direct_answer": "MySQL replication streams binary log (binlog) events from the primary to one or more replicas asynchronously. The replica's I/O thread fetches binlog events, and the SQL thread replays them. In Spring Boot, you configure separate DataSource beans for reads (replica) and writes (primary) using AbstractRoutingDataSource to distribute load and scale reads horizontally.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": "Tests architecture awareness and ability to design scalable database layers. Interviewers want to see that the candidate understands replication lag, read-after-write consistency risks, and how to handle them in Spring Boot.",
+      "company_tags": [
+        "High-traffic SaaS",
+        "E-commerce",
+        "Fintech"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How MySQL Replication Scales Reads",
+            "content": "MySQL replication allows one primary (master) node to replicate all writes to one or more replica (slave) nodes. The primary writes changes to its binary log; each replica connects, downloads binlog events, and applies them in sequence. This enables read scaling (route SELECT queries to replicas), high availability (replica can be promoted if primary fails), and backups without impacting the primary. The critical gotcha is replication lag: replicas may be seconds behind the primary, causing stale reads after a write."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot Read/Write Routing with AbstractRoutingDataSource",
+            "language": "java",
+            "caption": "Spring Boot read/write routing using AbstractRoutingDataSource",
+            "code": "// 1. Routing key holder\npublic class DataSourceContextHolder {\n    private static final ThreadLocal<String> context = new ThreadLocal<>();\n    public static void setDataSourceType(String type) { context.set(type); }\n    public static String getDataSourceType() { return context.get(); }\n    public static void clearDataSourceType() { context.remove(); }\n}\n\n// 2. Custom routing DataSource\npublic class RoutingDataSource extends AbstractRoutingDataSource {\n    @Override\n    protected Object determineCurrentLookupKey() {\n        return DataSourceContextHolder.getDataSourceType();\n    }\n}\n\n// 3. DataSource configuration\n@Configuration\npublic class DataSourceConfig {\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.primary\")\n    public DataSource primaryDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.replica\")\n    public DataSource replicaDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean\n    @Primary\n    public DataSource routingDataSource(\n            @Qualifier(\"primaryDataSource\") DataSource primary,\n            @Qualifier(\"replicaDataSource\") DataSource replica) {\n        RoutingDataSource routing = new RoutingDataSource();\n        Map<Object, Object> sources = new HashMap<>();\n        sources.put(\"primary\", primary);\n        sources.put(\"replica\", replica);\n        routing.setTargetDataSources(sources);\n        routing.setDefaultTargetDataSource(primary);\n        return routing;\n    }\n}\n\n// 4. AOP aspect to route based on @Transactional(readOnly=true)\n@Aspect @Component\npublic class DataSourceRoutingAspect {\n    @Around(\"@annotation(transactional)\")\n    public Object routeDataSource(ProceedingJoinPoint pjp,\n                                   Transactional transactional) throws Throwable {\n        try {\n            String key = transactional.readOnly() ? \"replica\" : \"primary\";\n            DataSourceContextHolder.setDataSourceType(key);\n            return pjp.proceed();\n        } finally {\n            DataSourceContextHolder.clearDataSourceType();\n        }\n    }\n}",
+            "content": "### Spring Boot read/write routing using AbstractRoutingDataSource\n\n```java\n// 1. Routing key holder\npublic class DataSourceContextHolder {\n    private static final ThreadLocal<String> context = new ThreadLocal<>();\n    public static void setDataSourceType(String type) { context.set(type); }\n    public static String getDataSourceType() { return context.get(); }\n    public static void clearDataSourceType() { context.remove(); }\n}\n\n// 2. Custom routing DataSource\npublic class RoutingDataSource extends AbstractRoutingDataSource {\n    @Override\n    protected Object determineCurrentLookupKey() {\n        return DataSourceContextHolder.getDataSourceType();\n    }\n}\n\n// 3. DataSource configuration\n@Configuration\npublic class DataSourceConfig {\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.primary\")\n    public DataSource primaryDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.replica\")\n    public DataSource replicaDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean\n    @Primary\n    public DataSource routingDataSource(\n            @Qualifier(\"primaryDataSource\") DataSource primary,\n            @Qualifier(\"replicaDataSource\") DataSource replica) {\n        RoutingDataSource routing = new RoutingDataSource();\n        Map<Object, Object> sources = new HashMap<>();\n        sources.put(\"primary\", primary);\n        sources.put(\"replica\", replica);\n        routing.setTargetDataSources(sources);\n        routing.setDefaultTargetDataSource(primary);\n        return routing;\n    }\n}\n\n// 4. AOP aspect to route based on @Transactional(readOnly=true)\n@Aspect @Component\npublic class DataSourceRoutingAspect {\n    @Around(\"@annotation(transactional)\")\n    public Object routeDataSource(ProceedingJoinPoint pjp,\n                                   Transactional transactional) throws Throwable {\n        try {\n            String key = transactional.readOnly() ? \"replica\" : \"primary\";\n            DataSourceContextHolder.setDataSourceType(key);\n            return pjp.proceed();\n        } finally {\n            DataSourceContextHolder.clearDataSourceType();\n        }\n    }\n}\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Async replication allows data loss on primary crash** \u2014 the primary commits and acknowledges before any replica confirms receipt; semi-sync replication eliminates this window at the cost of write latency\n- **Replication lag breaks read-your-writes** \u2014 a user reads from a lagging replica immediately after writing and sees the old value; route reads to the primary for a short post-write window to guarantee consistency\n- **Row-based replication (binlog_format=ROW) is safer than statement-based** \u2014 replicates exact row changes; statement-based replication breaks for non-deterministic functions like `NOW()` or `RAND()`\n- **`SHOW REPLICA STATUS`** \u2014 shows `Seconds_Behind_Source` (replica lag) and any SQL/IO thread errors; the first monitoring check for replication problems\n- **GTID-based replication simplifies failover** \u2014 Global Transaction IDs make it possible to promote any replica to primary without manually calculating binlog position; strongly recommended for new setups"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "MySQL primary-replica replication is the standard way to scale reads \u2014 the primary handles all writes and streams those changes to one or more replicas via the binary log.\n\n**How it works**\n- Every write on the primary is recorded in the binary log (binlog) in the order it commits \u2014 each replica runs an I/O thread that connects to the primary and copies the binlog, then an SQL thread that replays those events on the replica's local data\n- The replica applies events asynchronously by default, which means there's always some replication lag \u2014 how much depends on the replica's hardware and how fast the primary is generating writes\n\n**Asynchronous vs semi-synchronous replication**\n- With default async replication, a primary acknowledges a commit before any replica confirms receipt \u2014 which means a primary crash can lose committed transactions that hadn't yet been streamed to replicas\n- Semi-synchronous replication (`rpl_semi_sync_master_enabled`) waits for at least one replica to acknowledge receiving the binlog before the primary acknowledges the commit \u2014 this reduces the data loss window at the cost of slightly higher write latency\n\n**Replication lag and read-your-writes**\n- Replication lag means a read replica may return stale data \u2014 a user who just submitted a form may not see their change on the next page load if the read goes to a lagging replica\n- The Spring Boot solution: use `@Primary` or a separate DataSource for writes, and route reads to replicas; implement read-your-writes by routing reads to the primary for a short window after a write, or using `WAIT_FOR_EXECUTED_GTID_SET` to wait for the replica to catch up\n\nRow-based replication (binlog_format=ROW) replicates the exact row changes rather than the SQL statements, which makes replication deterministic for non-deterministic functions like `NOW()` and avoids many replication consistency issues."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle the scenario where a user creates a record and then immediately reads it \u2014 and the replica hasn't caught up yet?",
+        "What is GTID replication and what problem does it solve over binlog position-based replication?",
+        "How would you promote a replica to primary in a failover scenario with zero data loss?"
+      ],
+      "seo": {
+        "meta_title": "MySQL Replication Primary Replica Spring Boot \u2014 Java Interview",
+        "meta_description": "Learn MySQL primary-replica replication setup and how to implement read/write splitting in Spring Boot for intermediate Java developer interviews.",
+        "keywords": [
+          "MySQL replication",
+          "primary replica MySQL",
+          "Spring Boot read write routing",
+          "AbstractRoutingDataSource",
+          "MySQL scaling Java"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "MySQL primary-replica replication is the standard way to scale reads \u2014 the primary handles all writes and streams those changes to one or more replicas via the binary log.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "MySQL replication allows one primary (master) node to replicate all writes to one or more replica (slave) nodes. The primary writes changes to its binary log; each replica connects, downloads binlog events, and applies them in sequence. This enables read scaling (route SELECT queries to replicas), high availability (replica can be promoted if primary fails), and backups without impacting the primary. The critical gotcha is replication lag: replicas may be seconds behind the primary, causing stale reads after a write."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "MySQL replication allows one primary (master) node to replicate all writes to one or more replica (slave) nodes.",
+              "The primary writes changes to its binary log; each replica connects, downloads binlog events, and applies them in sequence.",
+              "This enables read scaling (route SELECT queries to replicas), high availability (replica can be promoted if primary fails), and backups without impacting the primary.",
+              "The critical gotcha is replication lag: replicas may be seconds behind the primary, causing stale reads after a write."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Async replication allows data loss on primary crash \u2014 the primary commits and acknowledges before any replica confirms receipt; semi-sync replication eliminates this window at the cost of write latency Replication lag breaks read-your-writes \u2014 a user reads from a lagging replica immediately after writing and sees the old value; route reads to the primary for a short post-write window to guarantee consistency Row-based replication (binlog_format=ROW) is safer than statement-based \u2014 replicates exact row changes; statement-based replication breaks for non-deterministic functions like NOW() or RAND() SHOW REPLICA STATUS \u2014 shows Seconds_Behind_Source (replica lag) and any SQL/IO thread errors; the first monitoring check for replication problems GTID-based replication simplifies failover \u2014 Global Transaction IDs make it possible to promote any replica to primary without manually calculating binlog position; strongly recommended for new setups"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "How it works Every write on the primary is recorded in the binary log (binlog) in the order it commits \u2014 each replica runs an I/O thread that connects to the primary and copies the.",
+        "familiarity_anchors": [
+          "MySQL",
+          "Spring",
+          "DataSource"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you handle the scenario where a user creates a record and then immediately reads it \u2014 and the replica hasn't caught up yet?",
+          "What is GTID replication and what problem does it solve over binlog position-based replication?",
+          "How would you promote a replica to primary in a failover scenario with zero data loss?"
+        ]
+      }
+    }
+  ]
+}

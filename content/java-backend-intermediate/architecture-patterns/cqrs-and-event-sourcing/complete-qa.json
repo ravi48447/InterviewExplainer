@@ -1,0 +1,148 @@
+{
+  "topic": "CQRS and Event Sourcing",
+  "topicSlug": "cqrs-and-event-sourcing",
+  "questions": [
+    {
+      "id": "ap-009",
+      "slug": "event-sourcing-pattern",
+      "question": "Explain the Event Sourcing pattern — storing state as a sequence of events.",
+      "title": "Event Sourcing Pattern — Storing State as a Sequence of Events",
+      "direct_answer": "**Event Sourcing** stores every state change as an **immutable, append-only event** in an event store; the current state is **derived by replaying events** in order. Instead of `UPDATE accounts SET balance=100`, you append `MoneyDeposited(amount=100)`. You get a perfect audit log, time-travel debugging, free CQRS read models, and natural integration via event publication — at the cost of higher complexity, eventual-consistency reads, and the schema-evolution problem (events can never be deleted, so old event versions live forever). Use for **financial / audit-critical / collaboration-heavy** domains; avoid for simple CRUD.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "What an event store actually is, how state is rebuilt from events, snapshots for performance, schema evolution, and pairing with CQRS.",
+        "common_mistake": "Event sourcing for CRUD systems where the audit log isn't valuable, or storing CRUD-style 'changed' events instead of meaningful business events.",
+        "to_stand_out": "Discuss event versioning strategies (upcasting, weak schema, copy-and-replace), snapshotting trade-offs, and how event sourcing pairs naturally with CQRS and DDD aggregates."
+      },
+      "company_tags": [
+        "Event Store DB",
+        "Axon",
+        "EventStoreDB",
+        "Banking systems"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Traditional vs Event-Sourced State",
+            "content": "**Traditional (state-stored):**\n- Database holds current state. `account.balance = 100`.\n- An update overwrites: `UPDATE accounts SET balance=80 WHERE id=1`.\n- The previous value is gone. The reason for the change is gone. The audit log is a separate (and lying) afterthought.\n\n**Event-sourced:**\n- Database holds an append-only log of events.\n- `MoneyDeposited(account=1, amount=100, ts=...)`\n- `MoneyWithdrawn(account=1, amount=20, ts=...)`\n- Current balance = sum of all events for that account = 80.\n- Nothing is lost. The full history of *why* the balance is what it is, is in the store.\n- The 'current state' is a function: `state = fold(events, initial)`."
+          },
+          {
+            "type": "step",
+            "title": "How an Event-Sourced Aggregate Works",
+            "content": "Take a bank account aggregate.\n\n```java\npublic class Account {\n    private String id;\n    private long balance;\n    private long version;\n\n    private final List<DomainEvent> uncommitted = new ArrayList<>();\n\n    public static Account fromHistory(String id, List<DomainEvent> history) {\n        Account a = new Account();\n        a.id = id;\n        for (DomainEvent e : history) a.apply(e);\n        return a;\n    }\n\n    public void deposit(long amount) {\n        if (amount <= 0) throw new IllegalArgumentException();\n        raise(new MoneyDeposited(id, amount, Instant.now()));\n    }\n\n    public void withdraw(long amount) {\n        if (amount > balance) throw new InsufficientFundsException();\n        raise(new MoneyWithdrawn(id, amount, Instant.now()));\n    }\n\n    private void raise(DomainEvent e) {\n        apply(e);\n        uncommitted.add(e);\n    }\n\n    private void apply(DomainEvent e) {\n        switch (e) {\n            case MoneyDeposited d -> { balance += d.amount(); version++; }\n            case MoneyWithdrawn w -> { balance -= w.amount(); version++; }\n        }\n    }\n\n    public List<DomainEvent> drainUncommitted() {\n        var out = List.copyOf(uncommitted);\n        uncommitted.clear();\n        return out;\n    }\n}\n```\n\n**Lifecycle:**\n1. Load: read all events for `account-123` → `fromHistory(...)` rebuilds state.\n2. Command: `account.withdraw(20)` — validates, raises `MoneyWithdrawn` event, applies it.\n3. Save: append `drainUncommitted()` to the event store.\n\n**Crucially:** business rules run in the aggregate; only events are persisted. Commands are not stored — only their *outcomes*."
+          },
+          {
+            "type": "step",
+            "title": "The Event Store",
+            "content": "The event store is an append-only log keyed by aggregate ID.\n\n```mermaid\nflowchart TB\n    Cmd[Command:<br/>withdraw 20]\n    Aggregate[Account Aggregate<br/>loaded from history]\n    EventStore[(Event Store<br/>append-only log)]\n    Bus{{Event Bus / Kafka}}\n    Read1[Read Model 1<br/>Postgres view]\n    Read2[Read Model 2<br/>Elasticsearch]\n\n    Cmd --> Aggregate\n    Aggregate -->|raise + append| EventStore\n    EventStore -.publish.-> Bus\n    Bus -.consume.-> Read1\n    Bus -.consume.-> Read2\n```\n\n**Properties:**\n- Append-only — events are immutable once written.\n- Per-aggregate stream — each aggregate has its own ordered sequence.\n- Optimistic concurrency — append checks expected stream version; conflicts on race.\n- Subscribers (event bus / Kafka / outbox) project events into read models.\n\n**Implementations:** EventStoreDB, Axon Server, Kafka (with caveats), or PostgreSQL with an `events(aggregate_id, version, type, payload, ts)` table."
+          },
+          {
+            "type": "step",
+            "title": "Snapshots — Performance Trick",
+            "content": "Replaying 50,000 events to load one aggregate is slow. Snapshots solve this.\n\n```\nEvents: e1, e2, e3, ..., e500\n\nSnapshot at v=300: { balance=4000, version=300 }\nReplay only e301..e500 to reach current state.\n```\n\n**Snapshot policy:**\n- Take a snapshot every N events (e.g., every 100) or on a schedule.\n- Stored in a separate table; versioned with the aggregate.\n- Loading: get latest snapshot → fetch events since snapshot version → apply.\n\n**Important:** snapshots are an optimization, not the source of truth. Events remain authoritative; you can always rebuild snapshots from scratch.\n\n**Trade-off:** snapshots add complexity (now you have two storage formats to evolve in lockstep). Skip them until aggregates become heavy."
+          },
+          {
+            "type": "step",
+            "title": "Pairing with CQRS",
+            "content": "Event sourcing pairs naturally with CQRS (Command Query Responsibility Segregation).\n\n**Write side (commands):**\n- Load aggregate from events → execute command → emit + persist new events.\n- Optimized for consistency and business rules.\n\n**Read side (queries):**\n- Subscribe to events; build denormalized read models tailored to query patterns.\n- One model per UI need: 'account summary', 'transaction history with categories', 'monthly statement'.\n- Eventually consistent; usually just milliseconds behind writes.\n\n```mermaid\nflowchart LR\n    User --> Cmd[Command Handler]\n    Cmd --> Agg[Aggregate]\n    Agg --> Store[(Event Store)]\n    Store -.events.-> Proj1[Projector A]\n    Store -.events.-> Proj2[Projector B]\n    Proj1 --> RM1[(Postgres view:<br/>account summary)]\n    Proj2 --> RM2[(Elasticsearch:<br/>transaction search)]\n    User -.query.-> RM1\n    User -.query.-> RM2\n```\n\nWhy these pair so well: events are already there; building read models is just consuming them. CQRS without events is harder (you need a separate change-data mechanism). Event sourcing without CQRS is awkward (querying the event store directly is painful)."
+          },
+          {
+            "type": "step",
+            "title": "Event Schema Evolution — The Hard Problem",
+            "content": "Events are immutable and live forever. You can never:\n- Delete an event.\n- Rename a field that production already wrote.\n- Change a field's semantics retroactively.\n\nWhen the schema needs to evolve, you have three strategies:\n\n**1. Weak schema / additive only:**\n- Use JSON or Protobuf. Add new optional fields; never remove or rename.\n- Old events still parse; new code handles missing fields with defaults.\n\n**2. Upcasting:**\n- On read, transform old event versions to the latest shape before applying.\n- A `MoneyDeposited.v1` becomes `MoneyDeposited.v2(currency=\"USD\")` at load time.\n- Code lives in version-aware deserializers.\n\n**3. Copy and replace (event migration):**\n- Replay all events through a transform; write new events to a new stream; switch over.\n- Heavy operation; rarely needed but cleanest for breaking changes.\n\n**Best practice:** model events as **business facts in past tense** (`OrderPlaced`, `PaymentCaptured`) — these change schema slowly. Avoid CRUD-style events (`CustomerUpdated{name, email, address}`) — they encode current shape and break on every schema change."
+          },
+          {
+            "type": "step",
+            "title": "When to Use Event Sourcing",
+            "content": "**Use when:**\n- **Audit / compliance.** Banking, healthcare, insurance — the regulator wants to see every change, by whom, when, why.\n- **Time-travel debugging.** 'What was the state at 3pm yesterday?' is one fold operation away.\n- **Complex domain with rich behavior.** Aggregate logic and business invariants benefit from explicit event modeling.\n- **Many interested parties.** Event-driven integration is free — emit events, subscribers consume.\n- **Need to replay business processes.** Bug found? Replay events through a fixed projector to rebuild a corrected read model.\n\n**Don't use when:**\n- **Simple CRUD.** Audit log isn't valuable; complexity dwarfs benefit.\n- **High-write, low-business-value data.** Telemetry, raw IoT — just store as time-series.\n- **Reporting-heavy systems** where business logic is thin and projections are huge.\n- **Team without DDD chops.** Event sourcing requires modeling discipline; without it, you'll get incoherent events and pain."
+          },
+          {
+            "type": "step",
+            "title": "Common Mistakes",
+            "content": "- **CRUD-as-events.** `CustomerUpdated{name, email}` is just a state diff; emit business events (`CustomerEmailChanged`, `CustomerNameCorrected`).\n- **Querying the event store directly.** It's not a query DB. Build read models.\n- **No snapshots when aggregates are large.** Loading 100k events on every command crushes latency.\n- **Mutating events in place.** Never. Append a corrective event (`AmountCorrected`) instead.\n- **Event store also as the read store.** Mixing concerns; event store is for writes only.\n- **No idempotent projectors.** A re-delivered event must update the read model the same way — design for at-least-once.\n- **Synchronous projection blocking commands.** Project asynchronously; reads accept brief lag.\n- **Adopting event sourcing because it sounds cool.** Without a clear audit/compliance/replay need, it's overhead."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Event sourcing = state is the fold of an immutable event sequence.**\n- **Append-only event store** keyed by aggregate ID; events are the source of truth.\n- **Aggregate** loads from history, validates commands, raises events, applies them in-memory.\n- **Snapshots** for performance — optimization, not source of truth.\n- **Pairs naturally with CQRS:** events feed denormalized read models for queries.\n- **Schema evolution** is constrained: events live forever; use additive changes, upcasting, or migration.\n- **Use for audit/compliance/time-travel/rich-domain;** avoid for simple CRUD.\n- **Model events as business facts in past tense**, not CRUD diffs.\n- **Asynchronous, idempotent projectors** for read models."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Traditional vs event-sourced**\n\nTraditional: DB holds current state. UPDATE overwrites; previous value gone, reason for change gone. Audit log a separate afterthought.\n\nEvent-sourced: DB holds an append-only log of events. MoneyDeposited(100), MoneyWithdrawn(20). Current balance = sum of all events. Nothing lost. Full history of why the balance is what it is. State is a function: state = fold(events, initial).\n\n**How an event-sourced aggregate works**\n\nAccount aggregate. Load: read all events for account-123, fromHistory replays them rebuilding state. Command: account.withdraw(20) — validates business rules, raises MoneyWithdrawn event, applies it (mutating in-memory). Save: append uncommitted events to the event store.\n\nCrucially, business rules run in the aggregate; only events are persisted. Commands are not stored — only their outcomes.\n\n**The event store**\n\nAppend-only log keyed by aggregate ID. Each aggregate has its own ordered stream. Optimistic concurrency — append checks expected stream version, conflicts on race. Subscribers (Kafka, outbox) project events into read models.\n\nImplementations: EventStoreDB, Axon, Kafka with caveats, or Postgres with events(aggregate_id, version, type, payload, ts) table.\n\n**Snapshots — performance trick**\n\nReplaying 50k events on every load is slow. Snapshot every N events: stored separately, versioned with the aggregate. Load: latest snapshot → events since snapshot version → apply.\n\nSnapshots are optimization, not source of truth. Always rebuildable.\n\n**Pairing with CQRS**\n\nWrite side: load aggregate from events, execute command, emit + persist new events. Optimized for consistency and business rules.\n\nRead side: subscribe to events, build denormalized read models tailored to query patterns. One model per UI need. Eventually consistent, usually milliseconds behind.\n\nWhy they pair: events are already there; building read models is just consuming them. CQRS without events needs separate change-data mechanism. Event sourcing without CQRS is awkward (querying event store directly is painful).\n\n**Schema evolution — the hard problem**\n\nEvents immutable and live forever. Can never delete, rename a field, change semantics retroactively.\n\nThree strategies:\n1. Weak schema, additive only: JSON/Protobuf. Add optional fields; never remove or rename. Old events still parse.\n2. Upcasting: on read, transform old event versions to latest shape. v1 → v2 in version-aware deserializers.\n3. Copy and replace (event migration): replay all events through transform, write new events to new stream, switch over. Heavy.\n\nBest practice: model events as business facts in past tense (OrderPlaced, PaymentCaptured) — change schema slowly. Avoid CRUD-style events (CustomerUpdated{name, email}) — encode current shape, break on every schema change.\n\n**When to use**\n\n- Audit/compliance: banking, healthcare, insurance — regulator wants every change\n- Time-travel debugging: state at 3pm yesterday is one fold away\n- Complex domain with rich behavior\n- Many interested parties: event-driven integration is free\n- Need to replay business processes: bug found? Replay through fixed projector\n\n**When not to use**\n\n- Simple CRUD: audit log not valuable, complexity dwarfs benefit\n- High-write, low-value data: telemetry, IoT — use time-series\n- Reporting-heavy with thin business logic\n- Team without DDD chops — requires modeling discipline\n\n**Common mistakes**\n\n- CRUD-as-events: emit business events, not state diffs\n- Querying event store directly: build read models\n- No snapshots for large aggregates: 100k events on every command crushes latency\n- Mutating events in place: never; append a corrective event\n- Event store as read store: mixed concerns\n- No idempotent projectors: at-least-once delivery requires it\n- Synchronous projection blocking commands\n- Adopting because it sounds cool: without clear need, it's overhead\n\n**Recommendation**\n\n**Use event sourcing for domains where the audit log, time-travel, replay, or rich event-driven integration genuinely matter — financial systems, regulated industries, complex collaborative domains. Pair with CQRS so reads stay fast and tailored. Model events as past-tense business facts, not CRUD diffs. Use snapshots once aggregates exceed a few hundred events. Plan schema evolution from day one (weak schema + upcasting). Don't adopt for simple CRUD; the operational and modeling tax is real and pays off only when the audit and replay capabilities are used.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle event schema changes once events are in production?",
+        "Walk through loading an aggregate with snapshots — what's the lookup sequence?",
+        "What happens if a projector falls behind by 1 hour — how do you catch up?",
+        "When is event sourcing definitely the wrong choice?"
+      ],
+      "seo": {
+        "metaTitle": "Event Sourcing Pattern — State as a Sequence of Events",
+        "metaDescription": "Event sourcing explained: append-only event store, aggregates rebuilt by event replay, snapshots for performance, schema evolution strategies, CQRS pairing, and when to use vs avoid."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "Traditional vs event-sourced Traditional: DB holds current state.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Traditional (state-stored): Database holds current state. account.balance = 100. An update overwrites: UPDATE accounts SET balance=80 WHERE id=1. The previous value is gone. The reason for the change is gone. The audit log is a separate (and lying) afterthought. Event-sourced: Database holds an append-only log of events. MoneyDeposited(account=1, amount=100, ts=...) MoneyWithdrawn(account=1, amount=20, ts=...) Current balance = sum of all events for that account = 80. Nothing is lost. The full history of why the balance is what it is, is."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "What an event store actually is, how state is rebuilt from events, snapshots for performance, schema evolution, and pairing with CQRS."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Event sourcing = state is the fold of an immutable event sequence",
+              "Append-only event store keyed by aggregate ID; events are the source of truth",
+              "Aggregate loads from history, validates commands, raises events, applies them in-memory",
+              "Snapshots for performance — optimization, not source of truth",
+              "Pairs naturally with CQRS: events feed denormalized read models for queries"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Traditional (state-stored): Database holds current state. account.balance = 100. An update overwrites: UPDATE accounts SET balance=80 WHERE id=1. The previous value is gone. The reason for the change is gone. The audit log is a separate (and lying) afterthought. Event-sourced: Database holds an append-only log of events. MoneyDeposited(account=1, amount=100, ts=...) MoneyWithdrawn(account=1, amount=20, ts=...) Current balance = sum of all events for that account = 80. Nothing is lost. The full history of why the balance is what it is, is in the store. The 'current state' is a function: state = fold(events, initial)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Event sourcing for CRUD systems where the audit log isn't valuable, or storing CRUD-style 'changed' events instead of meaningful business events"
+            ]
+          }
+        ],
+        "cap": "Don't adopt for simple CRUD; the operational and modeling tax is real and pays off only when the audit and replay capabilities are used.",
+        "familiarity_anchors": [
+          "Event",
+          "Sourcing",
+          "Instead"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle event schema changes once events are in production?",
+          "Walk through loading an aggregate with snapshots — what's the lookup sequence?",
+          "What happens if a projector falls behind by 1 hour — how do you catch up?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot modular monolith with DDD aggregates"
+      }
+    }
+  ]
+}

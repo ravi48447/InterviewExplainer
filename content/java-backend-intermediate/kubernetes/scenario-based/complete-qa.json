@@ -1,0 +1,417 @@
+{
+  "topic": "Kubernetes Scenario-Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "k8s-scn-001",
+      "slug": "pod-stuck-in-pending-debugging",
+      "question": "A Spring Boot pod is stuck in `Pending` state and not scheduling — how do you debug it?",
+      "title": "Debugging `Pending` Pods: Scheduling Failures in Kubernetes",
+      "direct_answer": "Run `kubectl describe pod` first — the `Events` section almost always shows the exact reason. Common causes: (1) **Insufficient resources** — no node has the requested CPU/memory; fix by adding nodes (Cluster Autoscaler/Karpenter) or lowering requests, (2) **Affinity / taints / topology spread constraints** that exclude all nodes, (3) **PersistentVolumeClaim unbound** because no StorageClass or no PV matches, (4) **No nodes match `nodeSelector`** labels, (5) **ImagePullBackOff-like but for scheduling** when node has taint and pod lacks toleration, (6) **Quota exceeded** on namespace. Walk the stack: events → node capacity → PVC status → affinity/taints → quota.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Systematic debugging skill — Google SRE-style 'give me a hypothesis per data point' reasoning",
+        "common_mistake": "Jumping to 'restart the pod' or 'add more nodes' before reading `kubectl describe` events; assuming Pending always means resource shortage",
+        "to_stand_out": "Explain scheduler's Filter+Score phases, how to read `FailedScheduling` events, PVC WaitForFirstConsumer binding mode, topologySpreadConstraints DoNotSchedule vs ScheduleAnyway, and ResourceQuota vs LimitRange differences"
+      },
+      "company_tags": [
+        "google",
+        "amazon",
+        "netflix",
+        "stripe"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-21",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Diagnostic Instinct: `Pending` Means the Scheduler Cannot Place This Pod",
+            "content": "A pod in `Pending` is a pod **the scheduler has not yet placed on any node**. It is NOT a container crash or image pull failure — those are `CrashLoopBackOff` and `ImagePullBackOff` respectively, which happen AFTER scheduling. `Pending` means the pod is sitting in the scheduler's queue with no node satisfying its constraints.\n\nThe Kubernetes scheduler runs two phases per pending pod:\n\n1. **Filter (Predicates)** — which nodes are candidates? Eliminates nodes with insufficient resources, taints the pod can't tolerate, affinity violations, label mismatches.\n2. **Score (Priorities)** — which of the remaining nodes is best? Picks one.\n\nIf Filter returns zero nodes, the pod stays Pending with a `FailedScheduling` event explaining why. **Your job**: read that event and walk backward.\n\nThe top five root causes in production order:\n\n1. **Insufficient resources** — every node is too full for the pod's requests.\n2. **PVC not bound** — pod waits for storage, storage waits for pod (with WaitForFirstConsumer).\n3. **Taints without tolerations** — newly tainted nodes exclude pods lacking matching tolerations.\n4. **Topology / affinity constraints** too strict — spread rules or anti-affinity prevent placement.\n5. **ResourceQuota exceeded** on namespace — no quota left for the new pod.\n\nA 15-second `kubectl describe pod` reveals which one it is."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The Debugging Decision Tree",
+            "content": "Walk the stack top-down from `Events` to root cause.\n\n```mermaid\nflowchart TB\n    Start[Pod Pending\\nkubectl describe pod] --> Events{Events section}\n    Events -->|Insufficient cpu/memory| Res[Resource shortage path]\n    Events -->|FailedScheduling\\nnode\\(s\\) had untolerated taint| Taint[Taint/Toleration path]\n    Events -->|FailedScheduling\\nno match for node selector| Sel[nodeSelector / affinity path]\n    Events -->|FailedScheduling\\npod has unbound PVCs| PVC[Storage path]\n    Events -->|exceeded quota| Q[ResourceQuota path]\n    Events -->|didnt match pod topology spread constraints| TSC[Topology spread path]\n\n    Res --> R1[kubectl top nodes]\n    R1 --> R2{Cluster has headroom?}\n    R2 -->|No| R3[Add nodes\\nKarpenter/CA]\n    R2 -->|Yes, scheduler wont fit| R4[Check pod requests\\nvs node allocatable]\n\n    Taint --> T1[kubectl describe node | grep Taint]\n    T1 --> T2[Add toleration or remove taint]\n\n    Sel --> S1[kubectl get nodes --show-labels]\n    S1 --> S2[Fix nodeSelector or label the node]\n\n    PVC --> P1[kubectl get pvc]\n    P1 --> P2{Status}\n    P2 -->|Pending| P3[Check StorageClass\\nCSI driver / zone]\n    P2 -->|WaitForFirstConsumer| P4[Expected - binds when pod schedules\\nbut pod cant schedule yet -> other cause]\n\n    Q --> Q1[kubectl describe resourcequota -n ns]\n```\n\nThe `Events` section is the compass. Every branch below it is verifiable with one `kubectl` command."
+          },
+          {
+            "type": "step",
+            "title": "Step 1: `kubectl describe pod` and Read the Events Section",
+            "content": "Always start here. The scheduler writes its failure reason as an Event on the pod.\n\n```bash\nkubectl describe pod order-svc-7d8b-abc -n prod\n# ...\n# Events:\n#   Type     Reason            From               Message\n#   ----     ------            ----               -------\n#   Warning  FailedScheduling  default-scheduler  0/6 nodes are available:\n#     3 Insufficient cpu,\n#     2 node(s) had untolerated taint {dedicated: gpu},\n#     1 Insufficient memory.\n#     preemption: 0/6 nodes are available: 6 Preemption is not helpful for scheduling.\n```\n\n**How to read this:** the scheduler checked 6 nodes. Each failed a specific predicate:\n\n- 3 nodes: not enough free CPU for this pod's `requests.cpu`.\n- 2 nodes: tainted `dedicated: gpu` and pod has no matching toleration.\n- 1 node: not enough free memory.\n\nTotal: zero nodes pass Filter → `Pending` forever until something changes.\n\n**If you see `FailedScheduling` with `pod has unbound immediate PersistentVolumeClaims`** — the pod references a PVC that hasn't bound yet; go to Step 3.\n\n**If you see nothing in Events** after many minutes — the scheduler may itself be down or a CRD admission webhook is blocking the pod. Check `kubectl get pods -n kube-system` for kube-scheduler health, and `kubectl get validatingwebhookconfigurations` for webhooks that might be failing.\n\n**`kubectl get events --sort-by=.lastTimestamp -n prod`** gives a namespace-wide view if you want to see whether many pods share the same scheduling problem."
+          },
+          {
+            "type": "step",
+            "title": "Step 2: Resource Shortage — The Most Common Cause",
+            "content": "If Events say `Insufficient cpu` or `Insufficient memory`, verify and decide between adding capacity or reducing requests.\n\n```bash\nkubectl top nodes                           # live usage\nkubectl describe node NODE | grep -A5 Allocated\n# Allocated resources:\n#   Resource           Requests       Limits\n#   cpu                3700m (92%)    6200m\n#   memory             11Gi (73%)     14Gi\n```\n\n**Key concept: requests vs usage.** The scheduler places pods based on **requests**, not actual usage. A node at 40% CPU usage can still reject new pods if requests already total 95% of allocatable. The scheduler is pessimistic — it reserves what pods requested.\n\n**Pod requests:**\n\n```bash\nkubectl get pod order-svc-... -o jsonpath='{.spec.containers[*].resources.requests}'\n# {\"cpu\":\"2\",\"memory\":\"4Gi\"}\n```\n\nIf requests are oversized vs actual need, lower them — this is a VPA-in-`Off`-mode opportunity to get right-sized recommendations.\n\n**If requests are legitimate:**\n\n- **Cluster Autoscaler / Karpenter** should provision a new node — check its logs: `kubectl logs -n kube-system deploy/cluster-autoscaler`. Common issues: scaling group hit max size, no instance type in the pool fits the pod shape, IAM permissions for scaling.\n- **Manual scale** as a fix: raise ASG max / MachinePool max, or add a Karpenter NodePool with a larger instance family.\n- **Karpenter `karpenter.sh/do-not-disrupt` annotations** on critical pods can prevent consolidation churn but also block node replacement.\n\n**Pod density per node.** On AWS VPC CNI, small instances (t3.small has 11 pod limit) fill up by pod count before CPU. `kubectl describe node | grep 'Non-terminated Pods'` shows count vs capacity."
+          },
+          {
+            "type": "step",
+            "title": "Step 3: PVC Unbound, Taints/Tolerations, and Topology Spread",
+            "content": "**PVC unbound.** The pod references a PVC that is not yet `Bound`.\n\n```bash\nkubectl get pvc -n prod\n# NAME         STATUS    STORAGECLASS   VOLUME   AGE\n# order-data   Pending   gp3                     5m\n\nkubectl describe pvc order-data -n prod\n# Events:\n#   Warning  ProvisioningFailed ... no persistent volumes available for this claim and\n#                                  no storage class is set\n```\n\n**Common fixes:**\n\n- Set `storageClassName` on the PVC or have a default `StorageClass` (`kubectl get sc` — look for `(default)`).\n- Wrong zone: pod is scheduled to zone `us-east-1a`, PV was provisioned in `us-east-1b`. With `volumeBindingMode: WaitForFirstConsumer` on the StorageClass, binding waits until the scheduler picks a node — then provisions in that zone. This is the correct mode for multi-AZ clusters.\n- CSI driver not healthy: `kubectl get pods -n kube-system | grep csi`.\n- Quota on storage: `kubectl describe resourcequota | grep storage`.\n\n**Taints and tolerations.**\n\n```bash\nkubectl describe node NODE | grep -A1 Taints\n# Taints: dedicated=gpu:NoSchedule\n```\n\nPods lacking a matching toleration are excluded. Either remove the taint (if unintended) or add a toleration:\n\n```yaml\nspec:\n  tolerations:\n    - key: dedicated\n      operator: Equal\n      value: gpu\n      effect: NoSchedule\n```\n\n**Common surprise:** nodes get auto-tainted when `NotReady` or under memory pressure (`node.kubernetes.io/not-ready`, `node.kubernetes.io/memory-pressure`). If all nodes are tainted like this, your cluster is unhealthy — investigate kubelet / network / disk.\n\n**Topology spread constraints.**\n\n```yaml\nspec:\n  topologySpreadConstraints:\n    - maxSkew: 1\n      topologyKey: topology.kubernetes.io/zone\n      whenUnsatisfiable: DoNotSchedule\n      labelSelector:\n        matchLabels: {app: order-svc}\n```\n\n`DoNotSchedule` means if the spread is violated (e.g., 2 pods in AZ-a, 0 in AZ-b, 0 in AZ-c), the scheduler blocks. Relax to `ScheduleAnyway` or adjust `maxSkew`. Google / Uber / Shopify use spread constraints heavily for AZ / host diversity; misconfigured spread is a classic Pending cause during rolling updates.\n\n**Affinity / anti-affinity.** Pod anti-affinity with `requiredDuringSchedulingIgnoredDuringExecution` saying \"no two pods on the same node\" limits placement to nodes without an existing pod. If you have 5 replicas and 4 nodes, the 5th stays Pending forever.\n\n**ResourceQuota.**\n\n```bash\nkubectl describe resourcequota -n prod\n# Resource              Used     Hard\n# requests.cpu          15       16\n# requests.memory       30Gi     32Gi\n# pods                  48       50\n```\n\nNear-full quotas block new pods with `exceeded quota` in Events. Either raise the quota or free pods. LimitRange (per-pod min/max) vs ResourceQuota (namespace total) — different tools; Quota is the one that blocks scheduling counts."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Production Playbook: Ordering, Tooling, and Preventive Measures",
+            "content": "**15-second triage:**\n\n```bash\nkubectl describe pod $POD -n $NS | tail -30     # Events\nkubectl get pvc -n $NS                           # any Pending?\nkubectl top nodes                                # headroom?\nkubectl get events -n $NS --sort-by=.lastTimestamp | tail -20\n```\n\n**5-minute deeper dive:**\n\n```bash\nkubectl get nodes -o wide\nkubectl describe node NODE | grep -E 'Taints|Allocatable|Allocated'\nkubectl get pods -n $NS -o wide                  # distribution\nkubectl logs -n kube-system deploy/cluster-autoscaler --tail=100\nkubectl get resourcequota -n $NS\n```\n\n**Tools that save time:**\n\n- **`kubectl-debug-scheduler`** / scheduler verbose logs (`--v=5`) — see exact filter decisions per node.\n- **`kubectl events`** (1.25+) — richer than `kubectl get events`.\n- **`k9s` or `Lens`** — interactive event viewing.\n- **Prometheus alerts:** `kube_pod_status_phase{phase=\"Pending\"} > 5m` — anything Pending more than 5 minutes is an incident.\n- **Metrics:** `scheduler_pending_pods`, `scheduler_framework_extension_point_duration_seconds` — scheduler internal health.\n\n**Preventive measures:**\n\n- **Set resource requests based on VPA recommendations**, not guesses — oversized requests cause unnecessary Pending.\n- **PodDisruptionBudget + minReplicas ≥ 2** prevents rolling updates from pinning a lone pod unable to find a new home.\n- **Cluster Autoscaler / Karpenter with sensible bounds** — max node count, spot diversification, instance family list.\n- **`priorityClassName` on critical workloads** — high priority pods preempt lower-priority pods if no node has room, avoiding Pending for the most important services.\n- **Test topology spread changes in staging** — DoNotSchedule bugs show up only during rollouts when distribution becomes tight.\n- **Avoid `requiredDuringScheduling...` anti-affinity with too strict keys** — often ScheduleAnyway or topology spread is more flexible.\n\n**Escalation pattern:**\n\n1. Single pod Pending — look at pod spec / target node constraints.\n2. All new pods in namespace Pending — check Quota, StorageClass, default LimitRange.\n3. All new pods cluster-wide Pending — check scheduler health, CNI/CSI driver, node readiness.\n4. Pods Pending during rollout only — PDB vs HPA interaction, surge capacity, topology spread tightness."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Pending = scheduler cannot place** — not a crash, not an image pull; the pod is stuck in the queue.\n- **`kubectl describe pod` Events section is the compass** — it says EXACTLY which predicate failed on which nodes.\n- **Scheduler uses `requests`, not actual usage** — a node at 30% CPU usage can still reject pods if requests total 95% of allocatable.\n- **PVC with `WaitForFirstConsumer` binds only after a pod is placed** — multi-AZ safe; but if other constraints block scheduling, PVC stays Pending in lock-step.\n- **Auto-taints from NotReady / memory-pressure** exclude pods cluster-wide — if every new pod is Pending with taint reasons, your nodes are unhealthy.\n- **`DoNotSchedule` topology spread is strict** — classic Pending cause during scale events; switch to `ScheduleAnyway` or adjust `maxSkew`.\n- **ResourceQuota blocks scheduling when exceeded** — `kubectl describe resourcequota` shows usage vs limit.\n- **PriorityClass preemption** — high-priority pods evict lower ones to schedule; plan priority classes per workload tier.\n- **Prometheus alert on Pending duration > 5 min** catches slow/silent scheduling issues before they pile up."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "When a pod is stuck in Pending, my first move is always `kubectl describe pod` and I read the Events section. The scheduler writes its failure reason there — it will literally say why each node was rejected.\n\n**Walking the decision tree**\n- The most common reason is resource shortage — \"0/6 nodes are available: Insufficient cpu\". I check `kubectl top nodes` for headroom and compare requests to allocatable; then check the Cluster Autoscaler or Karpenter logs to see why it isn't adding nodes.\n- A key concept: the scheduler uses requests, not actual usage. A node at 30% CPU usage can still reject pods if committed requests already total 95% of allocatable — the scheduler is pessimistic.\n- If Events mention untolerated taints, I run `kubectl describe node` and grep for Taints; the fix is either adding a matching toleration or removing the taint.\n- If Events mention unbound PVC, I check `kubectl get pvc` and `describe pvc` — usually wrong zone, missing StorageClass, or CSI driver unhealthy.\n- If Events mention topology spread or affinity, I check the pod spec's constraints — `DoNotSchedule` spread with tight `maxSkew` is a classic cause during rolling updates.\n- If Events mention exceeded quota, `kubectl describe resourcequota` shows used vs hard limits.\n\n**Catching things `describe pod` doesn't tell you**\n- If Events are empty after several minutes, the scheduler itself might be unhealthy or a validating admission webhook is blocking — check `kube-scheduler` pod and validatingwebhookconfigurations.\n- Nodes auto-taint on NotReady or memory-pressure — if every new pod is Pending with taint reasons cluster-wide, the cluster is unhealthy, not the pod.\n- Pod density limits per node on AWS VPC CNI — a t3.small only holds 11 pods, so CPU-free doesn't mean pod-free.\n\n**Preventive patterns I put in place**\n- Use VPA in recommend-only mode to right-size requests — oversized requests cause unnecessary Pending.\n- PodDisruptionBudget plus minReplicas 2 so rolling updates don't pin a lone pod unable to find a new home.\n- PriorityClasses on critical workloads so they preempt lower-priority pods rather than sit Pending.\n- Prometheus alert on `kube_pod_status_phase{phase=\"Pending\"} > 5m` — anything Pending more than 5 minutes is an incident.\n\n**Escalation order**\n- Single pod Pending → look at the pod's constraints.\n- All new pods in one namespace → Quota, StorageClass, default LimitRange.\n- All new pods cluster-wide → scheduler health, CNI/CSI driver, node readiness."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between `WaitForFirstConsumer` and `Immediate` volumeBindingMode?",
+        "How do PriorityClass and preemption help prevent Pending pods for critical workloads?",
+        "How does Cluster Autoscaler decide to add a node vs Karpenter's approach?",
+        "What is the difference between ResourceQuota and LimitRange?"
+      ],
+      "seo": {
+        "metaTitle": "Pod Pending Debugging Kubernetes Scheduling Failures | InterviewExplainer",
+        "metaDescription": "Debug Kubernetes Pending pods. Scheduler events, resource shortage, taints, PVC unbound, topology spread, quota, autoscaler logs, preventive patterns."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P09",
+        "hook": "When a pod is stuck in Pending, my first move is always kubectl describe pod and I read the Events section.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "A pod in Pending is a pod the scheduler has not yet placed on any node. It is NOT a container crash or image pull failure — those are CrashLoopBackOff and ImagePullBackOff respectively, which happen AFTER scheduling. Pending means the pod is sitting in the scheduler's queue with no node."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Systematic debugging skill — Google SRE-style 'give me a hypothesis per data point' reasoning"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Always start here.",
+              "The scheduler writes its failure reason as an Event on the pod.",
+              "``bash kubectl describe pod order-svc-7d8b-abc -n prod ...",
+              "Events: Type Reason From Message ---- ------ ---- ------- Warning FailedScheduling default-scheduler 0/6 nodes are available: 3 Insufficient cpu, 2 node(s) had untolerated taint {dedicated: gpu}, 1 Insufficient memory.",
+              "preemption: 0/6 nodes are available: 6 Preemption is not helpful for scheduling.",
+              "` How to read this: the scheduler checked 6 nodes."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Pending = scheduler cannot place — not a crash, not an image pull; the pod is stuck in the queue",
+              "kubectl describe pod Events section is the compass — it says EXACTLY which predicate failed on which nodes",
+              "Scheduler uses requests, not actual usage — a node at 30% CPU usage can still reject pods if requests total 95% of allocatable",
+              "PVC with WaitForFirstConsumer binds only after a pod is placed — multi-AZ safe; but if other constraints block scheduling, PVC stays Pending in lock-step",
+              "Auto-taints from NotReady / memory-pressure exclude pods cluster-wide — if every new pod is Pending with taint reasons, your nodes are unhealthy"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "15-second triage: `bash kubectl describe pod $POD -n $NS | tail -30 # Events kubectl get pvc -n $NS # any Pending? kubectl top nodes # headroom? kubectl get events -n $NS --sort-by=.lastTimestamp | tail -20 5-minute deeper dive: bash kubectl get nodes -o wide kubectl describe node NODE | grep -E 'Taints|Allocatable|Allocated' kubectl get pods -n $NS -o wide # distribution kubectl logs -n kube-system deploy/cluster-autoscaler --tail=100 kubectl get."
+          }
+        ],
+        "cap": "All new pods cluster-wide → scheduler health, CNI/CSI driver, node readiness.",
+        "familiarity_anchors": [
+          "Events",
+          "Common",
+          "Insufficient"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between `WaitForFirstConsumer` and `Immediate` volumeBindingMode?",
+          "How do PriorityClass and preemption help prevent Pending pods for critical workloads?",
+          "How does Cluster Autoscaler decide to add a node vs Karpenter's approach?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed as a Kubernetes Deployment"
+      }
+    },
+    {
+      "id": "k8s-scn-002",
+      "slug": "crashloopbackoff-spring-boot-debugging",
+      "question": "A Spring Boot pod is in `CrashLoopBackOff` — how do you diagnose and fix it?",
+      "title": "Debugging `CrashLoopBackOff`: Why Pods Crash and How to Fix Them",
+      "direct_answer": "`CrashLoopBackOff` means the container started, exited, and kubelet is backing off before the next restart (10s → 20s → 40s → ... up to 5 min). Root causes: (1) **App crashes on startup** — missing config, bad DB creds, port conflict, OOMKilled; (2) **Liveness probe failing** — endpoint doesn't exist or app is slow to warm up; (3) **Init container failing**; (4) **Missing Secret/ConfigMap**. Debug order: `kubectl describe pod` (exit code + reason) → `kubectl logs --previous` (logs of the crashed container) → `kubectl logs -f` if still running → check probes, init containers, and env/secret refs. Exit code 137 = OOMKilled; 143 = SIGTERM.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Whether you know to read `--previous` logs, interpret exit codes, and distinguish app crashes from probe failures",
+        "common_mistake": "Only reading current logs (empty because the container restarted) and missing `--previous`; or confusing probe-induced kills with app crashes",
+        "to_stand_out": "Explain exit code table (137 OOMKilled, 1 app error, 143 SIGTERM, 139 SIGSEGV), `kubectl debug` ephemeral containers, `terminationMessagePath`, backoff timing, startup probe to prevent liveness-during-warmup kills, and sidecar crashes affecting the main container"
+      },
+      "company_tags": [
+        "google",
+        "netflix",
+        "uber",
+        "datadog"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-21",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What `CrashLoopBackOff` Actually Means",
+            "content": "`CrashLoopBackOff` is not itself an error — it's kubelet saying \"the container keeps exiting; I'm waiting before the next restart.\" The backoff sequence is **exponential**: 10s → 20s → 40s → 80s → 160s → 300s (capped). Each crash cycle counts toward the pod's restart count; kubelet never gives up, just waits longer.\n\nThe hard part of debugging is that by the time you look, the container has already exited. `kubectl logs pod` returns empty or only a few lines from the most recent attempt. **The key flag is `--previous`** — shows logs from the immediately prior terminated container instance, which almost always holds the stack trace or error message.\n\nFour dominant root causes:\n\n1. **App crash on startup.** Bad config, missing DB, port conflict, unhandled exception in `main()`, OOMKilled from too-low memory limit.\n2. **Liveness probe killing a slow-starting app.** Spring Boot takes 30–60s to warm; liveness probe runs before then and kubelet SIGKILLs.\n3. **Init container failing.** Main container never starts; init's logs hold the reason.\n4. **Missing ConfigMap / Secret reference.** The pod mounts a Secret that doesn't exist; container fails to start.\n\n**Exit codes** give immediate signal:\n\n| Code | Meaning |\n|---|---|\n| 0 | Clean exit (shouldn't loop) |\n| 1 | General app error — unhandled exception, failed main |\n| 137 | SIGKILL — typically OOMKilled |\n| 139 | SIGSEGV — native crash (rare for JVM) |\n| 143 | SIGTERM — graceful shutdown requested |\n| 2 | Shell misuse, often wrong ENTRYPOINT |"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The Diagnostic Flow",
+            "content": "Read metadata first, then previous logs, then current logs. Branch based on exit reason.\n\n```mermaid\nflowchart TB\n    Start[Pod CrashLoopBackOff] --> Desc[kubectl describe pod]\n    Desc --> LastState[Last State section\\nExit code + Reason]\n    LastState -->|ExitCode: 137\\nReason: OOMKilled| OOM[OOM path:\\ncheck limits, MaxRAMPercentage, heap dump]\n    LastState -->|ExitCode: 1\\nReason: Error| App[App error path]\n    LastState -->|Reason: ContainerCannotRun| Run[Entrypoint/image path]\n    LastState -->|Events show Liveness probe failed| Probe[Probe path]\n    LastState -->|Init container failed| Init[Init container path]\n\n    App --> PrevLogs[kubectl logs POD --previous]\n    PrevLogs --> Trace{Stack trace?}\n    Trace -->|Yes| Fix1[Read exception: DB, config, port, etc]\n    Trace -->|Logs empty| CCD[kubectl debug with ephemeral container\\nOR exec into init shell]\n\n    Probe --> P1[Check livenessProbe spec]\n    P1 --> P2{Endpoint / port right?}\n    P2 -->|Wrong| P3[Fix probe endpoint]\n    P2 -->|Right but app slow to start| P4[Add startupProbe\\nOR increase initialDelay]\n\n    Init --> I1[kubectl logs POD -c INIT_NAME --previous]\n\n    OOM --> O1[kubectl describe node | grep Memory]\n    O1 --> O2[Raise memory limit OR\\nset -XX:MaxRAMPercentage=75]\n```\n\nExit code 137 goes to OOM path. Exit code 1 goes to app error path via `--previous` logs. Probe-induced kills show up as events, not exit codes."
+          },
+          {
+            "type": "step",
+            "title": "Step 1: `kubectl describe pod` and Interpret Last State",
+            "content": "The describe output tells you WHY the last container died.\n\n```bash\nkubectl describe pod order-svc-7d8b-abc -n prod | sed -n '/Containers:/,$p'\n# Containers:\n#   app:\n#     Image:  myregistry/order:1.2.3\n#     State:  Waiting\n#       Reason: CrashLoopBackOff\n#     Last State: Terminated\n#       Reason:       Error\n#       Exit Code:    1\n#       Started:      Tue, 21 Apr 2026 10:14:02\n#       Finished:     Tue, 21 Apr 2026 10:14:18\n#     Ready:          False\n#     Restart Count:  7\n# Events:\n#   Warning  Unhealthy  kubelet  Liveness probe failed: Get \"http://10.0.1.5:8080/actuator/health\": dial tcp 10.0.1.5:8080: connect: connection refused\n#   Normal   Killing    kubelet  Container app failed liveness probe, will be restarted\n```\n\n**Key fields:**\n\n- **`Last State.Reason`** — `Error` (app exit), `OOMKilled` (SIGKILL from cgroup OOM), `ContainerCannotRun` (entrypoint missing / bad image).\n- **`Last State.Exit Code`** — decode with table above.\n- **`Ready: False`** and **`Restart Count`** climbing — confirms the loop.\n- **Events** — may reveal probe failures that triggered the restart.\n\n**Common interpretations:**\n\n- `Reason: OOMKilled, Exit Code: 137` — cgroup memory limit hit. Raise `resources.limits.memory`, or tune `-XX:MaxRAMPercentage` so JVM respects the container limit.\n- `Reason: Error, Exit Code: 1` + probe failure event — app exited on its own; logs will tell why.\n- `Reason: ContainerCannotRun` — image or ENTRYPOINT problem; verify image exists and the entrypoint path is correct.\n- `Reason: Error, Exit Code: 143` — SIGTERM received; typically from kubelet killing after failed liveness probe."
+          },
+          {
+            "type": "step",
+            "title": "Step 2: `kubectl logs --previous` — The Stack Trace From the Dead Container",
+            "content": "Once the container restarts, `kubectl logs` returns the new instance's logs (probably just starting). To see the crashed instance's last output:\n\n```bash\nkubectl logs order-svc-7d8b-abc -n prod --previous\n# 2026-04-21 10:14:18.723 ERROR 1 --- [main] o.s.boot.SpringApplication :\n# Application run failed\n# org.springframework.beans.factory.UnsatisfiedDependencyException: ...\n#     Caused by: java.sql.SQLException: FATAL: password authentication failed for user \"app\"\n# ...\n```\n\nThat is the root cause staring at you. **Fix**: the DB password Secret is wrong or missing.\n\n**Common crash patterns and their messages:**\n\n- **DB connection / auth failure** — `Cannot get a connection`, `Connection refused`, `password authentication failed`. Check Secret, ConfigMap, DB availability from pod (`kubectl exec -it pod -- nc -zv db-host 5432`).\n- **Missing config property** — `Could not resolve placeholder 'MISSING_PROP'`. Spring Boot config not loaded; check `envFrom` reference or `application.yml` mounted path.\n- **Port already in use** — rare but happens with sidecars listening on the same port.\n- **Class not found / NoSuchMethodError** — Jib/Dockerfile produced an incomplete classpath.\n- **`OutOfMemoryError: Metaspace`** — JVM ran out of non-heap memory even before hitting the container limit; increase `-XX:MaxMetaspaceSize`.\n\n**If `--previous` returns 'previous terminated container not found':** the container has restarted many times, very fast; kubelet may have dropped the previous log. Fixes: check Events history, or temporarily add a `preStop` sleep to slow the loop for inspection.\n\n**Init container logs:**\n\n```bash\nkubectl logs POD -n NS -c INIT_NAME --previous\n```\n\nInit containers run in order before the main container; a failing init (e.g., waiting for DB to be ready) keeps the pod in `Init:CrashLoopBackOff` with no main container logs at all."
+          },
+          {
+            "type": "step",
+            "title": "Step 3: Liveness Probes Killing Slow-Starting JVMs",
+            "content": "A classic Spring Boot scenario: the app takes 45 seconds to start (Spring context, JPA, Kafka clients). Liveness probe is configured with `initialDelaySeconds: 30`, fires on an app that isn't ready, kubelet records 3 failures (at ~30, 40, 50s), kills the container. CrashLoopBackOff begins.\n\n**`describe pod` events show this clearly:**\n\n```\nWarning  Unhealthy  Liveness probe failed: HTTP probe failed with statuscode: 503\nNormal   Killing    Container app failed liveness probe, will be restarted\n```\n\nBut the app didn't crash — it was SIGKILLed while still warming up.\n\n**Fix: use a startup probe in addition to liveness.**\n\n```yaml\nstartupProbe:\n  httpGet: {path: /actuator/health/liveness, port: 8080}\n  failureThreshold: 30    # total 30 * 5s = 150s allowed\n  periodSeconds: 5\nlivenessProbe:\n  httpGet: {path: /actuator/health/liveness, port: 8080}\n  periodSeconds: 10\n  failureThreshold: 3\nreadinessProbe:\n  httpGet: {path: /actuator/health/readiness, port: 8080}\n  periodSeconds: 5\n  failureThreshold: 3\n```\n\n`startupProbe` runs until it succeeds once; only then do liveness / readiness begin. This gives slow-starting JVMs 150s of grace without loosening liveness for the rest of the pod's life.\n\n**Common probe mistakes:**\n\n- Hitting `/actuator/health` (aggregate) which includes dependencies; use `/actuator/health/liveness` (Spring Boot 2.3+) that returns UP even if DB is down, so transient DB issues don't kill the pod.\n- `initialDelaySeconds` too high hiding real crashes, or too low killing warm-up.\n- Liveness and readiness using the same endpoint — during DB outage, both fail, pod restarts pointlessly instead of just being taken out of Service rotation.\n- `failureThreshold: 1` on liveness — a single flaky probe kills a healthy pod.\n\n**OOMKilled path (`ExitCode: 137`):**\n\n- Raise `resources.limits.memory`.\n- Set JVM flags: `-XX:MaxRAMPercentage=75 -XX:+UseContainerSupport` (default since JDK 10 but worth verifying).\n- Capture heap dump: `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps` with a hostPath or emptyDir for post-mortem.\n- Check for memory leaks with `jcmd <pid> GC.heap_info` or a profiler."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Ephemeral Containers, Init Failures, and Production Hardening",
+            "content": "**`kubectl debug` with ephemeral containers.** When the crashed pod has no shell or you need to inspect the filesystem:\n\n```bash\nkubectl debug -it order-svc-... --image=busybox --target=app -n prod\n# attach a busybox sidecar sharing process namespace with 'app'\nps aux\ncat /proc/1/environ | tr '\\0' '\\n'\nls /config\n```\n\nThe ephemeral container shares PID and filesystem namespaces so you can see the main container's environment and config without rebuilding the image.\n\n**`terminationMessagePath`.** A container can write its cause-of-death to `/dev/termination-log` (default); kubelet surfaces it as `Last State.Message`. For Spring Boot, configure a `@PreDestroy` or `SpringApplication.exit()` handler that writes the last error to the termination log — this puts the root cause in `describe pod` output without even reading logs.\n\n**Sidecar crashes affecting the main container.** Istio/Envoy/Cilium sidecar that crashes can break the main container's networking. `describe pod` shows each container's state — if the sidecar is `CrashLoopBackOff` and the app is `Ready: False`, fix the sidecar first. In Kubernetes 1.29+, native sidecar containers (`restartPolicy: Always` on init containers) change the ordering so sidecar readiness gates app startup.\n\n**Production hardening:**\n\n- **Structured logs to stdout** — so `kubectl logs` gives immediate signal; don't log only to a file.\n- **Spring Boot `spring.main.banner-mode=off`** + **`logging.pattern.console`** for concise pod-friendly output.\n- **Startup probe on every JVM service** — eliminates warm-up kills permanently.\n- **Readiness probe tied to DB health checks conservatively** — if DB is down briefly, pod drops from Service rotation but doesn't restart; when DB returns, pod returns to rotation without cold start.\n- **Alert on `kube_pod_container_status_restarts_total` rate** — restart rate > 0 per 10 min is a signal before users notice.\n- **`restartPolicy: OnFailure` for Jobs**, not Deployments — Deployments should not have custom restart policy (only `Always` is valid).\n- **Resource limits = requests for critical services** — no burst, predictable; prevents CPU throttling confusion during diagnosis.\n- **Always capture heap dumps on OOMKill** — `emptyDir` or `hostPath` volume at `/dumps`, then copy out with `kubectl cp` before the pod is replaced.\n\n**Escalation pattern:**\n\n1. One pod — app bug, config typo, probe misconfig.\n2. All pods of a Deployment — bad image, wrong Secret, env misconfig.\n3. Many Deployments crashing simultaneously — node issue, cluster-wide DNS failure, or platform-level problem (CoreDNS, cert-manager, Istio control plane)."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **CrashLoopBackOff is a backoff status, not an error** — kubelet is waiting before restart; exponential 10s → 300s.\n- **`kubectl logs --previous` is the primary tool** — shows the crashed container's last output; without it you see only the new attempt.\n- **Exit code table:** 137 = OOMKilled, 1 = app error, 143 = SIGTERM, 139 = SIGSEGV, 2 = ENTRYPOINT issue.\n- **Liveness probe on a slow-starting JVM causes crash loops** — add a startupProbe so liveness doesn't fire during warm-up.\n- **Use `/actuator/health/liveness`, not aggregate `/actuator/health`** — so transient DB outage doesn't restart the pod.\n- **Init container failure keeps pod in `Init:CrashLoopBackOff`** — check init logs specifically with `-c INIT_NAME --previous`.\n- **`kubectl debug` ephemeral containers** — attach a busybox to inspect filesystem and env without rebuilding the image.\n- **Sidecar crashes can mask main-container health** — check all containers in the pod; Kubernetes 1.29+ native sidecars fix ordering.\n- **`terminationMessagePath`** surfaces root cause in `describe pod` — write last error there for immediate diagnosis.\n- **Capture heap dumps on OOMKill** before the pod is replaced — `emptyDir` at /dumps + `kubectl cp`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "CrashLoopBackOff means the container keeps exiting and kubelet is waiting before the next restart with exponential backoff from 10 seconds up to 5 minutes. The symptom is a loop; the root cause is one of a handful of things.\n\n**The diagnostic flow I use**\n- `kubectl describe pod` and read the Last State section — that gives the exit code and reason. 137 means OOMKilled, 1 is an app error, 143 is SIGTERM, 2 is an ENTRYPOINT issue.\n- `kubectl logs POD --previous` — this is the critical step most people miss. The current container just started so `kubectl logs` returns almost nothing; `--previous` shows the last crashed container's output which usually has the stack trace.\n- Check the Events section for liveness probe failures — if the probe is killing the pod during startup, the app didn't crash, it was SIGKILLed.\n\n**The big four root causes**\n- App crash on startup — bad DB credentials, missing config, port conflict. Fix via logs: \"password authentication failed\" or \"Could not resolve placeholder\".\n- Liveness probe killing a slow-starting JVM — Spring Boot takes 30 to 60 seconds to warm up; liveness fires before then, kubelet SIGKILLs. Fix: add a startupProbe so liveness only starts after startup succeeds once.\n- Init container failing — pod shows `Init:CrashLoopBackOff` and main container never starts. Check init logs with `-c INIT_NAME --previous`.\n- OOMKilled (exit code 137) — cgroup memory limit hit. Raise memory limit and set `-XX:MaxRAMPercentage=75` so JVM respects the container limit.\n\n**Probe configuration**\n- Use `/actuator/health/liveness` from Spring Boot 2.3+, not aggregate `/actuator/health` — the liveness endpoint returns UP even if DB is temporarily down, so transient DB issues don't cause pointless restarts.\n- startupProbe plus livenessProbe plus readinessProbe is the production pattern — startup covers warm-up, liveness restarts on true hangs, readiness takes the pod out of Service rotation during transient issues.\n\n**Tools that help when logs aren't enough**\n- `kubectl debug --image=busybox --target=CONTAINER` attaches an ephemeral container sharing process and filesystem namespace — you can inspect /proc, environment, mounted configs without rebuilding the image.\n- `terminationMessagePath` lets the container write its cause-of-death; kubelet surfaces it in `describe pod`, so root cause is visible even if logs were lost.\n\n**Escalation pattern**\n- One pod — app bug, config typo, probe misconfig.\n- All pods of one Deployment — bad image, wrong Secret, env misconfig.\n- Many Deployments — node issue, DNS failure cluster-wide, or platform-level problem.\n\n**Production hardening I apply**\n- Startup probe on every JVM service.\n- `-XX:+HeapDumpOnOutOfMemoryError` writing to an emptyDir at /dumps so I can copy the dump out before the pod is replaced.\n- Prometheus alert on restart rate per 10 minutes — catches CrashLoop before users notice."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a startupProbe and a livenessProbe with `initialDelaySeconds`?",
+        "How do you capture a heap dump when a pod is being OOMKilled?",
+        "How does `kubectl debug` ephemeral containers differ from `kubectl exec`?",
+        "Why should you use `/actuator/health/liveness` instead of `/actuator/health` for liveness?"
+      ],
+      "seo": {
+        "metaTitle": "CrashLoopBackOff Debugging Kubernetes Spring Boot | InterviewExplainer",
+        "metaDescription": "Debug CrashLoopBackOff pods in Kubernetes. `kubectl logs --previous`, exit codes (137 OOMKilled, 1, 143), liveness probes, init containers, ephemeral containers."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P09",
+        "hook": "CrashLoopBackOff means the container keeps exiting and kubelet is waiting before the next restart with exponential backoff from 10 seconds up to 5 minutes.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "CrashLoopBackOff is not itself an error — it's kubelet saying \"the container keeps exiting; I'm waiting before the next restart.\" The backoff sequence is exponential: 10s → 20s → 40s → 80s → 160s → 300s (capped). Each crash cycle counts toward the pod's restart count; kubelet never gives up."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Whether you know to read --previous logs, interpret exit codes, and distinguish app crashes from probe failures"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "The describe output tells you WHY the last container died.",
+              "``bash kubectl describe pod order-svc-7d8b-abc -n prod | sed -n '/Containers:/,$p' Containers: app: Image: myregistry/order:1.2.3 State: Waiting Reason: CrashLoopBackOff Last State: Terminated Reason: Error Exit Code: 1 Started: Tue, 21 Apr 2026 10:14:02 Finished: Tue, 21 Apr 2026 10:14:18 Ready: False Restart Count: 7 Events: Warning Unhealthy kubelet Liveness probe failed: Get \"http://10.0.1.5:8080/actuator/health\": dial tcp 10.0.1.5:8080: connect: connection refused Normal Killing kubelet Container app failed liveness probe, will be restarted ` Key fields: Last State.Reason — Error (app exit), OOMKilled (SIGKILL from cgroup OOM), ContainerCannotRun (entrypoint missing / bad image).",
+              "Last State.Exit Code — decode with table above.",
+              "Ready: False and Restart Count climbing — confirms the loop.",
+              "Events — may reveal probe failures that triggered the restart.",
+              "Common interpretations: Reason: OOMKilled, Exit Code: 137 — cgroup memory limit hit."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "CrashLoopBackOff is a backoff status, not an error — kubelet is waiting before restart; exponential 10s → 300s",
+              "kubectl logs --previous is the primary tool — shows the crashed container's last output; without it you see only the new attempt",
+              "Exit code table: 137 = OOMKilled, 1 = app error, 143 = SIGTERM, 139 = SIGSEGV, 2 = ENTRYPOINT issue",
+              "Liveness probe on a slow-starting JVM causes crash loops — add a startupProbe so liveness doesn't fire during warm-up",
+              "Use /actuator/health/liveness, not aggregate /actuator/health — so transient DB outage doesn't restart the pod"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "kubectl debug with ephemeral containers. When the crashed pod has no shell or you need to inspect the filesystem: `bash kubectl debug -it order-svc-... --image=busybox --target=app -n prod attach a busybox sidecar sharing process namespace with 'app' ps aux cat /proc/1/environ | tr '\\0' '\\n' ls /config The ephemeral container shares PID and filesystem namespaces so you can see the main container's environment and config without rebuilding the image. terminationMessagePath."
+          }
+        ],
+        "cap": "Prometheus alert on restart rate per 10 minutes — catches CrashLoop before users notice.",
+        "familiarity_anchors": [
+          "CrashLoopBackOff",
+          "OOMKilled",
+          "Liveness"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a startupProbe and a livenessProbe with `initialDelaySeconds`?",
+          "How do you capture a heap dump when a pod is being OOMKilled?",
+          "How does `kubectl debug` ephemeral containers differ from `kubectl exec`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed as a Kubernetes Deployment"
+      }
+    },
+    {
+      "id": "k8s-scn-003",
+      "slug": "dns-resolution-failing-kubernetes-coredns-debug",
+      "question": "Services in the cluster suddenly fail DNS resolution — how do you debug CoreDNS?",
+      "title": "Debugging CoreDNS: When Kubernetes Service DNS Fails",
+      "direct_answer": "CoreDNS runs as a Deployment in `kube-system` resolving `*.svc.cluster.local` for all pods. DNS failures usually manifest as `UnknownHostException` or random 50% failures (one CoreDNS pod unhealthy). Debug order: (1) `kubectl exec pod -- nslookup kubernetes.default` to verify DNS from a pod; (2) check CoreDNS pods healthy (`kubectl get pods -n kube-system -l k8s-app=kube-dns`); (3) check CoreDNS logs for errors; (4) validate `/etc/resolv.conf` in pod (correct nameserver + search domains); (5) check NetworkPolicy isn't blocking DNS (UDP/53 to kube-dns); (6) verify CoreDNS ConfigMap. Fix: scale CoreDNS replicas, enable NodeLocal DNSCache, tune pod `ndots`, check for upstream resolver issues.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Whether you know that DNS is the most common intermittent-failure culprit and how to isolate it",
+        "common_mistake": "Assuming 'service is unreachable' means networking broken, without checking DNS first; or restarting CoreDNS pods without reading logs",
+        "to_stand_out": "Explain `ndots: 5`, search domain expansion, NodeLocal DNSCache for scalability, NetworkPolicy egress rules for DNS, CoreDNS Corefile plugins, and the classic DNS intermittency caused by conntrack race on parallel DNS queries"
+      },
+      "company_tags": [
+        "google",
+        "cloudflare",
+        "airbnb",
+        "lyft"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-21",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why DNS Is the First Thing to Check When 'Networking Is Broken'",
+            "content": "In a Kubernetes cluster, every service call that uses a service name (`payment-service.default.svc.cluster.local`) depends on DNS working. **CoreDNS** (replaced kube-dns in 1.13+) is the in-cluster resolver — a Deployment of 2–3 pods in `kube-system` that every pod queries via a ClusterIP Service (typically `kube-dns` at `10.96.0.10`).\n\nCoreDNS handles:\n\n- Cluster-internal names (`*.svc.cluster.local`, `*.pod.cluster.local`) resolved from the Kubernetes API.\n- External names forwarded to upstream resolvers (cloud VPC DNS or `/etc/resolv.conf` of the node).\n- Custom rewrites and stub zones defined in the **Corefile** (CoreDNS ConfigMap).\n\nSymptoms of DNS failure range from obvious (all service-to-service calls break with `UnknownHostException`) to insidious:\n\n- **Intermittent ~5% failure rate** — one of 3 CoreDNS pods is unhealthy, queries landed on it fail.\n- **50% failure on specific services** — only external DNS broken (upstream resolver issue), cluster-internal still works.\n- **First query always slow (5s), subsequent fast** — `ndots: 5` + `search` list causes parallel A/AAAA query race triggering conntrack bugs (classic Linux kernel issue).\n- **Pod can't reach DB despite DB being up** — NetworkPolicy blocking egress to kube-dns on UDP/53.\n\nRule of thumb: **before concluding a service is down, prove DNS resolves its name**. It saves hours of wrong-path debugging."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The DNS Resolution Path for a Spring Boot Pod",
+            "content": "App calls `payment-service` → glibc queries `/etc/resolv.conf` nameserver → kube-proxy routes to CoreDNS pod → CoreDNS answers from Kubernetes API or upstream.\n\n```mermaid\nflowchart LR\n    App[Spring Boot Pod\\nInetAddress.getByName payment-service] --> Resolv[/etc/resolv.conf\\nnameserver 10.96.0.10\\nsearch ns.svc.cluster.local svc.cluster.local cluster.local\\noptions ndots:5]\n    Resolv -->|UDP/53 to 10.96.0.10| KDS[kube-dns Service\\nClusterIP]\n    KDS -->|kube-proxy iptables| CD1[CoreDNS Pod 1]\n    KDS --> CD2[CoreDNS Pod 2]\n    CD1 -->|cluster zone match| K8sAPI[Kubernetes API\\nServices + Endpoints]\n    CD1 -->|external query| Upstream[Upstream DNS\\nVPC resolver / 8.8.8.8]\n    CD1 -.failing.-> X[Errors surface\\nas UnknownHostException\\nor timeout]\n    NLC[NodeLocal DNSCache\\nDaemonSet on each node] -.optional cache.-> CD1\n    NP[NetworkPolicy egress\\nmust allow UDP/53 to kube-dns] -.blocks if misconfigured.-> KDS\n```\n\n**`ndots: 5` behavior:** if the query has fewer than 5 dots, glibc appends the search list and tries each — so `payment-service` becomes `payment-service.ns.svc.cluster.local`, `payment-service.svc.cluster.local`, `payment-service.cluster.local`, and finally `payment-service` itself. External DNS like `google.com` (1 dot) also goes through this expansion — multiple queries per lookup, each doing parallel A + AAAA."
+          },
+          {
+            "type": "step",
+            "title": "Step 1: Verify DNS From a Pod — The One Command That Answers Everything",
+            "content": "The fastest diagnosis is to run nslookup from inside an affected pod.\n\n```bash\n# Spawn a debug pod if the affected app has no shell\nkubectl run dns-test --rm -it --image=busybox:1.36 --restart=Never -- sh\n# Inside the pod:\nnslookup kubernetes.default\n# Server:    10.96.0.10\n# Name:      kubernetes.default.svc.cluster.local\n# Address:   10.96.0.1\n\nnslookup payment-service.prod.svc.cluster.local\n# success or failure tells you if CoreDNS resolves THIS name\n\nnslookup google.com\n# tests external resolution via upstream\n\ncat /etc/resolv.conf\n# nameserver 10.96.0.10\n# search prod.svc.cluster.local svc.cluster.local cluster.local\n# options ndots:5\n```\n\n**Interpretation:**\n\n| Result | Diagnosis |\n|---|---|\n| `kubernetes.default` fails | DNS totally broken — CoreDNS down or unreachable (NetworkPolicy / kube-proxy / iptables). |\n| Internal name fails, external works | Service doesn't exist, wrong namespace, or label mismatch on Service — check `kubectl get svc`. |\n| External fails, internal works | Upstream resolver issue — check CoreDNS Corefile `forward . /etc/resolv.conf` or VPC DNS. |\n| Intermittent (50% failure on retries) | One CoreDNS pod unhealthy; check `kubectl get pods -n kube-system -l k8s-app=kube-dns`. |\n| Resolves but takes 5 seconds | `ndots: 5` + parallel A/AAAA conntrack race — see NodeLocal DNSCache fix. |\n\n**Check CoreDNS health:**\n\n```bash\nkubectl get pods -n kube-system -l k8s-app=kube-dns\n# NAME                       READY   STATUS    RESTARTS\n# coredns-74ff55c5b-abc      1/1     Running   0\n# coredns-74ff55c5b-xyz      0/1     CrashLoopBackOff  4\n\nkubectl logs -n kube-system coredns-74ff55c5b-xyz --previous\n# reveals the crash reason — often bad Corefile or upstream timeout loop\n\nkubectl top pods -n kube-system -l k8s-app=kube-dns\n# CoreDNS pod pegged at 100% CPU = overloaded; scale up replicas\n```"
+          },
+          {
+            "type": "step",
+            "title": "Step 2: The Corefile, NodeLocal DNSCache, and ndots Tuning",
+            "content": "**CoreDNS Corefile** is a ConfigMap in `kube-system`:\n\n```bash\nkubectl get configmap coredns -n kube-system -o yaml\n# data:\n#   Corefile: |\n#     .:53 {\n#         errors\n#         health { lameduck 5s }\n#         ready\n#         kubernetes cluster.local in-addr.arpa ip6.arpa {\n#            pods insecure\n#            fallthrough in-addr.arpa ip6.arpa\n#            ttl 30\n#         }\n#         prometheus :9153\n#         forward . /etc/resolv.conf {\n#            max_concurrent 1000\n#         }\n#         cache 30\n#         loop\n#         reload\n#         loadbalance\n#     }\n```\n\nCommon Corefile tweaks:\n\n- **`cache 30`** — CoreDNS caches answers for 30s; tune up for latency or down for consistency.\n- **`forward . 8.8.8.8 1.1.1.1`** — force a specific upstream instead of inheriting node's resolv.conf; useful when node DNS is broken.\n- **`rewrite name substring prod.svc.example.com prod.svc.cluster.local`** — alias externally-looking names to internal.\n- **`hosts`** plugin for adding static entries (hotfix for bad external DNS).\n\n**NodeLocal DNSCache** — a DaemonSet on each node running a local CoreDNS cache that pods query first (at a link-local IP). Dramatically reduces query volume hitting CoreDNS pods and eliminates the UDP conntrack race:\n\n```yaml\n# Pods' resolv.conf points to 169.254.20.10 (link-local)\n# NodeLocal DNSCache pod on each node handles lookups\n# Falls back to CoreDNS service for cache misses\n```\n\nStandard recommendation for **clusters with >100 nodes or DNS-intensive workloads**. Measurable latency improvement (P99 DNS drops from ~10ms to <1ms) and eliminates the classic 5-second timeout from conntrack collisions.\n\n**ndots tuning.** Pods default to `ndots: 5`. For external-heavy workloads, lower to reduce search expansion:\n\n```yaml\nspec:\n  dnsConfig:\n    options:\n      - name: ndots\n        value: \"2\"\n```\n\nWith ndots 2, `google.com` is queried once without expansion; internal names like `my-svc` still expand through search list. Cuts external DNS query count by ~5x."
+          },
+          {
+            "type": "step",
+            "title": "Step 3: NetworkPolicy, Overloaded CoreDNS, and External Resolver Failures",
+            "content": "**NetworkPolicy blocking DNS.** A strict `default-deny` egress policy that doesn't explicitly allow DNS to `kube-system` will break every pod's name resolution.\n\n```yaml\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: allow-dns, namespace: prod}\nspec:\n  podSelector: {}\n  policyTypes: [Egress]\n  egress:\n    - to:\n        - namespaceSelector:\n            matchLabels: {kubernetes.io/metadata.name: kube-system}\n          podSelector:\n            matchLabels: {k8s-app: kube-dns}\n      ports:\n        - protocol: UDP\n          port: 53\n        - protocol: TCP\n          port: 53\n```\n\nWithout this, pods in `prod` with default-deny egress will get `Temporary failure in name resolution`. Debug: compare `kubectl exec` nslookup from a pod in the affected namespace vs one without policy.\n\n**Overloaded CoreDNS.** CoreDNS pod CPU pegged at 100% means queries are queueing. Symptoms: rising DNS latency, occasional timeouts.\n\nFixes (in order):\n\n1. **Scale CoreDNS replicas**: `kubectl scale deploy coredns -n kube-system --replicas=5`.\n2. **Enable NodeLocal DNSCache** (offloads most queries to per-node cache).\n3. **Tune pod `ndots` down** to reduce search expansion multiplier.\n4. **Lower cache TTL on upstream if stale data is tolerable** — `cache 60` reduces upstream traffic.\n5. **CoreDNS autoscaler** (addon) that scales based on cluster size.\n\n**External resolver failures.** `forward . /etc/resolv.conf` inherits the node's DNS. If the node's VPC DNS (AWS `.2` of the VPC CIDR, GCP metadata server) is unreliable, every external lookup suffers.\n\nDiagnosis:\n\n```bash\nkubectl exec coredns-pod -n kube-system -- nslookup google.com\n# If this fails, upstream is the issue\n\nkubectl debug node/NODENAME -it --image=busybox\n# Then from node context:\nnslookup google.com\n# Test node-level DNS directly\n```\n\nFixes: switch CoreDNS to `forward . 8.8.8.8 1.1.1.1` explicitly, or fix the VPC / on-prem DNS.\n\n**The classic 5-second DNS timeout.** Linux's glibc sends A and AAAA queries in parallel on the same UDP socket. Conntrack can race, drop one, and retransmit after 5s. Workarounds:\n\n- **NodeLocal DNSCache** uses TCP or dedicated connections.\n- **`use-vc`** resolv.conf option (Alpine doesn't support).\n- **`single-request-reopen`** — sends A then AAAA on separate sockets.\n\n```yaml\nspec:\n  dnsConfig:\n    options:\n      - {name: single-request-reopen}\n      - {name: ndots, value: \"2\"}\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Production Playbook and Alerting",
+            "content": "**15-second triage:**\n\n```bash\nkubectl run dns-test --rm -it --image=busybox:1.36 --restart=Never -- \\\n  nslookup kubernetes.default\nkubectl get pods -n kube-system -l k8s-app=kube-dns\nkubectl top pods -n kube-system -l k8s-app=kube-dns\nkubectl logs -n kube-system -l k8s-app=kube-dns --tail=50 | grep -iE 'error|timeout'\n```\n\n**Deeper dive:**\n\n```bash\nkubectl exec -it affected-pod -n prod -- cat /etc/resolv.conf\nkubectl exec -it affected-pod -n prod -- nslookup payment-service\nkubectl get networkpolicy -n prod                    # any deny-egress?\nkubectl get configmap coredns -n kube-system -o yaml # Corefile review\nkubectl get svc -n kube-system kube-dns -o yaml      # check Service is healthy\nkubectl get endpoints -n kube-system kube-dns        # does Service have endpoints?\n```\n\n**Essential alerts:**\n\n- `coredns_cache_hits_total` vs `coredns_cache_misses_total` ratio — sudden drop = upstream failures.\n- `coredns_dns_request_duration_seconds` P99 > 100ms for 5m — CoreDNS overloaded.\n- `coredns_panics_total` > 0 — code bug.\n- `up{job=\"kube-dns\"}` < 2 — less than 2 CoreDNS pods ready — scale or investigate.\n- Pod-level: synthetic probe from a canary pod doing nslookup every 15s; page if failure rate > 1%.\n\n**Production hardening:**\n\n- **Always run ≥ 3 CoreDNS replicas** with topology spread across zones; PDB `minAvailable: 2`.\n- **Enable NodeLocal DNSCache** for clusters ≥ 100 nodes or DNS-intensive workloads.\n- **Explicit NetworkPolicy allow rule** for DNS egress in every namespace that uses default-deny.\n- **Lower pod `ndots` to 2** for external-heavy services.\n- **Set pod `single-request-reopen`** for Spring Boot / glibc-based containers.\n- **Monitor CoreDNS CPU** — scale early; CoreDNS is a single-CPU-bound resolver per pod.\n- **Cache-only pods for critical paths** — some SREs deploy per-app dnsmasq sidecars for mission-critical paths (mostly made obsolete by NodeLocal DNSCache).\n- **Document the DNS runbook** — this is the highest-ROI runbook because DNS-induced incidents are both frequent and misdiagnosed.\n\n**The classic production story.** A strict NetworkPolicy is rolled out to prod at 10 AM. At 10:02 AM, all services in `prod` start failing to resolve each other. Only the SREs with the DNS runbook realize within minutes that the default-deny-egress policy doesn't whitelist UDP/53 to kube-dns. A teams without this knowledge chase service health for hours. DNS is always the first thing to check."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **DNS is the most common hidden cause of 'networking is broken'** — always verify with `nslookup kubernetes.default` from an affected pod before anything else.\n- **CoreDNS Deployment in `kube-system`** resolves `*.svc.cluster.local` via Kubernetes API and forwards external to upstream.\n- **`ndots: 5` + search list causes query amplification** — lower to 2 for external-heavy services; cuts external query count by ~5x.\n- **NodeLocal DNSCache is the standard scalability fix** — DaemonSet per node with local cache; eliminates the 5-second conntrack race and cuts CoreDNS load by 10x.\n- **NetworkPolicy must allow DNS explicitly** — default-deny egress without a rule for UDP/53 to kube-dns breaks every pod in the namespace.\n- **CoreDNS CPU pegs at 100% under load** — scale replicas, enable NodeLocal DNSCache, tune ndots; CoreDNS autoscaler addon for large clusters.\n- **Upstream resolver failures surface as 'external fails, internal works'** — CoreDNS inherits node DNS; switch to explicit `forward . 8.8.8.8` or fix VPC DNS.\n- **Exit code and logs from CoreDNS pods reveal Corefile bugs** — `kubectl logs` and `kubectl get configmap coredns` for Corefile review.\n- **Run ≥ 3 CoreDNS replicas with PDB and topology spread** — losing 2 at once is an outage; spread across AZs for availability."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "When I see 'networking seems broken' my first instinct is to verify DNS. In a Kubernetes cluster DNS is responsible for every service name resolution, and intermittent DNS issues are the single most common hidden cause of vague connectivity problems.\n\n**My first command**\n- `kubectl run dns-test --rm -it --image=busybox --restart=Never -- nslookup kubernetes.default`.\n- If that fails, DNS is totally broken — CoreDNS down or unreachable; check kube-system pods and NetworkPolicy.\n- If kubernetes.default works but my service name fails, it's a missing Service, wrong namespace, or label mismatch — `kubectl get svc` and `describe` it.\n- If internal works but external doesn't, it's an upstream resolver issue — CoreDNS inherits the node's resolv.conf by default; check the VPC DNS or force an explicit upstream in the Corefile.\n\n**Check CoreDNS health**\n- `kubectl get pods -n kube-system -l k8s-app=kube-dns` — any CrashLoopBackOff? Any pod at 100% CPU under load?\n- `kubectl logs` on CoreDNS pods with `--previous` if they've restarted — Corefile errors show up here.\n- Scale CoreDNS replicas immediately if CPU is pegged — `kubectl scale deploy coredns -n kube-system --replicas=5`.\n\n**The classic Kubernetes DNS performance issues**\n- `ndots: 5` default — every lookup with fewer than 5 dots goes through the search list, so `google.com` becomes 4 queries. Lower ndots to 2 via pod dnsConfig for external-heavy services; cuts external DNS volume 5x.\n- The 5-second timeout — glibc sends A and AAAA in parallel on the same UDP socket and conntrack can race, dropping one and retransmitting after 5 seconds. Fixes are `single-request-reopen` in pod dnsConfig or enabling NodeLocal DNSCache which uses TCP.\n- NodeLocal DNSCache is the standard scalability answer — a DaemonSet runs on every node with a local cache; pods hit the local cache first, CoreDNS sees only cache misses. Dramatically cuts load and eliminates conntrack races. Standard recommendation for clusters over 100 nodes.\n\n**NetworkPolicy is the production trap**\n- A strict default-deny egress policy without an explicit allow rule for UDP/53 to kube-dns breaks every pod in the namespace.\n- The rule must allow both UDP and TCP port 53 to pods labeled `k8s-app: kube-dns` in `kube-system`.\n- Classic production incident: a security-hardening policy rolls out, all services start failing to resolve, the fix is a one-line NetworkPolicy addition but it takes hours to find without the runbook.\n\n**Essential alerting I put in place**\n- CoreDNS P99 request duration > 100ms for 5 minutes — CoreDNS is overloaded.\n- CoreDNS cache hit ratio drops suddenly — upstream failures.\n- At least 2 CoreDNS pods ready — less than 2 is an incident.\n- A synthetic DNS probe pod doing nslookup every 15 seconds — page at >1% failure rate.\n\n**Production hardening**\n- At least 3 CoreDNS replicas with topology spread across AZs and PDB minAvailable 2.\n- NodeLocal DNSCache enabled.\n- Pod-level ndots and single-request-reopen tuning.\n- Explicit NetworkPolicy allow-dns rule in every namespace that uses default-deny.\n- Document the DNS runbook — this is the single highest-ROI runbook because DNS-induced incidents are frequent and misdiagnosed."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is NodeLocal DNSCache and when should you enable it?",
+        "Why does the `ndots: 5` default amplify DNS query volume?",
+        "How does the glibc parallel A/AAAA query cause a 5-second timeout, and how do you fix it?",
+        "What NetworkPolicy rule must you add to allow DNS egress in a default-deny namespace?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes CoreDNS Debugging DNS Resolution Failures | InterviewExplainer",
+        "metaDescription": "Debug CoreDNS in Kubernetes. DNS resolution failures, ndots, NodeLocal DNSCache, NetworkPolicy for DNS egress, 5-second timeout, upstream resolvers, production playbook."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P09",
+        "hook": "When I see 'networking seems broken' my first instinct is to verify DNS.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "In a Kubernetes cluster, every service call that uses a service name (payment-service.default.svc.cluster.local) depends on DNS working. CoreDNS (replaced kube-dns in 1.13+) is the in-cluster resolver — a Deployment of 2–3 pods in kube-system that every pod queries via a ClusterIP Service (typically kube-dns at 10.96.0.10). CoreDNS handles: Cluster-internal names."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Whether you know that DNS is the most common intermittent-failure culprit and how to isolate it"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "The fastest diagnosis is to run nslookup from inside an affected pod.",
+              "``bash Spawn a debug pod if the affected app has no shell kubectl run dns-test --rm -it --image=busybox:1.36 --restart=Never -- sh Inside the pod: nslookup kubernetes.default Server: 10.96.0.10 Name: kubernetes.default.svc.cluster.local Address: 10.96.0.1 nslookup payment-service.prod.svc.cluster.local success or failure tells you if CoreDNS resolves THIS name nslookup google.com tests external resolution via upstream cat /etc/resolv.conf nameserver 10.96.0.10 search prod.svc.cluster.local svc.cluster.local cluster.local options ndots:5 ` Interpretation: | Result | Diagnosis | |---|---| | kubernetes.default fails | DNS totally broken — CoreDNS down or unreachable (NetworkPolicy / kube-proxy / iptables).",
+              "| | Internal name fails, external works | Service doesn't exist, wrong namespace, or label mismatch on Service — check kubectl get svc.",
+              "| | External fails, internal works | Upstream resolver issue — check CoreDNS Corefile forward .",
+              "/etc/resolv.conf or VPC DNS.",
+              "| | Intermittent (50% failure on retries) | One CoreDNS pod unhealthy; check kubectl get pods -n kube-system -l k8s-app=kube-dns."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "DNS is the most common hidden cause of 'networking is broken' — always verify with nslookup kubernetes",
+              "default from an affected pod before anything else",
+              "CoreDNS Deployment in kube-system resolves *",
+              "local via Kubernetes API and forwards external to upstream",
+              "ndots: 5 + search list causes query amplification — lower to 2 for external-heavy services; cuts external query count by ~5x"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "15-second triage: `bash kubectl run dns-test --rm -it --image=busybox:1.36 --restart=Never -- \\ nslookup kubernetes.default kubectl get pods -n kube-system -l k8s-app=kube-dns kubectl top pods -n kube-system -l k8s-app=kube-dns kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50 | grep -iE 'error|timeout' Deeper dive: bash kubectl exec -it affected-pod -n prod -- cat /etc/resolv.conf kubectl exec -it affected-pod -n prod -- nslookup payment-service kubectl get networkpolicy -n prod # any deny-egress? kubectl get."
+          }
+        ],
+        "cap": "Document the DNS runbook — this is the single highest-ROI runbook because DNS-induced incidents are frequent and misdiagnosed.",
+        "familiarity_anchors": [
+          "CoreDNS",
+          "Deployment",
+          "UnknownHostException"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is NodeLocal DNSCache and when should you enable it?",
+          "Why does the `ndots: 5` default amplify DNS query volume?",
+          "How does the glibc parallel A/AAAA query cause a 5-second timeout, and how do you fix it?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed as a Kubernetes Deployment"
+      }
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "topic": "Social Media Feed",
+  "topicSlug": "social-media-feed",
+  "questions": [
+    {
+      "id": "sdh-002",
+      "slug": "design-social-media-feed",
+      "question": "Design a social media feed like Twitter or Instagram timeline.",
+      "title": "Design a Social Media Feed (Twitter/Instagram Timeline)",
+      "direct_answer": "Use a hybrid fan-out model: fan-out on write for users with fewer than 10K followers (pre-compute their followers' feeds in Redis), fan-out on read for celebrity accounts. A feed service merges pre-computed feed entries with real-time celebrity posts at read time. Store posts in a database and feed timelines in Redis sorted sets.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Fan-out strategies, caching at scale, ranking/relevance algorithms, and handling celebrity users with millions of followers",
+        "common_mistake": "Pure fan-out on write for all users \u2014 a celebrity with 50M followers would require 50M writes per tweet, causing massive write amplification",
+        "to_stand_out": "Explain the hybrid fan-out threshold, how ranking replaces chronological ordering, and how to handle feed consistency when a user unfollows someone mid-scroll"
+      },
+      "company_tags": [
+        "Twitter",
+        "Meta",
+        "Instagram",
+        "LinkedIn",
+        "TikTok"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Scale Math: Why Naive Approaches Collapse",
+            "content": "Twitter-scale numbers: **500 million tweets/day**, **300 million daily active users**, each following ~200 accounts on average. Each user opens their feed ~10 times/day \u2192 **3 billion feed reads/day \u00f7 86,400 \u2248 35,000 read QPS**, peaks at 100K+ QPS. Feed generation must complete in **< 200ms** including ranking.\n\nThe naive approach \u2014 \"when User A opens their feed, query all 200 accounts they follow, fetch recent posts, merge and sort\" \u2014 requires 200 database queries per feed load. At 35,000 QPS that is **7 million DB queries/sec** just for feed reads. This is the core problem: you must **pre-compute** feeds to avoid this read-time fan-out.\n\nBut pure pre-computation has its own problem. When a celebrity with 50 million followers posts, you'd need to write that post ID into 50 million users' feed caches. That single tweet triggers **50 million writes** \u2014 taking minutes to propagate. Twitter famously solved this with a **hybrid model**: pre-compute for regular users, compute on-the-fly for celebrities.\n\nStorage: each feed entry is ~100 bytes (post ID + metadata). A user's feed cache holds 800 entries \u2192 80KB per user. 300M users \u00d7 80KB = **24TB** of feed cache \u2014 fits in a Redis cluster."
+          },
+          {
+            "type": "step",
+            "title": "Hybrid Fan-Out Architecture",
+            "content": "The system splits users into two categories based on follower count:\n\n**Regular users (< 10K followers) \u2014 fan-out on write.** When they post, a fan-out service pushes the post ID into every follower's feed cache (a Redis sorted set keyed by `feed:{userId}`, scored by timestamp). With an average of 200 followers, this is 200 Redis writes per post \u2014 fast and manageable.\n\n**Celebrity users (\u2265 10K followers) \u2014 fan-out on read.** Their posts are NOT pushed into follower feeds. Instead, when a user loads their feed, the feed service fetches the pre-computed feed from Redis AND queries a small \"celebrity posts\" cache for any celebrities that user follows, then merges the two lists.\n\n```\nUser posts a tweet:\n    \u2502\n    \u251c\u2500\u2500 follower_count < 10K?\n    \u2502   YES \u2192 Fan-out on write:\n    \u2502         Kafka \u2192 Fan-out Workers \u2192 ZADD feed:{followerId} {timestamp} {postId}\n    \u2502         (for each follower)\n    \u2502\n    \u2514\u2500\u2500 follower_count \u2265 10K?\n        YES \u2192 Store in celebrity_posts:{userId} only\n              (merged at read time)\n\nUser reads their feed:\n    \u2502\n    \u251c\u2500\u2500 ZREVRANGE feed:{userId} 0 49        (pre-computed feed)\n    \u251c\u2500\u2500 For each celebrity the user follows:\n    \u2502   ZREVRANGE celebrity_posts:{celeb} 0 9  (recent posts)\n    \u251c\u2500\u2500 Merge + rank + return top 50\n```\n\nThe 10K threshold is tunable \u2014 Twitter reportedly used ~5K. The key insight: a small percentage of users (celebrities) create a disproportionate share of fan-out cost. Exempting them cuts total write amplification dramatically while adding only a few Redis reads per feed load."
+          },
+          {
+            "type": "step",
+            "title": "Data Model and Storage Layers",
+            "content": "**Post storage (PostgreSQL or DynamoDB):**\n\n```sql\nCREATE TABLE posts (\n    post_id       BIGINT PRIMARY KEY,   -- Snowflake ID\n    user_id       BIGINT NOT NULL,\n    content       TEXT,\n    media_urls    JSONB,\n    like_count    INT DEFAULT 0,\n    retweet_count INT DEFAULT 0,\n    reply_count   INT DEFAULT 0,\n    created_at    TIMESTAMPTZ NOT NULL,\n    is_deleted    BOOLEAN DEFAULT FALSE\n);\n\nCREATE TABLE follows (\n    follower_id   BIGINT,\n    followee_id   BIGINT,\n    created_at    TIMESTAMPTZ DEFAULT NOW(),\n    PRIMARY KEY (follower_id, followee_id)\n);\nCREATE INDEX idx_followee ON follows(followee_id); -- who follows me\n```\n\n**Feed cache (Redis sorted sets):**\n- Key: `feed:{userId}` \u2192 sorted set of `(postId, timestamp)` \u2014 max 800 entries with `ZREMRANGEBYRANK` to cap\n- Key: `celebrity_posts:{userId}` \u2192 recent 200 posts from celebrity accounts\n- Key: `user_profile:{userId}` \u2192 cached user metadata for feed rendering\n\n**Social graph (Redis or dedicated graph store):**\n- `following:{userId}` \u2192 set of user IDs this user follows\n- `followers:{userId}` \u2192 set of follower user IDs (used by fan-out workers)\n\nThe feed cache stores only **post IDs**, not full posts. The feed service hydrates IDs into full post objects by batch-fetching from a post cache (Redis) backed by PostgreSQL. This keeps feed entries tiny and avoids stale data \u2014 if a user edits their post, only the post cache needs updating, not millions of feed entries."
+          },
+          {
+            "type": "step",
+            "title": "Feed Ranking: Beyond Chronological Order",
+            "content": "Modern feeds are ranked, not purely chronological. The ranking service scores each candidate post before returning the feed.\n\n**Ranking signals:**\n- **Engagement probability** \u2014 ML model predicting P(like), P(retweet), P(reply) based on user-post affinity\n- **Recency** \u2014 exponential decay: a 1-hour-old post scores higher than a 12-hour-old post, all else equal\n- **Social closeness** \u2014 posts from users you interact with frequently rank higher\n- **Content type diversity** \u2014 avoid showing 10 consecutive image posts; mix content types\n- **Creator quality** \u2014 accounts with high engagement rates get a boost\n\nThe ranking pipeline runs in two stages: a **lightweight pre-ranker** filters 800 candidates to ~200 using simple features (recency, interaction history), then a **full ranker** scores the 200 candidates with the ML model and returns the top 50. This two-stage approach keeps latency under 50ms for the ranking step.\n\n```java\n@Service\npublic class FeedRankingService {\n    private static final double RECENCY_DECAY = 0.95; // per hour\n\n    public List<FeedItem> rank(List<FeedItem> candidates, UserProfile user) {\n        return candidates.stream()\n            .map(item -> {\n                double score = 0.0;\n                double hoursOld = hoursSince(item.getCreatedAt());\n                score += Math.pow(RECENCY_DECAY, hoursOld) * 100;  // recency\n                score += interactionScore(user, item.getAuthorId()) * 50;\n                score += item.getEngagementRate() * 30;\n                item.setRankScore(score);\n                return item;\n            })\n            .sorted(Comparator.comparing(FeedItem::getRankScore).reversed())\n            .limit(50)\n            .toList();\n    }\n}\n```\n\nFor an interview, you don't need to describe the ML model in detail \u2014 but showing that you understand **feature engineering** (recency decay, affinity scores, engagement rates) and **the two-stage pipeline** demonstrates maturity beyond \"just sort by timestamp.\""
+          },
+          {
+            "type": "step",
+            "title": "Consistency, Pagination, and Edge Cases",
+            "content": "**Feed consistency on unfollow:** If User A unfollows User B, B's posts should disappear from A's feed. Two approaches: (1) lazily filter at read time \u2014 when rendering the feed, check if the author is still followed, or (2) eagerly remove B's posts from A's feed cache. Lazy filtering is simpler and handles most cases; eager removal is needed only if the unfollow is a block (safety requirement).\n\n**Pagination with cursor-based scrolling:** Offset-based pagination breaks when new posts push items between pages. Use **cursor pagination** \u2014 the client sends the last-seen post ID or timestamp, and the server returns posts older than that cursor. Redis `ZREVRANGEBYSCORE` with the cursor score handles this naturally.\n\n**Delete propagation:** When a user deletes a post, mark `is_deleted = true` in the post table. The feed cache contains only post IDs, so the hydration step naturally filters deleted posts. No need to remove the ID from millions of feed caches \u2014 eventual consistency through the hydration layer.\n\n**New user cold start:** A new user with no follow graph has an empty feed. The feed service falls back to a **trending/recommended** feed generated by a batch job. As the user follows accounts and interacts, their personalized feed gradually replaces the default.\n\n**Multi-region:** Deploy feed caches per-region (US-East, EU-West, APAC). The fan-out workers publish to Kafka, and regional consumers update regional Redis clusters. A user's feed reads always hit their nearest region. Cross-region follows work because the fan-out message propagates through Kafka replication."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Fan-out on write for <1,000 followers** \u2014 pre-compute feed at post time by writing to each follower's Redis feed list.\n- **Celebrity problem: hybrid push-pull** \u2014 users with >10,000 followers skip pre-computation.\n- **Feed Redis list: 1,000-post window per user** \u2014 store only the latest 1,000 post IDs per user in Redis.\n- **Ranking model re-scores the feed** \u2014 raw chronological feed is replaced by an ML ranking score combining recency, engagement rate, and user affinity.\n- **Dual database: Cassandra for writes, Elasticsearch for search** \u2014 Cassandra handles 500M writes/day."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A social media feed at Twitter scale handles 500 million posts per day and 3 billion feed renders per day. The fundamental design challenge is that writes (posts) are relatively rare but reads (feed loads) are orders of magnitude more frequent \u2014 the system must optimize aggressively for the read path while keeping writes manageable.\n\n**Fan-out on write \u2014 the default for normal users:**\n- When a user with 200 followers posts, write the post reference to each of those 200 followers' feed lists in Redis; feed reads become a single Redis list operation \u2014 O(1), regardless of who you follow\n- Limit each Redis feed list to the latest 1,000 post IDs; older content is fetched from the timeline service on scroll; this bounds Redis memory to a manageable size\n- This works for 99% of users who have fewer than 10,000 followers\n\n**The celebrity problem \u2014 hybrid push-pull:**\n- A user with 5 million followers would require 5 million write operations per post; fan-out-on-write is prohibitively expensive at this scale\n- Celebrity accounts skip pre-computation; their posts are stored once and pulled at read time, merged with the pre-computed feed of the requesting user\n- The threshold is configurable \u2014 typically 10,000\u2013100,000 followers triggers the pull path\n\n**Feed ranking:**\n- Raw chronological feeds are replaced by a ranking model that scores each candidate post on recency, engagement rate, creator affinity, and content type preference\n- The ranking score is computed offline by the ML pipeline and stored alongside the post ID in the feed list; retrieval fetches IDs, ranking scores are looked up in parallel\n- Real-time signals (a post going viral in the last 5 minutes) are injected at read time by the trending service\n\nI recommend fan-out-on-write for standard users with a celebrity threshold cutover to fan-out-on-read, Redis feed lists capped at 1,000 entries per user, and ML-based feed ranking as the baseline rather than chronological order."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle a celebrity with 50M followers posting during peak hours?",
+        "How do you implement feed ranking with machine learning at low latency?",
+        "How do you ensure feed consistency when a user unfollows someone mid-scroll?"
+      ],
+      "seo": {
+        "metaTitle": "Design Social Media Feed Twitter Timeline \u2014 Java System Design Interview",
+        "metaDescription": "Social media feed system design with hybrid fan-out, Redis sorted sets, two-stage ranking pipeline, cursor pagination, and celebrity handling."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A social media feed at Twitter scale handles 500 million posts per day and 3 billion feed renders per day.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Twitter-scale numbers: 500 million tweets/day, 300 million daily active users, each following ~200 accounts on average. Each user opens their feed ~10 times/day \u2192 3 billion feed reads/day \u00f7 86,400 \u2248 35,000 read QPS, peaks at 100K+ QPS. Feed generation must complete in < 200ms including ranking. The naive approach \u2014 \"when User A opens their feed, query all 200 accounts they follow, fetch recent posts, merge and sort\" \u2014 requires 200 database queries per feed load. At 35,000 QPS that is 7 million DB queries/sec just for feed reads. This is the core problem: you must pre-compute feeds to avoid this read-time fan-out. But pure pre-computation has its own problem. When a celebrity with 50 million followers posts, you'd."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Twitter-scale numbers: 500 million tweets/day, 300 million daily active users, each following ~200 accounts on average. Each user opens their feed ~10 times/day \u2192 3 billion feed reads/day \u00f7 86,400 \u2248 35,000 read QPS, peaks at 100K+ QPS. Feed generation must complete in < 200ms including ranking. The naive approach \u2014 \"when User A opens their feed, query all 200 accounts they follow, fetch recent posts, merge and sort\" \u2014 requires 200 database queries per feed load. At 35,000 QPS that is 7 million DB queries/sec just for feed reads. This is the core problem: you must pre-compute feeds to avoid this read-time fan-out. But pure pre-computation has its own."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "The system splits users into two categories based on follower count: Regular users (< 10K followers) \u2014 fan-out on write",
+              "When they post, a fan-out service pushes the post ID into every follower's feed cache (a Redis sorted set keyed by feed:{userId}, scored by timestamp)",
+              "With an average of 200 followers, this is 200 Redis writes per post \u2014 fast and manageable",
+              "Celebrity users (\u2265 10K followers) \u2014 fan-out on read",
+              "Their posts are NOT pushed into follower feeds"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Twitter-scale numbers: 500 million tweets/day, 300 million daily active users, each following ~200 accounts on average. Each user opens their feed ~10 times/day \u2192 3 billion feed reads/day \u00f7 86,400 \u2248 35,000 read QPS, peaks at 100K+ QPS. Feed generation must complete in < 200ms including ranking. The naive approach \u2014 \"when User A opens their feed, query all 200 accounts they follow, fetch recent posts, merge and sort\" \u2014 requires 200 database queries per feed load. At 35,000 QPS that is 7 million DB queries/sec just for feed reads. This is the core problem: you must pre-compute feeds to avoid this read-time fan-out. But pure pre-computation has its own problem. When a celebrity with 50 million followers posts, you'd."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Twitter-scale numbers: 500 million tweets/day, 300 million daily active users, each following ~200 accounts on average. Each user opens their feed ~10 times/day \u2192 3 billion feed reads/day \u00f7 86,400 \u2248 35,000 read QPS, peaks at 100K+ QPS. Feed generation must complete in < 200ms including ranking. The naive approach \u2014 \"when User A opens their feed, query all 200 accounts they follow, fetch recent posts, merge and sort\" \u2014 requires 200 database queries per feed load. At 35,000 QPS that is 7 million DB queries/sec just for feed reads. This is the core problem: you must pre-compute feeds to avoid this read-time fan-out. But pure pre-computation has its own problem. When a celebrity with 50 million followers posts, you'd."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Pure fan-out on write for all users \u2014 a celebrity with 50M followers would require 50M writes per tweet, causing massive write amplification"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Fan-out on write for <1,000 followers \u2014 pre-compute feed at post time by writing to each follower's Redis feed list. Celebrity problem: hybrid push-pull \u2014 users with >10,000 followers skip pre-computation. Feed Redis list: 1,000-post window per user \u2014 store only the latest 1,000 post IDs per user in Redis. Ranking model re-scores the feed \u2014 raw chronological feed is replaced by an ML ranking score combining recency, engagement rate, and user affinity. Dual database: Cassandra for writes, Elasticsearch for search \u2014 Cassandra handles 500M."
+          }
+        ],
+        "cap": "Fan-out on write \u2014 the default for normal users: When a user with 200 followers posts, write the post reference to each of those 200 followers' feed lists in Redis; feed reads become a single.",
+        "familiarity_anchors": [
+          "Redis",
+          "Store"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you handle a celebrity with 50M followers posting during peak hours?",
+          "How do you implement feed ranking with machine learning at low latency?",
+          "How do you ensure feed consistency when a user unfollows someone mid-scroll?"
+        ]
+      }
+    }
+  ]
+}

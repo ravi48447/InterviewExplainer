@@ -1,0 +1,411 @@
+{
+  "topic": "Custom Repositories",
+  "topicSlug": "custom-repositories",
+  "questions": [
+    {
+      "id": "jpa-008",
+      "slug": "spring-data-specifications-dynamic-queries",
+      "title": "Spring Data Specifications for Dynamic Queries",
+      "question": "How do you build dynamic, type-safe queries in Spring Data JPA using Specifications?",
+      "direct_answer": "**`Specification<T>`** is a functional interface returning a JPA `Predicate` — one filter per Specification, **composed at runtime** with `.and()`, `.or()`, `.not()`. Repositories that extend **`JpaSpecificationExecutor<T>`** gain `findAll(Specification, Pageable)`, `count`, and `findOne` methods. The win is killing the **combinatorial explosion** of derived methods for search forms — instead of `findByStatus`, `findByStatusAndCity`, `findByStatusAndDate`, … you have one `findAll(spec)` built from only the filters provided. Returning `null` is idiomatic for an empty filter. Generated SQL is **always parameterized** — safe from injection by construction. Trade-offs vs **QueryDSL**: Specifications are terser than raw Criteria but more verbose than QueryDSL's Q-classes; QueryDSL has superior compile-time type safety; Specifications win on zero extra build setup.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows alternatives to writing dozens of `findBy*And*Or*` methods for complex filter UIs",
+        "common_mistake": "Writing separate `findByStatusAndDateAndCity()`, `findByStatusAndDate()`, `findByDate()` methods for every combination — unmaintainable past three filters",
+        "to_stand_out": "Compare Specifications against QueryDSL, mention the JPA metamodel for type-safe field references, and note that the generated SQL is always parameterized"
+      },
+      "company_tags": [
+        "Shopify",
+        "Farfetch",
+        "Wayfair",
+        "ASOS",
+        "Spring",
+        "Zalando"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One `findBy` per Combination Doesn't Scale — Specifications Compose Instead",
+            "content": "The moment a search form has **three optional filters** — status, date range, city — the derived-query approach breaks. You need `findByStatus`, `findByStatusAndDate`, `findByStatusAndCity`, `findByStatusAndDateAndCity`, and so on. **Seven methods for three filters.** Add a fourth and you need 15. Adding validation or logging multiplies the burden.\n\nThe **Specification** pattern composes individual predicates at runtime. Each filter is a reusable `Specification<T>` — a lambda producing a JPA Criteria predicate. Combine with `.and()`, `.or()`, `.not()` to build the final query dynamically.\n\nUnder the hood, Specifications wrap the **JPA Criteria API**.\n- Generated SQL is always parameterized — **safe from SQL injection by construction**, unlike string-concatenated JPQL.\n- The trade-off is verbosity — the Criteria API requires more code than a JPQL string for the same query — but the composability and runtime safety make it worth it for any non-trivial dynamic search."
+          },
+          {
+            "type": "step",
+            "title": "Building Composable Specifications — Repository, Predicates, Composition",
+            "content": "**Step 1 — Add `JpaSpecificationExecutor<T>` to the repository:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long>,\n        JpaSpecificationExecutor<Order> { }\n```\n\n**Step 2 — Define each filter as a static `Specification<T>` factory:**\n\n```java\npublic class OrderSpecs {\n    public static Specification<Order> hasStatus(String status) {\n        return (root, q, cb) -> cb.equal(root.get(\"status\"), status);\n    }\n    public static Specification<Order> createdAfter(LocalDate date) {\n        return (root, q, cb) -> cb.greaterThanOrEqualTo(root.get(\"createdAt\"), date);\n    }\n}\n```\n\n**Step 3 — Compose at the service layer with `Specification.where(...)`:**\n\n```java\nSpecification<Order> spec = Specification\n    .where(filter.status() != null ? OrderSpecs.hasStatus(filter.status()) : null)\n    .and(filter.from()   != null ? OrderSpecs.createdAfter(filter.from())  : null);\nrepo.findAll(spec, pageable);\n```\n\n**Why this beats derived methods:**\n- **One method handles every filter combination** — no combinatorial explosion.\n- **`null` predicates are ignored** by `Specification.where(...)` chains.\n- **Reusable** — the same `hasStatus` Specification powers `findAll`, `count`, and `findOne`.\n- **Testable** — predicate factories are unit-testable in isolation.\n- **Parameterized SQL** — Criteria API values become bind parameters; no injection risk."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Specifications vs QueryDSL vs Raw Criteria vs `@Query` Conditionals",
+            "content": "Four common approaches to dynamic JPA queries. Each has a sweet spot.\n\n| Approach | Setup cost | Type safety | Verbosity | Best for |\n|---|---|---|---|---|\n| Specifications | Zero (built into Spring Data) | Partial (string field names) | Medium | Small-medium dynamic search; most apps |\n| QueryDSL | Annotation processor + Q-classes | Full (Q-classes enforce names) | Low (fluent) | Complex search; teams accepting build step |\n| Raw Criteria API | Zero | Partial | High | One-off advanced queries; metamodel use |\n| `@Query` + `:p IS NULL OR ...` | Zero | None (string) | Low | Fixed queries with 2-3 optional filters |"
+          },
+          {
+            "type": "after_code",
+            "title": "Production Pattern — Pagination, Joins, Fetch, and the Count-Query Guard",
+            "content": "Order search with status, city, date range, customer name (join), with pagination and a fetch join.\n\n```java\npublic class OrderSpecs {\n    public static Specification<Order> hasStatus(OrderStatus status) {\n        return (root, q, cb) -> status == null ? null : cb.equal(root.get(\"status\"), status);\n    }\n\n    public static Specification<Order> inCity(String city) {\n        return (root, q, cb) -> city == null || city.isBlank() ? null\n            : cb.equal(root.get(\"shippingCity\"), city);\n    }\n\n    public static Specification<Order> createdBetween(Instant from, Instant to) {\n        return (root, q, cb) -> {\n            if (from == null && to == null) return null;\n            if (from == null) return cb.lessThanOrEqualTo(root.get(\"createdAt\"), to);\n            if (to == null)   return cb.greaterThanOrEqualTo(root.get(\"createdAt\"), from);\n            return cb.between(root.get(\"createdAt\"), from, to);\n        };\n    }\n\n    public static Specification<Order> customerNameContains(String fragment) {\n        return (root, q, cb) -> {\n            if (fragment == null || fragment.isBlank()) return null;\n            Join<Order, Customer> customer = root.join(\"customer\", JoinType.INNER);\n            return cb.like(cb.lower(customer.get(\"name\")),\n                           \"%\" + fragment.toLowerCase() + \"%\");\n        };\n    }\n\n    public static Specification<Order> fetchCustomerAndItems() {\n        return (root, q, cb) -> {\n            if (Long.class != q.getResultType()) {\n                root.fetch(\"customer\", JoinType.LEFT);\n                root.fetch(\"items\", JoinType.LEFT);\n                q.distinct(true);\n            }\n            return null;\n        };\n    }\n}\n\n@Service\npublic class OrderSearchService {\n    public Page<Order> search(OrderFilter f, Pageable page) {\n        Specification<Order> spec = Specification\n            .where(OrderSpecs.hasStatus(f.status()))\n            .and(OrderSpecs.inCity(f.city()))\n            .and(OrderSpecs.createdBetween(f.from(), f.to()))\n            .and(OrderSpecs.customerNameContains(f.customerName()))\n            .and(OrderSpecs.fetchCustomerAndItems());\n        return orderRepo.findAll(spec, page);\n    }\n}\n```\n\n**Two subtleties:**\n- **`Long.class != q.getResultType()`** guards the fetch so it runs only on the data query — fetches on the count query are forbidden.\n- **`q.distinct(true)`** deduplicates parents when fetching `@OneToMany` — otherwise one order with 10 items returns 10 rows."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Pitfalls, Anti-Patterns, and the QueryDSL Migration Trigger",
+            "content": "**When Specifications help:**\n- **Dynamic search forms with 3+ optional filters** — one `findAll(spec, page)` replaces a dozen derived methods.\n- **Reusable predicates** — same `hasStatus` powers `findAll`, `count`, `findOne`.\n- **Always parameterized SQL** — no injection risk by construction.\n\n**When Specifications hurt:**\n- **String field names are fragile** — `root.get(\"stauts\")` compiles, fails at runtime.\n- **Verbose for simple cases** — for a single fixed filter, `findByStatus` is shorter and clearer.\n- **Join duplication trap** — `root.join(\"customer\")` from multiple Specifications produces multiple JOINs to the same table.\n\n**Watch for:**\n- **`fetch()` on collections breaks count queries** — guard with `if (q.getResultType() != Long.class)`.\n- **`Specification.where(null).and(null)`** is idiomatic but easy to misread; helper methods make intent clearer.\n- **Sort inside the data query, not the count query** — Spring Data handles this correctly only when the Specification doesn't try to manipulate `q.orderBy` on count queries.\n- **JPA metamodel** (`Order_.status`) gives compile-time field names but adds a build step; at that cost you might as well adopt QueryDSL.\n\n**When to migrate to QueryDSL:**\n- More than ~10 filter methods with string field names.\n- Recurring join-reuse bugs.\n- Production typos in field names.\n- Need compile-time validation of every query path."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Decision Heuristic — Specifications, QueryDSL, or Something Else",
+            "content": "**Use Specifications when:**\n- Search UI has 3+ optional filters that combine independently.\n- Filters span joins (customer name, product category).\n- Team won't add a QueryDSL annotation processor.\n- Predicates need to be composed and reused across `findAll`, `count`, `findOne`.\n\n**Don't use Specifications when:**\n- Only 1-2 fixed filters — derived query method is simpler.\n- Recursive or CTE queries — native SQL via `@Query(nativeQuery=true)`.\n- Reporting/analytics — raw JDBC or jOOQ for fine-grained SQL control.\n- Building GraphQL resolvers — evaluate `graphql-jpa-query` or similar.\n\n**Performance note:** Specifications compile to the same SQL as equivalent JPQL — no runtime overhead. The cost is at build time (slightly slower compilation due to Criteria type inference). Choose on **readability and composability**, never performance."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Specification<T>`** wraps a single `Predicate`; `.where().and().or()` composes them dynamically.\n- **`null` is idiomatic** for an absent filter — `Specification.where(null)` is a no-op chain start.\n- **`JpaSpecificationExecutor<T>`** must be added to the repository to enable `findAll(spec, page)`.\n- **Always parameterized** — Criteria values become bind parameters; safe from injection.\n- **Guard fetches on count queries** — `if (q.getResultType() != Long.class)` prevents the forbidden fetch-on-count error.\n- **Use the JPA metamodel** (`Order_.status`) for compile-time field names; or graduate to QueryDSL.\n- **QueryDSL wins past 10 filters** — Q-classes give compile-time validation and IDE autocomplete."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Specifications solve the dynamic query problem — building a WHERE clause where filters are optional and combinations depend on runtime input.\n\n**The pattern:**\n- Each filter is a `Specification<Order>` — a lambda returning a `Predicate`\n- Compose with `Specification.where(hasStatus(status)).and(inCity(city)).and(after(date))`\n- `null` predicates are ignored — if `status` is null, `hasStatus(null)` returns `null` and the chain skips it\n\n**Implementation:**\n- Add `JpaSpecificationExecutor<Order>` to the repository\n- Define static factories returning `Specification<Order>`\n- Call `orderRepo.findAll(spec, pageable)` — pagination and sorting work transparently\n\n**vs QueryDSL:**\n- QueryDSL generates a `QOrder` class from the entity at compile time\n- `QOrder.order.status.eq(status).and(QOrder.order.city.eq(city))` — fluent and type-safe\n- More powerful for path traversal; needs an annotation processor and Q-class generation step\n\n**When to switch:**\n- Past ~10 filter methods, string field names cause production typos\n- Need compile-time validation — adopt QueryDSL or the JPA metamodel"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle pagination and sorting when using Specifications?",
+        "What is the difference between Specifications and QueryDSL — when would you choose one over the other?",
+        "How do you write a Specification that filters based on a child collection (orders containing a specific product)?",
+        "How does the JPA metamodel help, and why is it not always worth the build cost?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data JPA Specifications — Dynamic, Type-Safe Queries",
+        "metaDescription": "Build dynamic, composable, parameterized queries with `Specification<T>`, `JpaSpecificationExecutor`, and the JPA Criteria API in Spring Data JPA."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Specifications solve the dynamic query problem — building a WHERE clause where filters are optional and combinations depend on runtime input.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The moment a search form has three optional filters — status, date range, city — the derived-query approach breaks. You need findByStatus, findByStatusAndDate, findByStatusAndCity, findByStatusAndDateAndCity, and so on. Seven methods for three filters. Add a fourth and you need 15. Adding validation or logging multiplies the burden. The Specification pattern composes individual predicates at runtime. Each filter is a reusable Specification<T> — a lambda producing a JPA Criteria predicate. Combine with .and(), .or(), .not() to build the final query dynamically."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows alternatives to writing dozens of findByAndOr* methods for complex filter UIs"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Specification<T> wraps a single Predicate;",
+              "or() composes them dynamically",
+              "null is idiomatic for an absent filter — Specification",
+              "where(null) is a no-op chain start",
+              "JpaSpecificationExecutor<T> must be added to the repository to enable findAll(spec, page)"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The moment a search form has three optional filters — status, date range, city — the derived-query approach breaks. You need findByStatus, findByStatusAndDate, findByStatusAndCity, findByStatusAndDateAndCity, and so on. Seven methods for three filters. Add a fourth and you need 15. Adding validation or logging multiplies the burden. The Specification pattern composes individual predicates at runtime. Each filter is a reusable Specification<T> — a lambda producing a JPA Criteria predicate. Combine with .and(), .or(), .not() to build the final query dynamically. Under the hood, Specifications wrap the JPA Criteria API. Generated SQL is always parameterized — safe from SQL injection by construction, unlike string-concatenated JPQL. The trade-off is verbosity — the Criteria API requires more code than a JPQL string for."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Writing separate findByStatusAndDateAndCity(), findByStatusAndDate(), findByDate() methods for every combination",
+              "unmaintainable past three filters"
+            ]
+          }
+        ],
+        "cap": "The pattern: Each filter is a Specification<Order> — a lambda returning a Predicate Compose with Specification.where(hasStatus(status)).and(inCity(city)).and(after(date)) null predicates are ignored —",
+        "familiarity_anchors": [
+          "Specification",
+          "Predicate",
+          "Repositories"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle pagination and sorting when using Specifications?",
+          "What is the difference between Specifications and QueryDSL — when would you choose one over the other?",
+          "How do you write a Specification that filters based on a child collection (orders containing a specific product)?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-repository-methods",
+      "slug": "spring-data-jpa-repository-methods",
+      "question": "How do Spring Data JPA repository methods work — `findBy`, `@Query`, native queries, and derived methods?",
+      "title": "Spring Data JPA Repository Methods — Derived, JPQL, Native",
+      "direct_answer": "Spring Data JPA offers **three ways** to define query methods. **Derived queries** — names like `findByStatusAndCreatedAtAfter` parsed into JPQL at startup — are validated early and need zero code, but become unreadable past ~3 parameters. **`@Query(JPQL)`** is explicit JPQL with **`@Param`**, validated at startup, supports joins/aggregations/projections, and keeps method names clean. **`@Query(value=..., nativeQuery=true)`** drops to database-specific SQL for window functions, CTEs, full-text, JSON operators — at the cost of runtime-only validation, no portability, and no L2 cache. **`@Modifying`** is required for UPDATE/DELETE (`clearAutomatically=true` flushes the persistence context after, `flushAutomatically=true` flushes before). Pagination works everywhere via a trailing `Pageable`; native queries additionally need `countQuery=\"...\"`.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the three query definition approaches and their trade-offs",
+        "common_mistake": "Creating long derived method names like `findByStatusAndCityAndCreatedAtAfterAndPriceLessThan` instead of using `@Query` for complex queries",
+        "to_stand_out": "Explain the query derivation mechanism, mention `@Param` for named parameters, projections for list views, and when derived queries become unmaintainable"
+      },
+      "company_tags": [
+        "Spring",
+        "Hibernate",
+        "Atlassian",
+        "Zalando",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Data Writes Your SQL — Until the Method Name Becomes a Sentence",
+            "content": "Spring Data's killer feature is **derived query methods** — declare `findByStatusAndCreatedAtAfter(String status, LocalDate date)` and Spring generates the JPQL at startup from a well-defined naming convention. No implementation class, no SQL, no boilerplate.\n\nThis works beautifully for simple lookups. It breaks down when names become sentences: `findByStatusAndCityAndCreatedAtAfterAndPriceLessThanOrderByCreatedAtDesc`. The method name is now longer than the JPQL it would replace and harder to refactor.\n\n**`@Query` is the escape hatch** — write the JPQL explicitly and name the method anything.\n- For database-specific features (window functions, CTEs, full-text search, JSON operators), `@Query(nativeQuery=true)` drops to raw SQL.\n- The trade-off: native queries bypass entity management and L2 cache, and they fail only at runtime."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Derived vs `@Query` vs Native — Pick by Complexity",
+            "content": "Match the query complexity to the definition approach.\n\n| Aspect | Derived Method | `@Query` (JPQL) | `@Query` (Native) |\n|---|---|---|---|\n| Definition | Method name convention | Explicit JPQL | Raw SQL |\n| Readability | Good for 1-2 conditions | Always clear | SQL-familiar |\n| Validation | At startup (parse) | At startup (JPQL parse) | Runtime only |\n| Portability | DB-agnostic | DB-agnostic | DB-specific |\n| Joins / aggregations | Limited | Full JPQL | Full SQL |\n| L2 cache integration | Full | Full | Bypasses |\n| Best for | Simple `findBy` 1-2 fields | Joins, aggregations | Window fn, CTE, JSON |"
+          },
+          {
+            "type": "after_code",
+            "title": "All Three Approaches — Same Use Case",
+            "content": "'Active orders for a customer placed after a date, newest first' — three implementations.\n\n**Derived (simplest, breaks past ~3 parameters):**\n\n```java\nList<Order> findByCustomerIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(\n    Long customerId, OrderStatus status, Instant after);\n```\n\n**`@Query` JPQL (readable, portable):**\n\n```java\n@Query(\"\"\"\n    SELECT o FROM Order o\n    WHERE o.customer.id = :customerId\n      AND o.status = :status\n      AND o.createdAt > :after\n    ORDER BY o.createdAt DESC\n\"\"\")\nList<Order> findRecentActive(@Param(\"customerId\") Long customerId,\n                             @Param(\"status\") OrderStatus status,\n                             @Param(\"after\") Instant after);\n```\n\n**`@Query` native (database-specific):**\n\n```java\n@Query(value = \"\"\"\n    SELECT o.* FROM orders o\n    WHERE o.customer_id = :cid AND o.status = :status AND o.created_at > :after\n      AND o.metadata @> '{\"priority\":\"HIGH\"}'::jsonb\n    ORDER BY o.created_at DESC\n\"\"\",\n    countQuery = \"\"\"\n    SELECT count(*) FROM orders o\n    WHERE o.customer_id = :cid AND o.status = :status AND o.created_at > :after\n      AND o.metadata @> '{\"priority\":\"HIGH\"}'::jsonb\n\"\"\",\n    nativeQuery = true)\nPage<Order> findRecentHighPriority(@Param(\"cid\") Long cid,\n                                   @Param(\"status\") String status,\n                                   @Param(\"after\") Instant after,\n                                   Pageable page);\n```\n\nThe Postgres JSONB `@>` operator can't be expressed in JPQL — native required. Note `countQuery` is mandatory for native `Page<T>`.\n\n**`@Modifying` UPDATE/DELETE:**\n\n```java\n@Modifying(clearAutomatically = true, flushAutomatically = true)\n@Query(\"UPDATE Order o SET o.status = :newStatus WHERE o.createdAt < :cutoff\")\nint archiveOlderThan(@Param(\"newStatus\") OrderStatus newStatus,\n                     @Param(\"cutoff\") Instant cutoff);\n```\n\n- **`flushAutomatically=true`** — flushes pending writes before the UPDATE so in-flight changes apply.\n- **`clearAutomatically=true`** — clears the persistence context after so the next `findById` doesn't return a stale cached entity."
+          },
+          {
+            "type": "step",
+            "title": "Projections, Pagination Safety, and Native-Query Discipline",
+            "content": "**Interface projections for list views:**\n\n```java\npublic interface OrderSummary {\n    Long getId();\n    String getStatus();\n    BigDecimal getTotal();\n}\nList<OrderSummary> findByStatus(OrderStatus status);\n```\n\n- **Projects only the requested fields** — Spring generates a SELECT with just those columns.\n- **No entity construction, no lazy proxies, no N+1** on lazy access.\n- **Dynamic projection:** `<T> List<T> findByStatus(OrderStatus status, Class<T> type)` lets the caller pick `OrderSummary.class` or `Order.class` at runtime.\n\n**`Page<T>` vs `Slice<T>`:**\n- **`Page<T>`** runs two queries — data + COUNT. The COUNT can dominate latency on huge tables.\n- **`Slice<T>`** fetches `pageSize+1` rows to infer `hasNext()` — no COUNT.\n- Use `Slice<T>` for 'Load More' UIs that don't show 'Page 3 of 47'.\n\n**Native query discipline:**\n- **Each native query couples you to one database** — JSONB operators in Postgres are not portable.\n- **Validation only at runtime** — typos slip into production until the code path runs.\n- **Bypasses L2 cache** — frequent native reads can wipe out cache savings.\n- **Guardrail:** require a code-review comment explaining why JPQL can't express it.\n\n**Production checklist:**\n- Derived queries only when method name fits ≤ 3 clauses.\n- `@Param` always; never positional `?1`.\n- `countQuery=\"...\"` for every native `Page<T>`.\n- Projection interfaces for every list view.\n- `@Modifying(clearAutomatically=true, flushAutomatically=true)` for UPDATE/DELETE.\n- `@Transactional` on the service method wrapping `@Modifying` calls."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Decision Flow in Three Questions",
+            "content": "**Q1 — How many filter conditions?**\n- 1-2 required → **derived method** (`findByStatusAndCity`).\n- 3+ required → **`@Query` JPQL**.\n- Optional conditions → **Specifications** or **`@Query` with `:p IS NULL OR field = :p`**.\n\n**Q2 — Database-specific features needed?**\n- JPQL can express it → **`@Query` JPQL**.\n- JSONB, window fn, full-text → **`@Query(nativeQuery=true)`**.\n- DDL or `EXPLAIN` → **`JdbcClient`**, not a JPA repository.\n\n**Q3 — Read or write?**\n- Standard CRUD → inherited from `JpaRepository`.\n- Bulk UPDATE/DELETE → `@Modifying @Query` with `clearAutomatically=true`.\n- Batch inserts → `saveAll(...)` with `hibernate.jdbc.batch_size` configured.\n\n**Common mistakes:**\n- `@Modifying` without `@Transactional` — fails at runtime.\n- Forgotten `countQuery` on native `Page<T>` — wrong totals.\n- Returning full entities to API layer — leaks schema, triggers lazy loads."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs Across the Three Styles",
+            "content": "**When derived methods help:**\n- Self-documenting for simple lookups.\n- Validated at startup — typos fail context load.\n- Zero boilerplate.\n\n**When derived methods hurt:**\n- Past 3-4 conditions, the name is unreadable and unrefactorable.\n- No support for aggregations, GROUP BY, HAVING, window functions.\n- Limited control over fetch joins.\n\n**When `@Query` JPQL helps:**\n- Explicit, readable, version-controlled SQL.\n- Validated at startup against entity metadata.\n- Full JPQL features — joins, projections, subqueries.\n\n**When native SQL helps and hurts:**\n- Helps: JSONB, window functions, CTEs, vendor extensions.\n- Hurts: locks you to one database, fails only at runtime, bypasses L2 cache.\n\n**Watch for:**\n- **Positional parameters (`?1`)** — break silently when arguments are reordered.\n- **`countQuery` missing** on native `Page<T>` — pagination math breaks.\n- **JSONB and `LIMIT 1`** — native queries returning single rows still need explicit pagination or limit.\n- **`@Modifying` without `clearAutomatically`** — stale cached entity served on next read."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Derived methods** validate at startup; **native queries** validate only at runtime.\n- **`@Query` JPQL** validates against entity metadata at startup — typos fail context load.\n- **`@Param(\"name\")`** required for named parameters; prefer over positional `?1`.\n- **`@Modifying`** is mandatory for UPDATE/DELETE; `clearAutomatically=true` prevents stale entity reads.\n- **Interface projections** avoid loading full entities — Spring SELECTs only the requested fields.\n- **`Page<T>` runs a COUNT; `Slice<T>` does not** — pick by whether the UI needs the total.\n- **Native queries are technical debt** — couple you to one database; require runtime tests."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Data JPA offers three ways to define query methods, and the right choice depends on complexity.\n\n**Derived method names:**\n- Spring parses the name at startup and generates JPQL\n- `findByStatusAndCreatedAtAfter(String, Instant)` -> `WHERE status = ? AND created_at > ?`\n- Validated at startup — non-existent fields fail context load\n- Stop when names exceed 3-4 parts\n\n**`@Query` JPQL:**\n- Explicit, readable, supports aggregations, joins, projections\n- Use `@Param` for named parameters; avoid positional\n- Validated against entity metadata at startup\n\n**`@Query(nativeQuery=true)`:**\n- For database-specific features — JSONB, window functions, CTEs, full-text\n- Fails only at runtime; bypasses L2 cache; locks you to one database\n- Always provide `countQuery` for `Page<T>`\n\n**Modifying queries:**\n- `@Modifying` required for UPDATE/DELETE\n- `clearAutomatically=true` prevents stale entity reads after the bulk update\n- Always run inside a `@Transactional` boundary\n\n**Production tips:**\n- Use interface projections for list views — no entity construction, no lazy proxies\n- `Slice<T>` instead of `Page<T>` for infinite scroll — skips the COUNT query\n- Native queries need an integration test per query — runtime validation only"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the performance difference between `Page<T>` and `Slice<T>` on a large table?",
+        "How do interface projections compare to DTO projections for list endpoints?",
+        "Why does `@Modifying` require `clearAutomatically` and `flushAutomatically`?",
+        "When would you prefer native SQL over JPQL despite the portability cost?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data JPA Repositories — Derived, @Query, Native",
+        "metaDescription": "Compare Spring Data JPA's derived methods, @Query JPQL, and native queries with @Modifying, projections, and pagination patterns."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Data JPA offers three ways to define query methods, and the right choice depends on complexity.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Data's killer feature is derived query methods — declare findByStatusAndCreatedAtAfter(String status, LocalDate date) and Spring generates the JPQL at startup from a well-defined naming convention. No implementation class, no SQL, no boilerplate. This works beautifully for simple lookups. It breaks down when names become sentences: findByStatusAndCityAndCreatedAtAfterAndPriceLessThanOrderByCreatedAtDesc. The method name is now longer than the JPQL it would replace and harder to refactor. @Query is the escape hatch — write the JPQL explicitly and name the method anything. For database-specific."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the three query definition approaches and their trade-offs"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Derived methods validate at startup; native queries validate only at runtime",
+              "@Query JPQL validates against entity metadata at startup — typos fail context load",
+              "@Param(\"name\") required for named parameters; prefer over positional ?1",
+              "@Modifying is mandatory for UPDATE/DELETE; clearAutomatically=true prevents stale entity reads",
+              "Interface projections avoid loading full entities — Spring SELECTs only the requested fields"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Data's killer feature is derived query methods — declare findByStatusAndCreatedAtAfter(String status, LocalDate date) and Spring generates the JPQL at startup from a well-defined naming convention. No implementation class, no SQL, no boilerplate. This works beautifully for simple lookups. It breaks down when names become sentences: findByStatusAndCityAndCreatedAtAfterAndPriceLessThanOrderByCreatedAtDesc. The method name is now longer than the JPQL it would replace and harder to refactor. @Query is the escape hatch — write the JPQL explicitly and name the method anything. For database-specific features (window functions, CTEs, full-text search, JSON operators), @Query(nativeQuery=true) drops to raw SQL. The trade-off: native queries bypass entity management and L2 cache, and they fail only at runtime."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Creating long derived method names like findByStatusAndCityAndCreatedAtAfterAndPriceLessThan instead of using @Query for complex queries"
+            ]
+          }
+        ],
+        "cap": "Derived method names: Spring parses the name at startup and generates JPQL findByStatusAndCreatedAtAfter(String, Instant) -> WHERE status = ? AND created_at > ? Validated at startup — non-existent fie",
+        "familiarity_anchors": [
+          "Spring",
+          "Derived",
+          "Query"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the performance difference between `Page<T>` and `Slice<T>` on a large table?",
+          "How do interface projections compare to DTO projections for list endpoints?",
+          "Why does `@Modifying` require `clearAutomatically` and `flushAutomatically`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-pagination",
+      "slug": "pagination-sorting-spring-data",
+      "question": "How do you implement pagination and sorting with Spring Data JPA using `Pageable`, `Page`, and `Slice`?",
+      "title": "Pagination — Pageable, Page, Slice, and Keyset",
+      "direct_answer": "Spring Data accepts **`Pageable`** as the last argument; the return type decides whether COUNT runs. **`Page<T>`** runs **two queries** — data with `LIMIT/OFFSET` and `SELECT COUNT(*)`; the count is often as expensive as the data on large tables. **`Slice<T>`** runs **one query** for `pageSize+1` rows — `hasNext()` is true if the extra row exists; ideal for 'Load More' / infinite scroll. **`List<T>`** with `Pageable` works but loses metadata. For huge tables, **`OFFSET n` itself is O(n)** because the database scans and discards `n` rows; **keyset (cursor) pagination** stays constant-time. **`@Query(countQuery=\"...\")`** lets you optimize the count separately. The **`JOIN FETCH` + `Pageable` trap (HHH90003004)** is the most common pagination bug — Hibernate paginates in memory.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the difference between Page and Slice, the COUNT cost, and keyset pagination",
+        "common_mistake": "Always using `Page` when `Slice` would suffice — COUNT on a million-row table can dwarf the data query",
+        "to_stand_out": "Explain keyset pagination as an alternative to OFFSET for deep pagination, mention `countQuery` optimization, and the JOIN FETCH + Pageable trap"
+      },
+      "company_tags": [
+        "Spring",
+        "Twitter",
+        "Slack",
+        "Stripe",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The COUNT Query Is Often Slower Than the Data Query",
+            "content": "Every `Page<T>` triggers **two SQL queries** — one for the data, one for `COUNT(*)`. On a multi-million-row table, the COUNT can take **longer than the data query** because the database scans the entire matching set; the data query stops at the LIMIT.\n\n**`Slice<T>`** skips COUNT entirely. It fetches `size + 1` rows — if it gets more than `size`, there's a next page. Ideal for **infinite scroll** where 'page 3 of 47' isn't displayed.\n\nBoth `Page` and `Slice` accept a `Pageable` combining page number, page size, and sort. Spring Data translates this to `OFFSET` + `LIMIT`. APIs typically expose `?page=0&size=20&sort=createdAt,desc` — Spring resolves it to a `Pageable` automatically."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Page vs Slice vs List vs Keyset",
+            "content": "Four pagination strategies, four very different latency profiles as data grows.\n\n| Approach | Queries | Total count | Deep pages | Best for |\n|---|---|---|---|---|\n| `Page<T>` + OFFSET | 2 (data + COUNT) | Yes | O(n) OFFSET scan | Small tables, 'Page 3 of 47' UI |\n| `Slice<T>` + OFFSET | 1 | No | O(n) OFFSET scan | Medium tables, 'Load More' UI |\n| `List<T>` + OFFSET | 1 | No | O(n) OFFSET scan | Scripts, admin tools |\n| Keyset (cursor) | 1 | No | O(1) — index seek | Deep pagination, feeds, mobile APIs |"
+          },
+          {
+            "type": "step",
+            "title": "Custom COUNT Queries and the OFFSET Performance Wall",
+            "content": "**Optimizing the count separately:**\n\n```java\n@Query(value = \"SELECT o FROM Order o JOIN FETCH o.customer WHERE o.status = :s\",\n       countQuery = \"SELECT COUNT(o) FROM Order o WHERE o.status = :s\")\nPage<Order> findByStatusWithCustomer(@Param(\"s\") OrderStatus status, Pageable p);\n```\n\n- **Default count** would include `JOIN FETCH customer` — wasted work; the count doesn't need it.\n- **Explicit `countQuery`** removes the join — often **50-90% faster**.\n\n**Why OFFSET fails at scale:**\n- **`OFFSET 10000 LIMIT 20`** forces the database to **scan and discard 10,000 rows** before returning your 20.\n- At page 500, latency hits seconds.\n- The database can't 'skip to row 10000' without reading the rows.\n\n**Why keyset wins:**\n- **`WHERE id > :lastSeenId ORDER BY id LIMIT 20`** uses an **index seek** — reads exactly 20 rows.\n- **Constant time** regardless of page depth.\n- Required for Twitter-style feeds, infinite scroll, mobile APIs.\n\n**Caveat:**\n- Keyset requires a **deterministic sort with a unique tiebreaker** (usually `id`).\n- `ORDER BY createdAt` alone fails when two rows share a timestamp — cursor comparison is ambiguous.\n- Always include `id` (or another unique column) as the **final sort key**."
+          },
+          {
+            "type": "after_code",
+            "title": "Keyset Pagination — Production Implementation",
+            "content": "Spring Data has no built-in keyset pagination as of 3.x; it's straightforward with `@Query`.\n\n```java\npublic interface FeedRepository extends JpaRepository<Post, Long> {\n\n    @Query(\"\"\"\n        SELECT p FROM Post p\n        WHERE (:cursorCreatedAt IS NULL OR\n               p.createdAt < :cursorCreatedAt OR\n               (p.createdAt = :cursorCreatedAt AND p.id < :cursorId))\n        ORDER BY p.createdAt DESC, p.id DESC\n    \"\"\")\n    List<Post> findNextPage(@Param(\"cursorCreatedAt\") Instant cursorCreatedAt,\n                            @Param(\"cursorId\") Long cursorId,\n                            Pageable limit);\n}\n\n@RestController\npublic class FeedController {\n    @GetMapping(\"/feed\")\n    public FeedResponse feed(@RequestParam(required = false) String cursor,\n                             @RequestParam(defaultValue = \"20\") int size) {\n        Cursor c = cursor == null ? Cursor.empty() : Cursor.decode(cursor);\n        List<Post> posts = feedRepo.findNextPage(c.createdAt(), c.id(),\n            PageRequest.of(0, size));\n        String nextCursor = posts.isEmpty() ? null\n            : Cursor.of(posts.get(posts.size() - 1)).encode();\n        return new FeedResponse(posts, nextCursor);\n    }\n}\n```\n\n- **Cursor is base64-encoded `(createdAt, id)`** — sent to client, echoed on next request.\n- **Client never sees page numbers** — only 'next' cursors.\n- **Performance stays flat** even at post 10,000,000."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "The Pagination Traps",
+            "content": "**When pagination is fine:**\n- Small tables (< 10K rows) — every strategy works; pick the simplest.\n- 'Load More' UI — `Slice<T>` is ideal; no COUNT cost.\n- Sort by `id` only — keyset is trivial.\n\n**When pagination breaks:** - **JOIN FETCH + Pageable** — triggers `HHH90003004`; Hibernate loads every matching row, deduplicates, paginates in memory.\n- Replace with `@EntityGraph` + `Pageable`.\n- **Unstable sort orders** — `ORDER BY createdAt DESC` with ties produces duplicate rows across pages.\n- Always add a unique tiebreaker.\n- **Custom `@Query` without `countQuery`** — the auto-generated count is wrong for GROUP BY, HAVING, DISTINCT, UNION.\n- **`Page<T>` on huge tables** — COUNT(*) on a 100M-row table can take seconds; switch to `Slice<T>` or keyset.\n\n**Watch for:**\n- **`PageRequest.of(0, Integer.MAX_VALUE)`** — anti-pattern; use `Stream<T>` with `@Transactional(readOnly=true)` for exports.\n- **Mobile clients with retries** — keyset is robust to missed pages; OFFSET can skip or duplicate rows when data shifts.\n- **Admin 'jump to page 500'** — OFFSET is painful; prefer date-range or keyset back-pagination.\n- **Sort customization** — every sort field must be in the keyset cursor; user-customizable sort is harder with keyset.\n\n**Production checklist:**\n- `Page<T>` only when UI displays total count.\n- `countQuery` explicit for every non-trivial `@Query` with `Page<T>`.\n- Sort always has a unique tiebreaker.\n- `@EntityGraph` instead of JOIN FETCH for paginated collections.\n- Keyset for deep/infinite lists and feeds.\n- `Stream<T>` + `@Transactional(readOnly=true)` for exports."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Choosing a Strategy by Data Size, UI, and Sort",
+            "content": "**By table size:**\n- < 10K rows — any strategy; `Page<T>` + OFFSET is simplest.\n- 10K – 1M rows — watch COUNT latency; prefer `Slice<T>` unless total is mandatory.\n- 1M+ rows — OFFSET is O(n); **keyset is the only viable choice** for deep pagination.\n\n**By UI pattern:**\n- 'Page 3 of 47' bar — `Page<T>`; accept COUNT cost.\n- 'Load More' / infinite scroll — `Slice<T>` or keyset.\n- Export / batch — `Stream<T>` with `@Transactional(readOnly=true)` and JDBC fetch-size; constant memory.\n\n**By sort:**\n- Sort by `id` — keyset is trivial.\n- Sort by `createdAt` — keyset needs `(createdAt, id)` compound cursor.\n- User-customizable sort — keyset cursor grows; OFFSET can be acceptable on smaller tables.\n- Multi-field sort — keyset works but cursor lexicographic comparison is complex.\n\n**By user behavior:**\n- Users browse first 5-10 pages — OFFSET is fine even at scale.\n- Users jump to page 500 — keyset or 'jump to date' UX.\n- Mobile clients with intermittent network — keyset; cursor encodes exact position."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Page<T>`** runs a COUNT; **`Slice<T>`** does not — choose by whether the UI needs the total.\n- **`PageRequest.of(0, 20, Sort.by(\"createdAt\").descending())`** — zero-indexed page number, combined with sort.\n- **JOIN FETCH + Pageable** triggers `HHH90003004` — Hibernate paginates in memory; use `@EntityGraph` instead.\n- **`Slice.hasNext()`** is computed by fetching `pageSize+1` rows.\n- **Keyset pagination** is not built into Spring Data — implement with `@Query` and a compound `(createdAt, id)` cursor for constant-time deep pages.\n- **`countQuery=\"...\"`** lets you optimize the count separately when joins are unnecessary for counting.\n- **`PageRequest.of(0, Integer.MAX_VALUE)`** is an anti-pattern — use `Stream<T>` with read-only transactions."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Data's `Pageable` handles page number, size, and sort. The `Page` vs `Slice` choice has a real performance impact on large tables.\n\n**`Page<T>` vs `Slice<T>`:**\n- `Page<T>` — two queries: data with LIMIT/OFFSET and `SELECT COUNT(*)` for total\n- `Slice<T>` — one query for `pageSize+1` rows; `hasNext()` is true if the extra row exists\n- On a 10M-row table the COUNT alone can take seconds — pick `Slice<T>` unless total is required\n\n**Creating Pageable:**\n- `PageRequest.of(0, 20)` — zero-indexed\n- `PageRequest.of(0, 20, Sort.by(\"createdAt\").descending())` — with sort\n- Spring MVC: `@PageableDefault(size = 20, sort = \"createdAt\", direction = DESC) Pageable pageable` resolves from query params\n\n**The JOIN FETCH + Pageable trap:**\n- Fetching a `@OneToMany` with JOIN FETCH and Pageable triggers `HHH90003004`\n- Hibernate loads all matching rows in memory and applies pagination in Java — latent OOM\n- Use `@EntityGraph` instead — pagination applied in SQL, associations fetched via IN-clause batching\n\n**Keyset pagination for scale:**\n- OFFSET 10000 forces a scan of 10000 rows — O(n)\n- `WHERE (createdAt, id) < (:lastCreatedAt, :lastId) ORDER BY createdAt DESC, id DESC LIMIT 20` is O(1)\n- Required for feeds, infinite scroll, and any mobile API serving deep pagination"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does JOIN FETCH + Pageable fall back to in-memory pagination, and how does @EntityGraph fix it?",
+        "When would you use Slice<T> over Page<T>, and what UI patterns map to each?",
+        "How would you implement keyset pagination for a feed sorted by createdAt with ties?",
+        "What's the right way to export 1M rows without Pageable or OFFSET?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data JPA Pagination — Page, Slice, Keyset",
+        "metaDescription": "Implement pagination and sorting with Spring Data JPA: Pageable, Page vs Slice, the JOIN FETCH trap, custom countQuery, and keyset (cursor) pagination."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Data's Pageable handles page number, size, and sort.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Every Page<T> triggers two SQL queries — one for the data, one for COUNT(*). On a multi-million-row table, the COUNT can take longer than the data query because the database scans the entire matching set; the data query stops at the LIMIT. Slice<T> skips COUNT entirely. It fetches size + 1 rows — if it gets more than size, there's a next page. Ideal for infinite scroll where 'page 3 of 47' isn't displayed. Both Page and Slice accept a."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows the difference between Page and Slice, the COUNT cost, and keyset pagination"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Page<T> runs a COUNT; Slice<T> does not — choose by whether the UI needs the total",
+              "PageRequest",
+              "of(0, 20, Sort",
+              "by(\"createdAt\")",
+              "descending()) — zero-indexed page number, combined with sort"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Every Page<T> triggers two SQL queries — one for the data, one for COUNT(*). On a multi-million-row table, the COUNT can take longer than the data query because the database scans the entire matching set; the data query stops at the LIMIT. Slice<T> skips COUNT entirely. It fetches size + 1 rows — if it gets more than size, there's a next page. Ideal for infinite scroll where 'page 3 of 47' isn't displayed. Both Page and Slice accept a Pageable combining page number, page size, and sort. Spring Data translates this to OFFSET + LIMIT. APIs typically expose ?page=0&size=20&sort=createdAt,desc — Spring resolves it to a Pageable automatically."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Always using Page when Slice would suffice",
+              "COUNT on a million-row table can dwarf the data query"
+            ]
+          }
+        ],
+        "cap": "Page<T> vs Slice<T>: Page<T> — two queries: data with LIMIT/OFFSET and SELECT COUNT(*) for total Slice<T> — one query for pageSize+1 rows; hasNext() is true if the extra row exists On a 10M-row table",
+        "familiarity_anchors": [
+          "Spring",
+          "Pageable",
+          "COUNT"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does JOIN FETCH + Pageable fall back to in-memory pagination, and how does @EntityGraph fix it?",
+          "When would you use Slice<T> over Page<T>, and what UI patterns map to each?",
+          "How would you implement keyset pagination for a feed sorted by createdAt with ties?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

@@ -1,0 +1,369 @@
+{
+  "topic": "Event Driven Design",
+  "topicSlug": "event-driven-design",
+  "questions": [
+    {
+      "id": "sdf-006",
+      "slug": "message-queues-vs-event-streams",
+      "question": "When would you choose a message queue (RabbitMQ) over an event stream (Kafka)? What are the trade-offs?",
+      "title": "Message Queues vs Event Streams: RabbitMQ vs Kafka Trade-offs",
+      "direct_answer": "Use RabbitMQ for task distribution (work queues) where each message is processed by exactly one consumer, message ordering is per-queue, and you want flexible routing with exchanges. Use Kafka for event streaming where you need durable, ordered event logs, multiple consumers replaying from any offset, and throughput exceeding 100K messages/sec. RabbitMQ is a smart broker; Kafka is a dumb broker with smart consumers.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Understanding of the fundamental architectural difference: broker-managed consumption (RabbitMQ) vs consumer-managed offsets (Kafka)",
+        "common_mistake": "Using Kafka for simple task queues or RabbitMQ for event sourcing \u2014 each tool's architecture makes the other use case painful",
+        "to_stand_out": "Discuss consumer group semantics, exactly-once processing trade-offs, and dead letter queue strategies for both systems"
+      },
+      "company_tags": [
+        "LinkedIn",
+        "Confluent",
+        "Uber",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Fundamentally Different Models of Message Handling",
+            "content": "RabbitMQ and Kafka solve different problems despite both being called \"messaging systems.\" The core difference is **who manages consumption state**.\n\n**RabbitMQ** is a traditional message broker: it pushes messages to consumers, tracks which messages have been acknowledged, and deletes them after delivery. Think of it as a post office \u2014 once the letter is delivered, the post office forgets about it. This model excels at **task distribution**: send a job to a queue, one worker picks it up, processes it, acknowledges it, done.\n\n**Kafka** is a distributed commit log: consumers pull messages and track their own position (offset) in the log. Messages are retained for a configurable period (days or weeks) regardless of whether they have been consumed. Think of it as a newspaper archive \u2014 every reader has their own bookmark, and new readers can start from any point in history.\n\nAt LinkedIn, Kafka processes over 7 trillion messages per day across 100+ clusters. RabbitMQ at scale typically handles 10K\u201350K messages/sec per cluster. The throughput difference (Kafka: millions/sec per topic, RabbitMQ: tens of thousands/sec per queue) comes from their architectural choices, not just engineering effort."
+          },
+          {
+            "type": "comparison_table",
+            "title": "RabbitMQ vs Kafka: Architecture and Trade-offs",
+            "content": "| Dimension | RabbitMQ | Kafka |\n|---|---|---|\n| **Model** | Message queue (broker pushes, tracks acks) | Event log (consumers pull, track offsets) |\n| **Message lifecycle** | Deleted after consumer ack | Retained for configured period (days/weeks) |\n| **Ordering** | Per-queue ordering | Per-partition ordering (not global) |\n| **Consumer model** | Competing consumers \u2014 one message \u2192 one consumer | Consumer groups \u2014 one partition \u2192 one consumer; multiple groups replay independently |\n| **Throughput** | 10K\u201350K msg/sec per queue | 100K\u20131M+ msg/sec per partition |\n| **Replay** | No \u2014 consumed messages are gone | Yes \u2014 any consumer can seek to any offset |\n| **Routing** | Rich \u2014 exchanges, bindings, routing keys, headers | Simple \u2014 topic + partition key |\n| **Latency** | Sub-millisecond (push-based) | Low millisecond (poll-based batching) |\n| **Backpressure** | Broker manages via prefetch count | Consumer-side \u2014 poll at your own rate |\n| **Dead letter handling** | Built-in DLX/DLQ | Manual \u2014 write failed messages to a DLT topic |\n| **Best for** | Task queues, RPC, complex routing | Event sourcing, stream processing, audit logs |"
+          },
+          {
+            "type": "step",
+            "title": "When to Choose RabbitMQ: Task Distribution and Complex Routing",
+            "content": "**Use RabbitMQ when:**\n\n1. **Each message must be processed by exactly one worker.** Email sending, image processing, PDF generation \u2014 you want one consumer to handle each job, and the broker should manage the competing-consumer pattern.\n\n2. **You need sophisticated routing.** RabbitMQ's exchange types (direct, fanout, topic, headers) let you route messages based on routing keys, headers, or patterns. A topic exchange with routing key `order.created.premium` can be consumed by both the fulfillment service (`order.created.*`) and the VIP notification service (`*.*.premium`).\n\n3. **Message ordering is secondary to per-message reliability.** RabbitMQ guarantees per-queue ordering, but competing consumers process messages in parallel, so order is not preserved across consumers.\n\n4. **You want low-latency fire-and-forget.** RabbitMQ's push model delivers messages to consumers within sub-millisecond latency.\n\n```java\n// Spring AMQP \u2014 task queue with manual ack and DLQ\n@RabbitListener(queues = \"email-send-queue\",\n    ackMode = \"MANUAL\",\n    concurrency = \"5-20\")  // 5-20 competing consumers\npublic void processEmail(Message message, Channel channel,\n                         @Header(AmqpHeaders.DELIVERY_TAG) long tag) {\n    try {\n        EmailRequest req = objectMapper.readValue(message.getBody(), EmailRequest.class);\n        emailService.send(req);\n        channel.basicAck(tag, false);  // single message ack\n    } catch (Exception e) {\n        // reject + don't requeue \u2192 routes to DLX\n        channel.basicNack(tag, false, false);\n    }\n}\n```\n\nThe dead letter exchange (DLX) pattern is RabbitMQ's killer feature for reliability: messages that fail processing, expire, or are rejected automatically route to a dead letter queue for inspection and retry."
+          },
+          {
+            "type": "step",
+            "title": "When to Choose Kafka: Event Streams and Replay",
+            "content": "**Use Kafka when:**\n\n1. **Multiple consumers need the same events.** An `order.placed` event feeds the inventory service, analytics pipeline, notification service, and fraud detection \u2014 each with its own consumer group, reading at its own pace, from its own offset.\n\n2. **You need event replay.** A new service joins the ecosystem and needs to process all historical orders. Or a bug corrupted processed data and you need to reprocess from a known good offset. Kafka retains events for days or weeks.\n\n3. **You need ordering guarantees.** Kafka guarantees ordering within a partition. By partitioning on `order_id`, all events for the same order are processed in sequence.\n\n4. **Throughput exceeds 100K messages/sec.** Kafka's batched, sequential disk I/O achieves throughput that would require dozens of RabbitMQ instances.\n\n```java\n// Spring Kafka \u2014 consumer group with partition-level ordering\n@KafkaListener(\n    topics = \"order-events\",\n    groupId = \"inventory-service\",\n    concurrency = \"6\")  // one thread per partition (6 partitions)\npublic void handleOrderEvent(\n        @Payload OrderEvent event,\n        @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,\n        @Header(KafkaHeaders.OFFSET) long offset,\n        Acknowledgment ack) {\n    try {\n        inventoryService.adjustStock(event.getProductId(), event.getQuantity());\n        ack.acknowledge();  // commit offset manually\n    } catch (RetryableException e) {\n        // don't ack \u2014 Kafka will redeliver from this offset\n        throw e;\n    } catch (Exception e) {\n        // publish to dead letter topic for manual inspection\n        kafkaTemplate.send(\"order-events.DLT\", event);\n        ack.acknowledge();  // move past the poison pill\n    }\n}\n```\n\nKafka's consumer group protocol assigns each partition to exactly one consumer in the group. With 6 partitions and 6 consumers, each processes one partition sequentially. Adding a 7th consumer does nothing \u2014 it sits idle. This means **partition count caps your parallelism** \u2014 set it based on expected peak throughput, not current load."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Delete-after-ack vs log retention** \u2014 RabbitMQ deletes messages after consumer acknowledgment; Kafka retains them for a configurable period.\n- **Complex routing vs partitioned throughput** \u2014 RabbitMQ's exchange-binding model routes by key, wildcard, and headers at the broker.\n- **Competing consumers vs consumer groups** \u2014 RabbitMQ delivers each message to ONE consumer in a queue.\n- **RabbitMQ latency is sub-millisecond** \u2014 push delivery to consumer queues; Kafka's poll model adds 1\u201310ms but enables back-pressure handling for slow.\n- **Operational cost differs significantly** \u2014 a 3-node RabbitMQ cluster handles most workloads."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Message queues and event streaming systems both decouple producers from consumers, but they make fundamentally different assumptions about message consumption that drive every architectural decision. The core question is: does a message disappear after consumption, or is it retained?\n\n**RabbitMQ \u2014 smart broker, message disappears after delivery:**\n- RabbitMQ routes messages through exchanges, delivers to queues, and deletes after acknowledgment; it's optimized for task distribution where each message represents a unit of work to be done once\n- Rich routing: direct (exact key), fanout (broadcast), topic (wildcard patterns), and headers exchanges enable per-message routing logic at the broker level\n- Push delivery with per-consumer prefetch gives sub-millisecond latency; the right choice for RPC-over-messaging, order processing, and email sending\n\n**Kafka \u2014 dumb log, messages are retained:**\n- Kafka appends to an immutable commit log with configurable retention (hours to forever); each consumer group tracks its own offset, so the same event can be consumed by multiple teams independently\n- Adding a new consumer group is zero-impact \u2014 it starts at whatever offset you choose, including the beginning of history; replay is a core feature, not an afterthought\n- Write throughput is massive \u2014 millions of events per second \u2014 at the cost of routing complexity moving to application code\n\n**The replay question drives the choice:**\n- If downstream services need to reprocess historical events (new analytics consumer, CQRS rebuild after a bug, compliance audit), Kafka is the only answer\n- If the work should happen exactly once and then disappear, RabbitMQ's simpler operational model wins\n\nI recommend RabbitMQ for task queues and operational commands, Kafka for event streaming and any scenario requiring replay or multiple independent consumers of the same event stream."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you achieve exactly-once processing with Kafka?",
+        "What is the difference between Kafka consumer groups and RabbitMQ competing consumers?",
+        "How would you migrate from RabbitMQ to Kafka for an existing system?"
+      ],
+      "seo": {
+        "metaTitle": "RabbitMQ vs Kafka: Message Queues vs Event Streams \u2014 System Design",
+        "metaDescription": "When to use RabbitMQ vs Kafka. Message queue vs event stream trade-offs, consumer models, throughput comparison, and Spring Boot integration examples."
+      },
+      "speakable_v2": {
+        "archetype": "E",
+        "pillar": "P01",
+        "hook": "Message queues and event streaming systems both decouple producers from consumers, but they make fundamentally different assumptions about message consumption that drive every architectural decision.",
+        "beats": [
+          {
+            "kind": "optimising_for",
+            "layout": "paragraph",
+            "text": "RabbitMQ and Kafka solve different problems despite both being called \"messaging systems.\" The core difference is who manages consumption state. RabbitMQ is a traditional message broker: it pushes messages to consumers, tracks which messages have been acknowledged, and deletes them after delivery. Think of it."
+          },
+          {
+            "kind": "options",
+            "layout": "bullets",
+            "items": [
+              "Delete-after-ack vs log retention \u2014 RabbitMQ deletes messages after consumer acknowledgment; Kafka retains them for a configurable period",
+              "Complex routing vs partitioned throughput \u2014 RabbitMQ's exchange-binding model routes by key, wildcard, and headers at the broker",
+              "Competing consumers vs consumer groups \u2014 RabbitMQ delivers each message to ONE consumer in a queue",
+              "RabbitMQ latency is sub-millisecond \u2014 push delivery to consumer queues; Kafka's poll model adds 1\u201310ms but enables back-pressure handling for slow",
+              "Operational cost differs significantly \u2014 a 3-node RabbitMQ cluster handles most workloads"
+            ]
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "bullets",
+            "items": [
+              "RabbitMQ and Kafka solve different problems despite both being called \"messaging systems",
+              "\" The core difference is who manages consumption state",
+              "RabbitMQ is a traditional message broker: it pushes messages to consumers, tracks which messages have been acknowledged, and deletes them after delivery",
+              "Think of it as a post office \u2014 once the letter is delivered, the post office forgets about it",
+              "This model excels at task distribution: send a job to a queue, one worker picks it up, processes it, acknowledges it, done"
+            ]
+          },
+          {
+            "kind": "decision",
+            "layout": "paragraph",
+            "text": "Use RabbitMQ for task distribution (work queues) where each message is processed by exactly one consumer, message ordering is per-queue, and you want flexible routing with exchanges."
+          },
+          {
+            "kind": "rethink_if",
+            "layout": "callout",
+            "text": "Discuss consumer group semantics, exactly-once processing trade-offs, and dead letter queue strategies for both systems"
+          }
+        ],
+        "cap": "The core question is: does a message disappear after consumption, or is it retained? RabbitMQ \u2014 smart broker, message disappears after delivery: RabbitMQ routes messages through exchanges, delivers to",
+        "familiarity_anchors": [
+          "RabbitMQ",
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you achieve exactly-once processing with Kafka?",
+          "What is the difference between Kafka consumer groups and RabbitMQ competing consumers?",
+          "How would you migrate from RabbitMQ to Kafka for an existing system?"
+        ]
+      }
+    },
+    {
+      "id": "sd-010",
+      "slug": "design-event-sourcing-audit-log",
+      "question": "How do you design an audit log system? When should you use Event Sourcing?",
+      "title": "Audit Log Design and Event Sourcing",
+      "direct_answer": "An audit log records all state changes immutably. Append to an audit_events table with actor, action, before/after state, and timestamp. Event Sourcing goes further: the event log IS the source of truth, with current state derived by replaying events.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of append-only audit patterns and when Event Sourcing complexity is justified",
+        "common_mistake": "Using UPDATE to add audit records to the main entity table \u2014 loses history when records are updated",
+        "to_stand_out": "Explain the temporal query advantage of Event Sourcing (reconstruct state at any point in time) and the performance cost (replaying all events)"
+      },
+      "company_tags": [
+        "Stripe",
+        "GitHub",
+        "AWS",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Audit Logs vs Event Sourcing \u2014 Two Levels of History",
+            "content": "Audit logs are a compliance and debugging requirement. The simplest correct approach: a separate append-only events table. Event Sourcing is a more radical pattern where you replace the mutable state table entirely with an event log.\n\nFrom a **Java / Spring Boot** production angle, I would connect this design to **observability** and **incremental rollout**: Micrometer metrics with trace IDs, Actuator health that reflects downstream dependencies, and feature flags or shadow traffic before flipping primary users. Mention **load and chaos testing** for the specific failure modes you described, plus on-call runbooks that spell out who owns remediation (platform vs product). Interviewers reward naming **SLOs**\u2014p99 latency, error budgets, and dollars per incident\u2014so tie architecture choices to those numbers instead of stopping at boxes and arrows.\n\nClose with **incident readiness**: synthetic probes, paging thresholds tied to user-visible impact, and blameless postmortems that capture detection time, mitigation time, and the guardrails you will add next. Mention **capacity spreadsheets**\u2014peak multiplier, cost per million requests, and headroom after losing an AZ\u2014so the design feels grounded in finance as well as algorithms."
+          },
+          {
+            "type": "requirements",
+            "title": "Audit and Event Sourcing Requirements",
+            "content": "**Audit log requirements:**\n- Who changed what, when, from what to what\n- Immutable \u2014 no modification after write\n- Queryable: 'show me all changes to order #42' or 'show me all actions by user #7 today'\n- Retention: 7 years for financial data (compliance)\n\n**Event Sourcing requirements:**\n- Complete history of all state transitions\n- Reconstruct state at any point in time ('what was this account's balance last Tuesday?')\n- Support multiple read models built from same events\n- Debug production issues by replaying event sequences\n\nAdd **Spring-centric** details where credible: validated configuration properties for timeouts and pool sizes, `@Scheduled` or Debezium-style hooks for background reconciliation, and defensive validation on every external boundary. Close with **security**: least-privilege service accounts, secrets rotation, and auditability of administrative actions that bypass normal user flows."
+          },
+          {
+            "type": "approach",
+            "title": "Simple Audit Log Implementation",
+            "content": "```sql\n-- Audit events table (append-only, never UPDATE or DELETE)\nCREATE TABLE audit_events (\n    id           BIGSERIAL PRIMARY KEY,\n    entity_type  TEXT NOT NULL,       -- 'Order', 'User', 'Payment'\n    entity_id    BIGINT NOT NULL,\n    action       TEXT NOT NULL,       -- 'created', 'updated', 'deleted'\n    actor_id     BIGINT NOT NULL,     -- user who performed action\n    actor_type   TEXT NOT NULL,       -- 'user', 'service', 'admin'\n    before_state JSONB,               -- state before change\n    after_state  JSONB,               -- state after change\n    changed_fields TEXT[],            -- which fields changed\n    ip_address   INET,\n    user_agent   TEXT,\n    created_at   TIMESTAMPTZ DEFAULT NOW()\n) PARTITION BY RANGE (created_at);    -- partition by month for retention\n\n-- Spring Boot: AOP-based audit interceptor\n@Aspect @Component\npublic class AuditInterceptor {\n\n    @AfterReturning(\n        pointcut = \"@annotation(Auditable)\",\n        returning = \"result\")\n    public void auditAction(JoinPoint jp, Object result) {\n        // Extract before/after state, current user, IP\n        AuditEvent event = buildAuditEvent(jp, result);\n        auditEventRepository.save(event);\n    }\n}\n\n@PutMapping(\"/orders/{id}\")\n@Auditable(entity = \"Order\", action = \"updated\")  // auto-audited\npublic Order updateOrder(@PathVariable Long id, @RequestBody OrderRequest req) {\n    // ...\n}\n```"
+          },
+          {
+            "type": "design_diagram",
+            "title": "Event Sourcing with Temporal Queries and Snapshots",
+            "content": "```java\n// EVENT SOURCING \u2014 when simple audit log isn't enough:\n// ACCOUNT ENTITY: no mutable state, only events!\n\n@Entity @Table(name = \"account_events\")\npublic class AccountEvent {\n    private Long accountId;\n    private Long version;        // sequence number per account\n    private String eventType;    // 'AccountOpened', 'MoneyDeposited', etc.\n    private JSONB payload;       // event-specific data\n    private Instant occurredAt;\n    // Never UPDATE or DELETE rows in this table!\n}\n\n// CURRENT STATE = replay all events:\npublic Account loadAccount(Long accountId) {\n    List<AccountEvent> events = eventRepo.findByAccountId(accountId);\n    Account account = new Account(); // empty\n    for (AccountEvent event : events) {\n        account.apply(event);  // state machine: each event transitions state\n    }\n    return account;\n}\n\n// TEMPORAL QUERY: state at specific point in time\npublic Account loadAccountAt(Long accountId, Instant pointInTime) {\n    List<AccountEvent> events = eventRepo\n        .findByAccountIdAndOccurredAtBefore(accountId, pointInTime);\n    // Replay only events before that timestamp\n    return replay(events);\n}\n\n// PERFORMANCE: Snapshots for long-lived aggregates\n// Instead of replaying all 10,000 events:\n// Load last snapshot (e.g., at event #9900)\n// Replay only last 100 events from that point\n@Entity @Table(name = \"account_snapshots\")\npublic class AccountSnapshot {\n    private Long accountId;\n    private Long atVersion;  // event sequence number\n    private JSONB state;     // serialized account state at this version\n    private Instant createdAt;\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Storage, Querying, and Compliance Retention",
+            "content": "Audit tables grow without bound, so partition by month and ship cold partitions to **object storage** with immutability locks if regulators require WORM semantics. Index `(entity_type, entity_id, created_at)` for investigator queries and `(actor_id, created_at)` for insider threat reviews.\n\nAccess control matters: only security roles can read raw audit payloads; application services write through a narrow API that redacts sensitive fields from logs displayed to end users. Hash chains or Merkle trees are rarely needed but mention them when discussing tamper evidence for finance.\n\nFor event-sourced aggregates, operational queries move to **CQRS read models** fed by the same stream; keep the stream in Kafka or relational outbox tables with exactly-once processing semantics via idempotent consumers.\n\n**Retention policies** differ per domain: HR events might need seven years while web analytics logs expire sooner. Automate legal holds so deletes respect ongoing litigation freezes.\n\nDisaster recovery should rehearse rebuilding read models from scratch; document throughput (events/sec) the projectors must sustain after outages. These practicalities reassure interviewers you can maintain the system, not only draw event arrows.\n\nContrast **tamper-evident logs** (hash chains) with simpler signed exports to SIEM when threat models do not require blockchain theater. For GDPR **right to erasure**, explain how you tombstone entities while preserving immutable audit metadata\u2014often redacting personal fields but keeping actor IDs hashed.\n\nTesting should cover **clock skew**, out-of-order deliveries, and double-processing of the same event ID. Mention **PII minimization** in payloads so audit trails remain usable without exposing secrets. Finally, tie cost to storage growth: compression, columnar archival, and tiered retention keep finance comfortable funding the system."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Append-only audit log, never UPDATE or DELETE** \u2014 every record is immutable; changes are new rows; the log is the history, not a current-state table.\n- **`@TransactionalEventListener(AFTER_COMMIT)` publishes after the business transaction commits** \u2014 prevents audit log entries for operations that rolled.\n- **Event sourcing for domains requiring full replay** \u2014 the audit log IS the source of truth; current state is derived.\n- **Separate audit database with stricter access controls** \u2014 the audit store should be write-only for the application.\n- **Archive to S3 after 90 days** \u2014 hot audit data (last 90 days) stays in PostgreSQL for fast query."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An audit log system records every meaningful state change in the system \u2014 who did what to which entity, before and after, at what time. The design requirements are stricter than a normal database table: the log must be append-only (no updates or deletes), tamper-evident, queryable, and retainable for years without degrading query performance.\n\n**The append-only requirement:**\n- Audit records are immutable by design; never use UPDATE or DELETE on audit rows; if a correction is needed, add a new row noting the correction with the original record preserved\n- This property enables the log to serve as legal evidence; a log that can be modified provides no compliance guarantee\n- Use database constraints to enforce this: a write-only database role for the application user with no UPDATE or DELETE privileges on the audit table\n\n**Publishing the audit event safely:**\n- Use `@TransactionalEventListener(phase = AFTER_COMMIT)` to publish audit events only after the business transaction commits; events for rolled-back transactions must not appear in the audit log\n- The Outbox pattern provides durability: write the audit event to an outbox table in the same transaction as the business entity; a CDC relay publishes to the audit consumer asynchronously\n\n**Storage and retention strategy:**\n- Hot data (last 90 days) stays in PostgreSQL for fast query with indexes on (entity_type, entity_id, timestamp)\n- Cold data archives to S3 in Parquet format; Athena or Redshift Spectrum queries cold data without loading it into a database; this prevents the audit table from growing to billions of rows\n- Event sourcing as an alternative: if the domain already uses event sourcing, the event log IS the audit log; current state is always derivable by replaying events to any point in time\n\nI recommend a separate append-only PostgreSQL table with a write-only application role, `@TransactionalEventListener` for safe publishing, and S3 archiving after 90 days for compliance retention without unbounded database growth."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between an audit log and Event Sourcing?",
+        "How do you handle Event Sourcing schema evolution when event formats change?",
+        "What are snapshots in Event Sourcing and when do you need them?"
+      ],
+      "seo": {
+        "metaTitle": "Audit Log Event Sourcing Design \u2014 Java System Design Interview",
+        "metaDescription": "Audit log design and Event Sourcing explained. Append-only audit events table, AOP-based auditing, Event Sourcing benefits and costs, and temporal queries."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "An audit log system records every meaningful state change in the system \u2014 who did what to which entity, before and after, at what time.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Audit logs are a compliance and debugging requirement. The simplest correct approach: a separate append-only events table. Event Sourcing is a more radical pattern where you replace the mutable state table entirely with an event log. From a Java / Spring Boot production angle, I would connect this design to observability and incremental rollout: Micrometer metrics with trace IDs, Actuator health that reflects downstream dependencies, and feature flags or shadow traffic before flipping primary users. Mention load and chaos testing for the specific failure modes you described, plus on-call runbooks."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Audit tables grow without bound, so partition by month and ship cold partitions to object storage with immutability locks if regulators require WORM semantics.",
+              "Index (entity_type, entity_id, created_at) for investigator queries and (actor_id, created_at) for insider threat reviews.",
+              "Access control matters: only security roles can read raw audit payloads; application services write through a narrow API that redacts sensitive fields from logs displayed to end users.",
+              "Hash chains or Merkle trees are rarely needed but mention them when discussing tamper evidence for finance.",
+              "For event-sourced aggregates, operational queries move to CQRS read models fed by the same stream; keep the stream in Kafka or relational outbox tables with exactly-once processing semantics via idempotent consumers.",
+              "Retention policies differ per domain: HR events might need seven years while web analytics logs expire sooner."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Append-only audit log, never UPDATE or DELETE \u2014 every record is immutable; changes are new rows; the log is the history, not a current-state table",
+              "@TransactionalEventListener(AFTER_COMMIT) publishes after the business transaction commits \u2014 prevents audit log entries for operations that rolled",
+              "Event sourcing for domains requiring full replay \u2014 the audit log IS the source of truth; current state is derived",
+              "Separate audit database with stricter access controls \u2014 the audit store should be write-only for the application",
+              "Archive to S3 after 90 days \u2014 hot audit data (last 90 days) stays in PostgreSQL for fast query"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using UPDATE to add audit records to the main entity table \u2014 loses history when records are updated"
+          }
+        ],
+        "cap": "The append-only requirement: Audit records are immutable by design; never use UPDATE or DELETE on audit rows; if a correction is needed, add a new row noting the correction with the original record pr",
+        "familiarity_anchors": [
+          "Append",
+          "Event",
+          "Sourcing"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between an audit log and Event Sourcing?",
+          "How do you handle Event Sourcing schema evolution when event formats change?",
+          "What are snapshots in Event Sourcing and when do you need them?"
+        ]
+      }
+    },
+    {
+      "id": "sdl-004",
+      "slug": "design-pubsub-event-bus-java",
+      "question": "Design an in-process pub/sub event bus in Java. How do you handle type safety, async delivery, and subscriber lifecycle?",
+      "title": "Design a Pub/Sub Event Bus in Java",
+      "direct_answer": "Use a ConcurrentHashMap keyed by event Class<?> mapping to a CopyOnWriteArrayList of subscriber callbacks. Publishing looks up the event type, iterates subscribers, and dispatches to an ExecutorService for async delivery. Type safety comes from generics on the subscribe method. Subscriber lifecycle is managed via weak references or explicit unsubscribe tokens.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Generic type design, observer pattern at scale, concurrent data structure selection, and async error isolation",
+        "common_mistake": "Holding strong references to subscribers \u2014 causes memory leaks when subscribers are deregistered from the application but not from the bus",
+        "to_stand_out": "Discuss event hierarchy handling (publishing SubEvent should notify Event listeners), compare to Guava EventBus and Spring ApplicationEventPublisher, and explain backpressure when subscribers are slow"
+      },
+      "company_tags": [
+        "Google Guava",
+        "Spring",
+        "Vert.x",
+        "Uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why an In-Process Event Bus",
+            "content": "An in-process event bus decouples producers from consumers **within a single JVM**. Unlike Kafka or RabbitMQ, there is no network hop \u2014 events are method calls dispatched through a registry. This is the backbone of modular monoliths and plugin architectures where modules must communicate without compile-time dependencies on each other.\n\nThe design is a refined **Observer pattern** with three additional concerns: **type safety** (subscribers declare which event type they handle), **async delivery** (slow subscribers must not block the publisher), and **lifecycle management** (subscribers can come and go without leaking memory). Spring's `ApplicationEventPublisher` and Guava's `EventBus` are production implementations of this pattern. Building one from scratch reveals the concurrency and generics decisions hidden behind their APIs."
+          },
+          {
+            "type": "code_example",
+            "title": "Event Bus Core \u2014 Subscribe, Publish, Unsubscribe",
+            "language": "java",
+            "content": "public class EventBus {\n\n    // Event type \u2192 list of subscribers for that type\n    private final ConcurrentHashMap<Class<?>,\n        CopyOnWriteArrayList<Subscription<?>>> registry\n            = new ConcurrentHashMap<>();\n\n    private final ExecutorService asyncPool\n        = Executors.newFixedThreadPool(\n            Runtime.getRuntime().availableProcessors(),\n            r -> {\n                Thread t = new Thread(r, \"eventbus-worker\");\n                t.setDaemon(true);  // don't block JVM shutdown\n                return t;\n            });\n\n    // Type-safe subscribe: returns token for unsubscription\n    public <E> Subscription<E> subscribe(Class<E> eventType,\n                                          Consumer<E> handler) {\n        Subscription<E> sub = new Subscription<>(eventType, handler);\n        registry.computeIfAbsent(eventType,\n            k -> new CopyOnWriteArrayList<>()).add(sub);\n        return sub;  // caller keeps this to unsubscribe later\n    }\n\n    public void unsubscribe(Subscription<?> sub) {\n        var subs = registry.get(sub.getEventType());\n        if (subs != null) subs.remove(sub);\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    public <E> void publish(E event) {\n        var subs = registry.get(event.getClass());\n        if (subs == null) return;\n\n        for (Subscription<?> sub : subs) {\n            Subscription<E> typed = (Subscription<E>) sub;\n            asyncPool.submit(() -> {\n                try {\n                    typed.getHandler().accept(event);\n                } catch (Exception e) {\n                    // Isolate: one failing subscriber\n                    // must not affect others\n                    System.err.println(\"Subscriber failed: \" + e);\n                }\n            });\n        }\n    }\n\n    public void shutdown() {\n        asyncPool.shutdown();\n    }\n}\n\n// Subscription token \u2014 immutable, used for unsubscribe\npublic class Subscription<E> {\n    private final Class<E> eventType;\n    private final Consumer<E> handler;\n\n    Subscription(Class<E> eventType, Consumer<E> handler) {\n        this.eventType = eventType;\n        this.handler = handler;\n    }\n\n    Class<E> getEventType() { return eventType; }\n    Consumer<E> getHandler() { return handler; }\n}"
+          },
+          {
+            "type": "step",
+            "title": "Concurrency Choices and Event Hierarchy",
+            "content": "**Why CopyOnWriteArrayList?** Subscriptions change rarely (at startup/shutdown) but are iterated on every publish. COWAL is optimized for exactly this read-heavy pattern \u2014 iteration never locks, only mutations copy the internal array. If subscriptions change frequently at runtime, switch to a `ConcurrentLinkedQueue` instead.\n\n**Event hierarchy:** the implementation above uses exact-type matching \u2014 publishing an `OrderCreatedEvent` does not notify subscribers of its superclass `DomainEvent`. To support hierarchy dispatch, walk the class hierarchy at publish time:\n\n```java\npublic <E> void publishWithHierarchy(E event) {\n    Class<?> type = event.getClass();\n    while (type != null) {\n        var subs = registry.get(type);\n        if (subs != null) {\n            for (Subscription<?> sub : subs) {\n                asyncPool.submit(() -> {\n                    try {\n                        ((Consumer) sub.getHandler()).accept(event);\n                    } catch (Exception e) {\n                        System.err.println(\"Subscriber failed: \" + e);\n                    }\n                });\n            }\n        }\n        type = type.getSuperclass(); // walk up the hierarchy\n    }\n}\n```\n\nGuava EventBus uses this approach with a cache of type hierarchies to avoid repeated reflection. Spring ApplicationEventPublisher resolves the full type hierarchy plus implemented interfaces, which is why a listener on `ApplicationEvent` receives every event."
+          },
+          {
+            "type": "step",
+            "title": "Backpressure, Dead Subscribers, and Testing",
+            "content": "**Backpressure:** if a subscriber is slow, the thread pool queue grows unbounded. Guard against this with a bounded `LinkedBlockingQueue` on the `ExecutorService` and a rejection policy that logs and drops events \u2014 better to lose an event than OOM the JVM.\n\n**Dead subscribers:** if a subscriber object is garbage-collected but still registered, the bus holds a strong reference via the `Consumer` lambda, preventing GC. Two mitigations: require explicit `unsubscribe()` in a `@PreDestroy` hook (Spring-style), or wrap handlers in `WeakReference` and evict nulled entries on each publish scan.\n\n**Testing:** the async dispatch makes assertions timing-dependent. Provide a `publishSync` method or a constructor that accepts a same-thread executor for tests:\n\n`new EventBus(Runnable::run)` \u2014 executes handlers synchronously, making tests deterministic.\n\n**Time complexity:** `publish` is O(s) where s = number of subscribers for that event type. `subscribe` and `unsubscribe` are O(s) due to array copy. **Space:** O(t \u00d7 s) where t = distinct event types and s = average subscribers per type."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ConcurrentHashMap<Class<?>, List<EventListener>>`** \u2014 type-safe subscription map.\n- **Copy-on-write subscriber list** \u2014 snapshot the subscriber list before iterating.\n- **Async dispatch with bounded `ExecutorService`** \u2014 synchronous dispatch blocks the publisher until all handlers complete.\n- **Dead event for unhandled types** \u2014 if no subscriber exists for an event type, publish a `DeadEvent` wrapper.\n- **Weak references for subscriber lifecycle** \u2014 `WeakReference<EventListener>` allows GC to collect unused subscribers."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An in-process pub/sub event bus decouples producers from consumers within a single JVM \u2014 without the network overhead, operational complexity, or delivery guarantees of Kafka or RabbitMQ. It's the right tool for intra-service communication where you want domain events to trigger side effects (send email, update cache, write audit log) without direct method calls.\n\n**The subscription registry:**\n- `ConcurrentHashMap<Class<?>, CopyOnWriteArrayList<EventListener<?>>>` maps event types to subscriber lists; `computeIfAbsent` handles concurrent first-subscriber registration without explicit locking\n- `CopyOnWriteArrayList` is the right choice for subscriber lists: reads (iteration during publish) are lock-free; writes (subscribe/unsubscribe) are infrequent and create a new copy; this prevents `ConcurrentModificationException` when a handler unsubscribes itself during event processing\n\n**Synchronous vs asynchronous dispatch:**\n- Synchronous dispatch: the publisher thread calls all handlers inline and blocks until completion; simple, but a slow handler blocks the publisher\n- Asynchronous dispatch: submit each handler to a bounded `ExecutorService`; the publisher returns immediately; handlers execute concurrently on worker threads; use a bounded queue to prevent unbounded memory growth if handlers fall behind\n\n**Production considerations:**\n- Dead event handling: if no subscriber exists for an event type, wrap it in a `DeadEvent` and publish to a monitoring subscriber; prevents silent drops that are hard to debug\n- Exception isolation: a handler throwing an exception must not prevent other handlers from receiving the event; wrap each handler invocation in try-catch and log the exception independently\n- Unsubscription is mandatory for short-lived subscribers to prevent memory leaks; consider `WeakReference` listeners for objects that don't control their own lifecycle\n\nI recommend synchronous dispatch for simple intra-domain events, asynchronous dispatch with a bounded executor for cross-domain side effects where handler latency varies, and always implementing dead-event monitoring."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring ApplicationEventPublisher handle event type hierarchy?",
+        "How would you add ordering guarantees \u2014 events for the same aggregate processed in order?",
+        "What is the difference between an in-process event bus and a message broker like Kafka?"
+      ],
+      "seo": {
+        "metaTitle": "Pub/Sub Event Bus Java \u2014 LLD Interview Guide",
+        "metaDescription": "Design an in-process pub/sub event bus in Java with type-safe subscriptions, async delivery, CopyOnWriteArrayList, and subscriber lifecycle management."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "An in-process pub/sub event bus decouples producers from consumers within a single JVM \u2014 without the network overhead, operational complexity, or delivery guarantees of Kafka or RabbitMQ.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "An in-process event bus decouples producers from consumers within a single JVM. Unlike Kafka or RabbitMQ, there is no network hop \u2014 events are method calls dispatched through a registry. This is the backbone of modular monoliths and plugin architectures where modules must communicate without compile-time dependencies on each other. The design is a refined Observer pattern with three additional concerns: type safety (subscribers declare which event type they handle), async delivery (slow subscribers must not block the publisher), and lifecycle management (subscribers can come and go without leaking memory)."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Why CopyOnWriteArrayList?",
+              "Subscriptions change rarely (at startup/shutdown) but are iterated on every publish.",
+              "COWAL is optimized for exactly this read-heavy pattern \u2014 iteration never locks, only mutations copy the internal array.",
+              "If subscriptions change frequently at runtime, switch to a ConcurrentLinkedQueue instead.",
+              "Event hierarchy: the implementation above uses exact-type matching \u2014 publishing an OrderCreatedEvent does not notify subscribers of its superclass DomainEvent.",
+              "To support hierarchy dispatch, walk the class hierarchy at publish time: ``java public <E> void publishWithHierarchy(E event) { Class<?> type = event.getClass(); while (type != null) { var subs = registry.get(type); if (subs != null) { for (Subscription<?> sub : subs) { asyncPool.submit(() -> { try { ((Consumer) sub.getHandler()).accept(event); } catch (Exception e) { System.err.println(\"Subscriber failed: \" + e); } }); } } type = type.getSuperclass(); // walk up the hierarchy } } ` Guava EventBus uses this."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "ConcurrentHashMap<Class<?>, List<EventListener>> \u2014 type-safe subscription map",
+              "Copy-on-write subscriber list \u2014 snapshot the subscriber list before iterating",
+              "Async dispatch with bounded ExecutorService \u2014 synchronous dispatch blocks the publisher until all handlers complete",
+              "Dead event for unhandled types \u2014 if no subscriber exists for an event type, publish a DeadEvent wrapper",
+              "Weak references for subscriber lifecycle \u2014 WeakReference<EventListener> allows GC to collect unused subscribers"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Holding strong references to subscribers \u2014 causes memory leaks when subscribers are deregistered from the application but not from the bus"
+          }
+        ],
+        "cap": "The subscription registry: ConcurrentHashMap<Class<?>, CopyOnWriteArrayList<EventListener<?>>> maps event types to subscriber lists; computeIfAbsent handles concurrent first-subscriber registration wi",
+        "familiarity_anchors": [
+          "ConcurrentHashMap",
+          "Class",
+          "CopyOnWriteArrayList"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring ApplicationEventPublisher handle event type hierarchy?",
+          "How would you add ordering guarantees \u2014 events for the same aggregate processed in order?",
+          "What is the difference between an in-process event bus and a message broker like Kafka?"
+        ]
+      }
+    }
+  ]
+}

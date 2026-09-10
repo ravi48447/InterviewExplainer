@@ -1,0 +1,473 @@
+{
+  "topic": "Caching At Scale",
+  "topicSlug": "caching-at-scale",
+  "questions": [
+    {
+      "id": "sd-004",
+      "slug": "design-distributed-cache",
+      "question": "How do you design a caching strategy for a high-traffic Java API? What caching patterns should you know?",
+      "title": "Distributed Caching Strategy \u2014 Patterns and Trade-offs",
+      "direct_answer": "Implement cache-aside (lazy loading) with Redis for most use cases. Use write-through for high read-to-write ratios. Avoid cache stampede with probabilistic early expiry or Redis SETNX locks. Set TTLs based on data freshness requirements.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Knowledge of cache patterns, consistency trade-offs, and production failure modes",
+        "common_mistake": "Not having a TTL strategy \u2014 stale data accumulates indefinitely",
+        "to_stand_out": "Explain cache stampede (thundering herd), cache penetration (non-existent keys), and cache avalanche (mass expiry)"
+      },
+      "company_tags": [
+        "Redis Labs",
+        "Netflix",
+        "Amazon",
+        "Cloudflare"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Caching Strategy Matters More Than Caching Itself",
+            "content": "A typical PostgreSQL instance handles **5,000\u201310,000 queries/second** before latency degrades. A high-traffic Java API might need 50,000 req/sec at peak. Caching bridges that gap \u2014 but adding Redis without a strategy creates problems worse than the ones it solves.\n\nThe real challenge isn't \"add a cache.\" It's three decisions most teams skip: choosing the right **pattern** for your read/write ratio, defending against the **three failure modes** that bring down production caches (stampede, penetration, avalanche), and enforcing a **TTL strategy** so stale data doesn't silently accumulate. Most outages I've seen weren't from cache misses \u2014 they were from caches working exactly as configured, serving data that was hours old because nobody set an explicit expiration.\n\nFor a Spring Boot API, the practical stack is **Caffeine** as the in-process L1 cache (sub-microsecond, per-JVM) and **Redis** as the distributed L2 (sub-millisecond, shared across instances). L1 handles ultra-hot reads \u2014 config flags, permission lookups \u2014 while L2 handles the long tail. Spring's `@Cacheable` makes the pattern trivial to wire up, but the annotation hides every failure mode that requires explicit design."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Four Patterns and When Each One Fits",
+            "content": "Every caching decision starts with a pattern choice. The difference is where the responsibility for cache population and invalidation lives \u2014 in your application code, in the cache layer, or split between them.\n\n| Pattern | Read Path | Write Path | Consistency | Best For |\n|---|---|---|---|---|\n| **Cache-aside** | App checks cache \u2192 miss \u2192 fetch DB \u2192 populate cache | App writes DB \u2192 invalidates cache | Eventual (stale until next miss) | General purpose \u2014 90% of Java APIs |\n| **Write-through** | Same as cache-aside on read | App writes cache + DB synchronously | Strong (writes always update cache) | Read-heavy + write consistency critical |\n| **Write-behind** | Same as cache-aside on read | App writes cache \u2192 async flush to DB | Weak (cache ahead of DB) | Write-heavy, risk-tolerant (session carts) |\n| **Read-through** | Cache handles miss internally (fetches DB itself) | Same as cache-aside | Eventual | Simplifying app code, CDN-style patterns |\n\n**Cache-aside** is the default for nearly every Java service I've built. The application owns the logic: check cache, miss means fetch from database, populate cache, return. On writes, update the database first, then invalidate the cache \u2014 never update the cache directly, because a failed DB write leaves you serving data that doesn't exist yet.\n\n**Write-through** adds write latency on every mutation but guarantees the cache is never stale after a write. Use it only when stale data causes real business harm \u2014 pricing, permissions, inventory counts. **Write-behind** risks data loss if the cache crashes before flushing to the database; it's acceptable for shopping carts where losing a few seconds of state is tolerable. **Read-through** moves the fetch logic into the cache layer itself, which simplifies application code but couples your cache configuration to your data model."
+          },
+          {
+            "type": "step",
+            "title": "Three Failure Modes That Take Down Production Caches",
+            "content": "Knowing the patterns isn't enough. Production caches fail in three specific ways, and each requires a different defense.\n\n**Cache stampede** (thundering herd) is the most dangerous. A hot key expires. Simultaneously, hundreds of threads detect the miss and all query the database. The database briefly handles 100\u00d7 normal load for that single query. I've seen this cascade into full database failure when five hot keys expired in the same second during a traffic spike.\n\nThe fix is a **mutex lock** \u2014 only one thread fetches while others wait for the cache to be repopulated. In Java with Redis, this leverages `SETNX` to acquire a short-lived lock so that concurrent threads don't all slam the database at once.\n\n```java\nString value = redis.get(key);\nif (value == null) {\n    boolean acquired = redis.set(\"lock:\" + key, \"1\",\n        SetParams.nx().ex(5));               // 5-second lock TTL\n    if (acquired) {\n        value = db.fetch(key);               // single thread hits DB\n        redis.setex(key, ttlSeconds, value);\n        redis.del(\"lock:\" + key);\n    } else {\n        Thread.sleep(50);                    // wait for lock holder\n        value = redis.get(key);              // retry from cache\n    }\n}\n```\n\nThe `SETNX` ensures only one thread wins the lock. The 5-second TTL on the lock prevents deadlock if the winning thread crashes. For ultra-high throughput keys, **probabilistic early refresh** works better \u2014 each access within the last 10% of TTL has a small random chance of triggering a background refresh before the key actually expires, eliminating the miss entirely.\n\n**Cache penetration** happens when requests repeatedly query keys that don't exist in cache *or* database \u2014 typically bots probing sequential user IDs. Every request bypasses the cache and hits the database because there's nothing to cache. Two defenses: cache the null result with a short TTL (`redis.setex(key, 60, \"NULL\")`), or use a **Bloom filter** that checks existence before any lookup. Bloom filters use ~1 byte per key with zero false negatives \u2014 if the filter says \"doesn't exist,\" it definitely doesn't.\n\n**Cache avalanche** occurs when many keys expire simultaneously because they were all loaded during the same burst and given identical TTLs. The entire working set vanishes from cache at once, flooding the database. The fix is trivial: **add jitter to TTLs**. Instead of a flat 3600 seconds, use `3600 + random(0, 300)`. Five minutes of jitter spreads the expiration window enough to prevent synchronized misses."
+          },
+          {
+            "type": "common_mistakes",
+            "title": "The TTL Trap: What Happens When You Skip Expiration Strategy",
+            "content": "The most common production caching mistake isn't a dramatic failure \u2014 it's a slow, silent one. Teams set `@Cacheable` annotations without configuring explicit TTLs. Spring's default `RedisCacheConfiguration` uses **no expiration**. The cache grows indefinitely, serving increasingly stale data.\n\nA user changes their email, but the cached profile still shows the old one hours later. A product price updates, but customers see yesterday's price. These bugs are invisible until someone notices wrong data in production \u2014 and by then, trust is already damaged.\n\nThe rule: **every cached entity needs an explicit TTL tied to its business freshness requirement**, not a uniform default.\n\n| Data Type | TTL | Reasoning |\n|---|---|---|\n| User session | 30 min | Security boundary \u2014 expired sessions must not persist |\n| Product catalog | 5 min | Prices change; stale price = customer complaint or revenue loss |\n| App configuration | 24 hr | Rarely changes; staleness rarely hurts |\n| Search results | 60 sec | Freshness matters more than latency savings |\n| User permissions | 5 min | Stale permissions = security vulnerability |\n\nThe Spring configuration that enforces per-entity TTLs registers a `CacheManager` bean with explicit durations for each cache name, plus a global default that acts as a safety net for any annotation added without thought.\n\n```java\n@Bean\npublic RedisCacheManager cacheManager(RedisConnectionFactory rcf) {\n    RedisCacheConfiguration defaults = RedisCacheConfiguration\n        .defaultCacheConfig()\n        .entryTtl(Duration.ofMinutes(10));   // safety net, never \"forever\"\n\n    return RedisCacheManager.builder(rcf)\n        .cacheDefaults(defaults)\n        .withCacheConfiguration(\"users\",\n            defaults.entryTtl(Duration.ofHours(1)))\n        .withCacheConfiguration(\"products\",\n            defaults.entryTtl(Duration.ofMinutes(5)))\n        .withCacheConfiguration(\"permissions\",\n            defaults.entryTtl(Duration.ofMinutes(5)))\n        .build();\n}\n```\n\nThe `cacheDefaults` line is the critical safety net \u2014 it ensures that any new `@Cacheable` annotation automatically gets a 10-minute TTL instead of infinite. Without it, every developer who adds caching creates a potential staleness bug."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Cache-aside + invalidate-on-write** \u2014 check cache \u2192 miss \u2192 fetch DB \u2192 populate; on write, update DB first then delete the key.\n- **Stampede fix: SETNX mutex with 5-second TTL** \u2014 only one thread fetches on a hot-key miss; others wait and retry.\n- **Spring default TTL is infinite** \u2014 `RedisCacheConfiguration.defaultCacheConfig()` sets no expiration.\n- **Penetration defense: cache null results** \u2014 cache the \"not found\" result with a short TTL (30s).\n- **Avalanche defense: TTL jitter** \u2014 add \u00b110\u201320% randomness to all expiration times.\n- **Local L1 + remote L2** \u2014 Caffeine in-process (sub-millisecond) backed by Redis (5\u201310ms); L1 handles hot keys, L2 handles cross-instance consistency."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A caching strategy for a high-traffic Java API involves three connected decisions that most teams skip when they reach for Redis: choosing the right cache pattern for the access profile, defending against the three failure modes that bring down production caches, and enforcing TTL discipline that prevents stale data from accumulating silently.\n\n**Choosing the right cache pattern:**\n- Cache-aside is the right default for most Java APIs \u2014 check the cache, fetch from the database on a miss, populate the cache, and invalidate on writes by deleting the key; Spring's `@Cacheable` and `@CacheEvict` wire this up with minimal code\n- Write-through keeps the cache always populated by synchronously writing both cache and database on every write \u2014 higher write latency but zero cold-start problem; right when reads happen immediately after writes\n- Write-behind improves write throughput by acknowledging the cache immediately and flushing to the database asynchronously \u2014 highest write performance but requires durability guarantees and conflict resolution\n\n**The three production failure modes:**\n- Cache stampede: a hot key expires, hundreds of threads all miss simultaneously, and they all hit the database; fix with a SETNX mutex lock \u2014 only one thread fetches while others wait, with a 5-second lock TTL to prevent deadlock\n- Cache penetration: repeated queries for a key that doesn't exist always bypass the cache and hammer the database; fix by caching the null/empty result with a short TTL (30 seconds)\n- Cache avalanche: a large batch of keys with the same TTL expire simultaneously; fix with \u00b110\u201320% TTL jitter on every cached entry\n\n**TTL discipline \u2014 the silent killer:**\n- Spring's default `RedisCacheConfiguration` sets no expiration; every `@Cacheable` annotation without explicit `entryTtl` grows indefinitely, serving increasingly stale data until OOM\n- Define TTLs per cache name explicitly in `RedisCacheManagerBuilderCustomizer`, never rely on defaults\n\nI recommend cache-aside as the default, Redis with Caffeine L1 for hot keys, explicit TTL per cache region, and SETNX mutex protection for any cache entry that receives significant concurrent traffic."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between cache invalidation and cache eviction?",
+        "When would you use write-through caching over cache-aside?",
+        "How do you handle cache consistency in a microservices environment?"
+      ],
+      "seo": {
+        "metaTitle": "Distributed Caching Strategy Redis Spring Boot \u2014 Java Interview",
+        "metaDescription": "Distributed caching patterns for Java APIs. Cache-aside, write-through, stampede prevention, cache penetration, and Redis with Spring Boot @Cacheable."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A caching strategy for a high-traffic Java API involves three connected decisions that most teams skip when they reach for Redis: choosing the right cache pattern for the access profile, defending against the three failure.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A typical PostgreSQL instance handles 5,000\u201310,000 queries/second before latency degrades. A high-traffic Java API might need 50,000 req/sec at peak. Caching bridges that gap \u2014 but adding Redis without a strategy creates problems worse than the ones it solves. The real challenge isn't \"add a cache.\" It's three decisions most teams skip: choosing the right pattern for your read/write ratio, defending against the three failure modes that bring down production caches (stampede, penetration, avalanche), and enforcing a TTL strategy so stale data doesn't silently accumulate. Most outages I've seen weren't."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Knowing the patterns isn't enough.",
+              "Production caches fail in three specific ways, and each requires a different defense.",
+              "Cache stampede (thundering herd) is the most dangerous.",
+              "A hot key expires.",
+              "Simultaneously, hundreds of threads detect the miss and all query the database.",
+              "The database briefly handles 100\u00d7 normal load for that single query."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Cache-aside + invalidate-on-write \u2014 check cache \u2192 miss \u2192 fetch DB \u2192 populate; on write, update DB first then delete the key",
+              "Stampede fix: SETNX mutex with 5-second TTL \u2014 only one thread fetches on a hot-key miss; others wait and retry",
+              "Spring default TTL is infinite \u2014 RedisCacheConfiguration",
+              "defaultCacheConfig() sets no expiration",
+              "Penetration defense: cache null results \u2014 cache the \"not found\" result with a short TTL (30s)"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Not having a TTL strategy \u2014 stale data accumulates indefinitely"
+          }
+        ],
+        "cap": "Choosing the right cache pattern: Cache-aside is the right default for most Java APIs \u2014 check the cache, fetch from the database on a miss, populate the cache, and invalidate on writes by deleting the",
+        "familiarity_anchors": [
+          "Implement",
+          "Redis",
+          "Avoid"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between cache invalidation and cache eviction?",
+          "When would you use write-through caching over cache-aside?",
+          "How do you handle cache consistency in a microservices environment?"
+        ]
+      }
+    },
+    {
+      "id": "sdf-010",
+      "slug": "cdn-edge-caching",
+      "question": "How do CDNs and edge caching reduce latency for global users? When should you use them?",
+      "title": "CDN and Edge Caching: Reducing Latency for Global Users",
+      "direct_answer": "A CDN caches content at edge servers in 200+ locations worldwide, reducing latency from 150ms (cross-continent) to 10-30ms (nearest edge). Use CDNs for static assets (images, CSS, JS), API responses with cache-friendly patterns, and video delivery. The key decisions are cache invalidation strategy (TTL vs purge), origin shield configuration, and cache key design for dynamic content.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Understanding of CDN architecture, cache invalidation trade-offs, and when CDN caching helps vs when it doesn't",
+        "common_mistake": "Caching personalized or authenticated responses at the edge without proper cache key design \u2014 serving one user's data to another",
+        "to_stand_out": "Discuss origin shield to prevent thundering herd on origin, edge computing (Cloudflare Workers, Lambda@Edge), and cache key normalization"
+      },
+      "company_tags": [
+        "Cloudflare",
+        "Akamai",
+        "Netflix",
+        "Amazon"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Latency Problem That Server-Side Optimization Can't Fix",
+            "content": "You can optimize your Spring Boot API to respond in 5ms, but if the user is in Mumbai and your server is in Virginia, the physics of light through fiber imposes a **150ms round-trip time** that no code change can eliminate. For a page load requiring 3 sequential API calls, that's 450ms of pure network latency before any rendering begins.\n\n**CDNs (Content Delivery Networks)** solve this by caching your content at **edge servers** distributed globally \u2014 200+ locations for major providers like CloudFront, Cloudflare, and Akamai. The first request from Mumbai hits your origin server in Virginia, but every subsequent request for the same resource is served from the CDN's Mumbai edge, with **sub-10ms latency**.\n\nThe non-obvious value isn't just latency \u2014 it's **origin protection**. A CDN serving cached responses means your origin servers handle dramatically fewer requests. During traffic spikes (product launches, viral content), the CDN absorbs the surge while your origin infrastructure stays stable. Without edge caching, every traffic spike hits your servers directly."
+          },
+          {
+            "type": "step",
+            "title": "What to Cache at the Edge and What to Keep at the Origin",
+            "content": "The edge caching decision depends on two factors: **how often the content changes** and **whether it's personalized**.\n\n**Cache aggressively at the edge:**\n- Static assets (JS, CSS, images, fonts) \u2014 these change only on deploy. Set `Cache-Control: public, max-age=31536000, immutable` with cache-busting filenames (`app.a3f2b1.js`). One year TTL, effectively forever.\n- Public API responses that change infrequently (product catalog, country lists, exchange rates) \u2014 `Cache-Control: public, max-age=300` (5 minutes)\n- HTML pages that are the same for every user (marketing pages, blog posts) \u2014 `Cache-Control: public, s-maxage=3600` (`s-maxage` applies only to CDN, not browser)\n\n**Never cache at the edge without careful design:**\n- Authenticated responses \u2014 caching a response that includes user-specific data risks **serving User A's data to User B**. This is the most dangerous CDN mistake.\n- Responses with `Set-Cookie` headers \u2014 CDNs may cache the cookie and replay it to other users\n- Personalized content (recommendations, dashboards) \u2014 cache key must include the user identifier, which defeats the purpose of shared caching\n\nThe rule: if the `Authorization` header changes the response, don't use a shared CDN cache. Use a per-user cache (Redis) instead, or strip personalization into a separate client-side API call so the page shell can be cached while the personalized data loads dynamically."
+          },
+          {
+            "type": "step",
+            "title": "Cache Invalidation at the Edge: The Hard Problem",
+            "content": "Edge caching turns cache invalidation from a single-server problem into a **globally distributed** one. When you update a product price, you need to invalidate the cached version across 200+ edge locations. Three approaches exist, each with trade-offs.\n\n**TTL-based expiration** \u2014 set a reasonable TTL (5 minutes for product data, 1 hour for static pages) and accept that the content is stale until TTL expires. Simplest approach, works for content where brief staleness is acceptable. Most CDN traffic uses this model.\n\n**Explicit purge** \u2014 call the CDN API to invalidate specific URLs or patterns. CloudFront processes purge requests in 1\u20135 minutes, Cloudflare in under 30 seconds. Useful for urgent updates (wrong pricing, legal takedowns). The caveat: purge APIs have rate limits (CloudFront allows 1,000 wildcard invalidations/month for free), and propagation isn't instant.\n\n**Origin shield** solves the related problem of **cache stampede on the origin**. Without a shield, when a cached object expires at 200 edge locations, all 200 simultaneously request the origin. The origin shield is a single intermediate cache layer \u2014 all edge locations funnel through it, so the origin receives one request instead of 200. CloudFront, Cloudflare, and Fastly all support this.\n\nThe practical setup for a Spring Boot API: use `Cache-Control` headers in your HTTP responses to control CDN behavior. The application decides what's cacheable and for how long \u2014 the CDN obeys the headers. This keeps caching policy in your code, not in CDN configuration."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Origin-pull vs push** \u2014 CDNs pull content from origin on first miss and cache at the PoP; push pre-loads content before any request.\n- **Cache-Control: max-age is the CDN TTL** \u2014 set appropriately per content type; static JS/CSS (immutable with hash filenames): 1 year.\n- **CDNs can't cache POST or authenticated responses by default** \u2014 dynamic, user-specific content requires origin traversal.\n- **Anycast routing routes users to the nearest PoP** \u2014 200ms New York \u2192 Singapore becomes 5ms New York \u2192 New York CDN node.\n- **Stale-while-revalidate removes the cold-start penalty** \u2014 serve the cached version immediately while fetching the fresh version in background."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "CDNs solve a problem that no amount of server-side optimization can fix: the speed of light. A user in Singapore querying an origin server in Virginia adds 150ms of irreducible network latency regardless of how fast the server responds. A CDN node in Singapore serves the same content with 5ms latency.\n\n**How CDNs work:**\n- A CDN has hundreds of Points of Presence globally; Anycast routing sends each user's request to the geographically nearest PoP\n- On the first request from a PoP, the edge server fetches from origin and caches the response; subsequent requests from that region are served from the edge without touching origin\n- Cache-Control headers drive the TTL: static assets with content-hash filenames get 1-year max-age; HTML gets 5 minutes; API responses that can be shared across users get 60 seconds; user-specific data doesn't cache at all\n\n**What CDNs can and can't cache:**\n- CDNs cache GET responses with public or shared cache-control headers; POST requests, authenticated responses, and user-specific content bypass the CDN to origin\n- Dynamic content can still benefit from CDN edge logic (edge functions, A/B testing) but the response itself hits origin\n- Cache invalidation is the hard problem: stale-while-revalidate serves the old version while fetching the fresh one in background; CDN purge APIs allow instant invalidation on content updates\n\n**The operational subtlety:**\n- A cache hit rate below 80\u201390% means your content is too dynamic or your TTLs are too short to justify CDN cost; measure cache-hit ratio per content type in your CDN dashboard\n\nI recommend CDNs for any application with users distributed geographically, and always setting explicit Cache-Control headers per content type rather than relying on CDN default behavior."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does stale-while-revalidate work?",
+        "What is the difference between a pull CDN and a push CDN?",
+        "How would you use edge computing (Cloudflare Workers) for dynamic content?"
+      ],
+      "seo": {
+        "metaTitle": "CDN and Edge Caching for System Design \u2014 Interview Guide",
+        "metaDescription": "CDN architecture explained: edge caching, origin shield, cache invalidation strategies. Cache-Control headers, stale-while-revalidate, and CDN provider comparison."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "CDNs solve a problem that no amount of server-side optimization can fix: the speed of light.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "You can optimize your Spring Boot API to respond in 5ms, but if the user is in Mumbai and your server is in Virginia, the physics of light through fiber imposes a 150ms round-trip time that no code change can eliminate. For a page load requiring 3 sequential API calls, that's 450ms of pure network latency before any rendering begins. CDNs (Content Delivery Networks) solve this by caching your content at edge servers distributed globally \u2014 200+ locations for major providers like CloudFront, Cloudflare, and Akamai. The first request from."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The edge caching decision depends on two factors: how often the content changes and whether it's personalized.",
+              "Cache aggressively at the edge: Static assets (JS, CSS, images, fonts) \u2014 these change only on deploy.",
+              "Set Cache-Control: public, max-age=31536000, immutable with cache-busting filenames (app.a3f2b1.js).",
+              "One year TTL, effectively forever.",
+              "Public API responses that change infrequently (product catalog, country lists, exchange rates) \u2014 Cache-Control: public, max-age=300 (5 minutes) HTML pages that are the same for every user (marketing pages, blog posts) \u2014 Cache-Control: public, s-maxage=3600 (s-maxage applies only to CDN, not browser) Never cache at the edge without careful design: Authenticated responses \u2014 caching a response that includes user-specific data risks serving User A's data to User B.",
+              "This is the most dangerous CDN mistake."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Origin-pull vs push \u2014 CDNs pull content from origin on first miss and cache at the PoP; push pre-loads content before any request",
+              "Cache-Control: max-age is the CDN TTL \u2014 set appropriately per content type; static JS/CSS (immutable with hash filenames): 1 year",
+              "CDNs can't cache POST or authenticated responses by default \u2014 dynamic, user-specific content requires origin traversal",
+              "Anycast routing routes users to the nearest PoP \u2014 200ms New York \u2192 Singapore becomes 5ms New York \u2192 New York CDN node",
+              "Stale-while-revalidate removes the cold-start penalty \u2014 serve the cached version immediately while fetching the fresh version in background"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Caching personalized or authenticated responses at the edge without proper cache key design \u2014 serving one user's data to another"
+          }
+        ],
+        "cap": "How CDNs work: A CDN has hundreds of Points of Presence globally; Anycast routing sends each user's request to the geographically nearest PoP On the first request from a PoP, the edge server fetches f",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does stale-while-revalidate work?",
+          "What is the difference between a pull CDN and a push CDN?",
+          "How would you use edge computing (Cloudflare Workers) for dynamic content?"
+        ]
+      }
+    },
+    {
+      "id": "sdl-001",
+      "slug": "design-thread-safe-lru-cache-java",
+      "question": "Design a thread-safe LRU cache in Java. How do you handle concurrent reads and writes efficiently?",
+      "title": "Design a Thread-Safe LRU Cache in Java",
+      "direct_answer": "Combine a ConcurrentHashMap for O(1) key lookup with a doubly-linked list for O(1) eviction ordering. Protect list mutations with a ReentrantReadWriteLock so concurrent readers never block each other while writers serialize access to the eviction chain. An alternative shortcut is LinkedHashMap with synchronized access, but it serializes every operation and becomes a bottleneck under high concurrency.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Understanding of O(1) eviction data structures, Java concurrency primitives, and the trade-off between correctness and throughput under contention",
+        "common_mistake": "Using Collections.synchronizedMap(new LinkedHashMap<>()) \u2014 this serializes every operation including reads, destroying throughput on read-heavy workloads",
+        "to_stand_out": "Discuss striped locking (segmented locks like Caffeine uses), explain why ConcurrentLinkedDeque alone is not enough (you need atomic move-to-head), and reference real libraries like Caffeine or Guava Cache"
+      },
+      "company_tags": [
+        "Google",
+        "Amazon",
+        "Meta",
+        "Caffeine"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why LRU Cache Design Is Non-Trivial",
+            "content": "An LRU cache evicts the **least recently used** entry when capacity is reached. The naive approach \u2014 a LinkedHashMap with `removeEldestEntry` \u2014 works in single-threaded code but falls apart under concurrency. The real challenge is making `get` and `put` both O(1) while allowing multiple threads to operate without corrupting the eviction order.\n\nTwo data structures cooperate: a **hash map** provides O(1) key lookup, and a **doubly-linked list** provides O(1) insertion, removal, and move-to-head. Every cache hit must atomically move the accessed node to the head of the list so that the tail always points to the least-recently-used entry. That atomic move is where most concurrency bugs hide \u2014 a node being moved by one thread while another thread is evicting it.\n\nProduction caches like **Caffeine** solve this with a write-behind buffer and striped locks, achieving near-ConcurrentHashMap throughput. In an interview you are expected to build the simpler version: ConcurrentHashMap + a guarded linked list. That demonstrates the core insight without library hand-waving."
+          },
+          {
+            "type": "step",
+            "title": "The Node and Interface Contract",
+            "content": "Start by defining the public API. A cache has three operations: `get`, `put`, and `size`. The generic type parameters let callers store any key-value pair. Internally, each entry lives in a `Node` that carries `prev` / `next` pointers for the linked list plus the key (needed during eviction to remove the entry from the map).\n\n```java\npublic class LRUCache<K, V> {\n\n    private final int capacity;\n    private final ConcurrentHashMap<K, Node<K, V>> map;\n    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();\n\n    // Sentinel nodes simplify edge cases \u2014 head.next is MRU, tail.prev is LRU\n    private final Node<K, V> head = new Node<>(null, null);\n    private final Node<K, V> tail = new Node<>(null, null);\n\n    public LRUCache(int capacity) {\n        this.capacity = capacity;\n        this.map = new ConcurrentHashMap<>(capacity);\n        head.next = tail;\n        tail.prev = head;\n    }\n\n    private static class Node<K, V> {\n        final K key;\n        volatile V value;  // volatile for safe publication\n        Node<K, V> prev;\n        Node<K, V> next;\n\n        Node(K key, V value) {\n            this.key = key;\n            this.value = value;\n        }\n    }\n}\n```\n\nSentinel nodes (`head` and `tail`) eliminate null-checks when inserting or removing at boundaries. The most-recently-used entry always sits at `head.next`; the eviction candidate sits at `tail.prev`. This convention keeps every list operation uniform."
+          },
+          {
+            "type": "code_example",
+            "title": "Get and Put with Read-Write Locking",
+            "language": "java",
+            "content": "public V get(K key) {\n    Node<K, V> node = map.get(key);  // ConcurrentHashMap: lock-free read\n    if (node == null) return null;\n\n    // Move to head requires list mutation \u2192 write lock\n    lock.writeLock().lock();\n    try {\n        moveToHead(node);\n    } finally {\n        lock.writeLock().unlock();\n    }\n    return node.value;\n}\n\npublic void put(K key, V value) {\n    Node<K, V> existing = map.get(key);\n\n    if (existing != null) {\n        existing.value = value;  // update in place\n        lock.writeLock().lock();\n        try {\n            moveToHead(existing);\n        } finally {\n            lock.writeLock().unlock();\n        }\n        return;\n    }\n\n    // New entry\n    Node<K, V> newNode = new Node<>(key, value);\n    lock.writeLock().lock();\n    try {\n        addAfterHead(newNode);\n        map.put(key, newNode);\n\n        if (map.size() > capacity) {\n            Node<K, V> lru = tail.prev;  // least recently used\n            removeNode(lru);\n            map.remove(lru.key);          // evict from map too\n        }\n    } finally {\n        lock.writeLock().unlock();\n    }\n}\n\n// ---- linked-list helpers (caller must hold write lock) ----\n\nprivate void addAfterHead(Node<K, V> node) {\n    node.prev = head;\n    node.next = head.next;\n    head.next.prev = node;\n    head.next = node;\n}\n\nprivate void removeNode(Node<K, V> node) {\n    node.prev.next = node.next;\n    node.next.prev = node.prev;\n}\n\nprivate void moveToHead(Node<K, V> node) {\n    removeNode(node);  // unlink from current position\n    addAfterHead(node); // re-insert at head\n}"
+          },
+          {
+            "type": "step",
+            "title": "Concurrency Trade-Offs and Production Alternatives",
+            "content": "The implementation above serializes every `get` because `moveToHead` mutates the list. In read-heavy workloads (typical for caches) this is the primary bottleneck. Production libraries attack it in two ways:\n\n**Caffeine's approach** \u2014 buffer access events in a lock-free MPSC (multi-producer single-consumer) ring buffer. A single drain thread periodically replays the buffer to reorder the eviction list. Reads never contend on the list lock; the trade-off is that eviction order is *slightly* stale, which is acceptable because LRU is already a heuristic.\n\n**Segmented / striped locking** \u2014 partition the key space into N segments, each with its own list and lock. Contention drops linearly with segment count, but cross-segment eviction decisions become approximate. Guava Cache uses this approach with 4 segments by default.\n\n**Time complexity:** `get` and `put` are both O(1) amortized \u2014 hash map lookup is O(1), linked-list operations are O(1). **Space complexity:** O(n) where n = capacity, storing one map entry and one doubly-linked node per cached value.\n\nIn an interview, mention these production optimizations after presenting the clean read-write-lock version. It shows you understand that correctness comes first and performance tuning is layered on top."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **HashMap + doubly-linked list** \u2014 the canonical O(1) get/put/evict structure; the map indexes nodes, the list tracks recency order.\n- **Sentinel head/tail nodes** \u2014 eliminate null-check branches in `addAfterHead` and `removeNode`, making every list operation uniform regardless of list.\n- **`ReentrantReadWriteLock` trade-off** \u2014 safe but serializes reads via `moveToHead`.\n- **Eviction key stored in Node** \u2014 without the key in the node, you cannot remove the evicted entry from the map in O(1), forcing a linear scan of the.\n- **`ConcurrentHashMap` alone is not enough** \u2014 it protects the map, but `moveToHead` is a compound operation (remove + insert) that requires a separate."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An LRU cache needs two cooperating data structures: a hash map for O(1) key lookup and a doubly-linked list for O(1) recency tracking. The list head is the most recently used entry, the tail is the next eviction candidate. Every `get` moves the accessed node to the head; every `put` inserts at the head and evicts from the tail if capacity is exceeded.\n\n**The canonical implementation:**\n- Each node in the linked list holds the key, value, and prev/next pointers; the key stored in the node is critical \u2014 when evicting the tail, you need the key to remove the entry from the hash map in O(1) without scanning\n- Sentinel (dummy) head and tail nodes eliminate null-check branches in every list operation \u2014 `addAfterHead` and `removeNode` are always uniform regardless of list size; this simplifies the implementation significantly\n\n**The concurrency challenge:**\n- Even read operations (`get`) mutate the list via `moveToHead`; a `ConcurrentHashMap` protects the map but not the list\n- `ReentrantReadWriteLock` is the straightforward fix: map reads are lock-free via `ConcurrentHashMap`, but `moveToHead` requires the write lock; this serializes all operations through the list mutation\n- The performance implication: in a read-heavy workload, every `get` acquires the write lock, eliminating read parallelism; this is the primary bottleneck at high concurrency\n\n**Production-grade approach \u2014 Caffeine's buffering technique:**\n- Buffer access events in a lock-free MPSC (multi-producer single-consumer) ring buffer; a single drain thread periodically replays the buffer to reorder the eviction list; reads never contend on the list lock\n- The trade-off: eviction order is slightly stale (milliseconds), which is acceptable because LRU is already a heuristic approximation of \"what to keep\"\n\nI recommend the sentinel-node doubly-linked-list plus ConcurrentHashMap implementation for the interview, and Caffeine (`Cache.build()`) for any production use case where concurrent read throughput matters."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Caffeine achieve higher throughput than a synchronized LinkedHashMap?",
+        "How would you add TTL-based expiration to this LRU cache?",
+        "What changes if the cache must support O(1) bulk invalidation by prefix?"
+      ],
+      "seo": {
+        "metaTitle": "Thread-Safe LRU Cache Java \u2014 LLD Interview Guide",
+        "metaDescription": "Design a thread-safe LRU cache in Java with ConcurrentHashMap and doubly-linked list. O(1) get/put, ReentrantReadWriteLock, eviction, and Caffeine comparison."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "An LRU cache needs two cooperating data structures: a hash map for O(1) key lookup and a doubly-linked list for O(1) recency tracking.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "An LRU cache evicts the least recently used entry when capacity is reached. The naive approach \u2014 a LinkedHashMap with removeEldestEntry \u2014 works in single-threaded code but falls apart under concurrency. The real challenge is making get and put both O(1) while allowing multiple threads to operate without corrupting the eviction order. Two data structures cooperate: a hash map provides O(1) key lookup, and a doubly-linked list provides O(1) insertion, removal, and move-to-head. Every cache hit must atomically move the accessed node to the head of the list so that."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Start by defining the public API.",
+              "A cache has three operations: get, put, and size.",
+              "The generic type parameters let callers store any key-value pair.",
+              "Internally, each entry lives in a Node that carries prev / next pointers for the linked list plus the key (needed during eviction to remove the entry from the map).",
+              "``java public class LRUCache<K, V> { private final int capacity; private final ConcurrentHashMap<K, Node<K, V>> map; private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(); // Sentinel nodes simplify edge cases \u2014 head.next is MRU, tail.prev is LRU private final Node<K, V> head = new Node<>(null, null); private final Node<K, V> tail = new Node<>(null, null); public LRUCache(int capacity) { this.capacity = capacity; this.map = new ConcurrentHashMap<>(capacity); head.next = tail; tail.prev = head; } private static class Node<K, V> { final K key; volatile V value; //."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "HashMap + doubly-linked list \u2014 the canonical O(1) get/put/evict structure; the map indexes nodes, the list tracks recency order",
+              "Sentinel head/tail nodes \u2014 eliminate null-check branches in addAfterHead and removeNode, making every list operation uniform regardless of list",
+              "ReentrantReadWriteLock trade-off \u2014 safe but serializes reads via moveToHead",
+              "Eviction key stored in Node \u2014 without the key in the node, you cannot remove the evicted entry from the map in O(1), forcing a linear scan of the",
+              "ConcurrentHashMap alone is not enough \u2014 it protects the map, but moveToHead is a compound operation (remove + insert) that requires a separate"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using Collections.synchronizedMap(new LinkedHashMap<>()) \u2014 this serializes every operation including reads, destroying throughput on read-heavy workloads"
+          }
+        ],
+        "cap": "The canonical implementation: Each node in the linked list holds the key, value, and prev/next pointers; the key stored in the node is critical \u2014 when evicting the tail, you need the key to remove.",
+        "familiarity_anchors": [
+          "Combine",
+          "ConcurrentHashMap",
+          "Protect"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Caffeine achieve higher throughput than a synchronized LinkedHashMap?",
+          "How would you add TTL-based expiration to this LRU cache?",
+          "What changes if the cache must support O(1) bulk invalidation by prefix?"
+        ]
+      }
+    },
+    {
+      "id": "sdl-005",
+      "slug": "design-in-memory-kv-store-ttl-java",
+      "question": "Design an in-memory key-value store that supports per-key TTL (time-to-live) expiration in Java.",
+      "title": "Design an In-Memory Key-Value Store with TTL",
+      "direct_answer": "Store entries in a ConcurrentHashMap with each value wrapped in a record holding the data plus an expiration timestamp. Use a combination of lazy expiration (check on read) and active expiration (a ScheduledExecutorService that periodically scans and evicts expired keys) to bound memory usage. This mirrors Redis's dual-expiration strategy.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Expiration strategy trade-offs (lazy vs active vs hybrid), concurrent map operations, and memory management under unbounded writes",
+        "common_mistake": "Only implementing lazy expiration \u2014 expired keys stay in memory until someone reads them, causing unbounded memory growth if keys are write-once-read-never",
+        "to_stand_out": "Explain Redis's probabilistic active expiration (sample 20 keys, delete expired, repeat if >25% expired), discuss DelayQueue-based eager eviction, and mention memory overhead of per-key timers"
+      },
+      "company_tags": [
+        "Redis",
+        "Memcached",
+        "Hazelcast",
+        "Amazon ElastiCache"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The TTL Challenge \u2014 Lazy vs Active Expiration",
+            "content": "Any cache or session store needs key expiration. The naive approach \u2014 a `Timer` per key \u2014 creates one `TimerTask` object per entry, consuming heap proportional to total keys regardless of whether they are accessed. With millions of keys this is untenable.\n\nTwo strategies exist, and production systems use **both**:\n\n1. **Lazy expiration** \u2014 check `expiresAt` on every `get`. Expired? Delete and return null. Cost: zero background work. Risk: write-only keys leak memory forever.\n\n2. **Active expiration** \u2014 a background thread periodically scans a sample of keys and deletes expired ones. Cost: CPU proportional to scan rate. Benefit: memory stays bounded even for write-only keys.\n\nRedis uses a **hybrid**: lazy on every access plus an active loop that samples 20 random keys every 100 ms, evicting expired ones, and repeating immediately if more than 25% of the sample was expired. This self-adjusts CPU usage to expiration pressure."
+          },
+          {
+            "type": "code_example",
+            "title": "KV Store with Hybrid Expiration",
+            "language": "java",
+            "content": "public class TTLKeyValueStore<K, V> {\n\n    private final ConcurrentHashMap<K, Entry<V>> store\n        = new ConcurrentHashMap<>();\n\n    private final ScheduledExecutorService cleaner\n        = Executors.newSingleThreadScheduledExecutor(r -> {\n            Thread t = new Thread(r, \"ttl-cleaner\");\n            t.setDaemon(true);\n            return t;\n        });\n\n    public TTLKeyValueStore() {\n        // Active expiration: sweep every second\n        cleaner.scheduleAtFixedRate(\n            this::expireRandomSample,\n            1, 1, TimeUnit.SECONDS);\n    }\n\n    public void put(K key, V value, long ttlMs) {\n        long expiresAt = System.currentTimeMillis() + ttlMs;\n        store.put(key, new Entry<>(value, expiresAt));\n    }\n\n    public V get(K key) {\n        Entry<V> entry = store.get(key);\n        if (entry == null) return null;\n\n        // Lazy expiration: check on every read\n        if (entry.isExpired()) {\n            store.remove(key, entry);  // atomic: only remove this entry\n            return null;\n        }\n        return entry.value;\n    }\n\n    public boolean delete(K key) {\n        return store.remove(key) != null;\n    }\n\n    public int size() {\n        return store.size(); // includes expired-but-not-yet-evicted\n    }\n\n    // Redis-style probabilistic sweep\n    private void expireRandomSample() {\n        var keys = store.keySet().toArray();\n        if (keys.length == 0) return;\n\n        int sampleSize = Math.min(20, keys.length);\n        int expired = 0;\n        ThreadLocalRandom rng = ThreadLocalRandom.current();\n\n        for (int i = 0; i < sampleSize; i++) {\n            @SuppressWarnings(\"unchecked\")\n            K key = (K) keys[rng.nextInt(keys.length)];\n            Entry<V> entry = store.get(key);\n            if (entry != null && entry.isExpired()) {\n                store.remove(key, entry);\n                expired++;\n            }\n        }\n\n        // If >25% expired, run again immediately\n        if (expired > sampleSize / 4) {\n            expireRandomSample(); // recursive burst\n        }\n    }\n\n    private record Entry<V>(V value, long expiresAt) {\n        boolean isExpired() {\n            return System.currentTimeMillis() >= expiresAt;\n        }\n    }\n}"
+          },
+          {
+            "type": "step",
+            "title": "Thread Safety and the CAS Remove Pattern",
+            "content": "The critical concurrency detail is in `get()`: we call `store.remove(key, entry)` \u2014 the two-argument version that only removes if the current value equals the expected entry. Without this, a race condition arises: Thread A reads an expired entry, Thread B puts a new entry with the same key, Thread A removes Thread B's fresh entry. The two-argument `remove` is a CAS (compare-and-swap) operation that prevents this.\n\n**Alternative: DelayQueue-based eager eviction.** Instead of sampling, insert every key into a `DelayQueue` with its TTL. A consumer thread calls `take()` and evicts exactly when each key expires. Trade-off: O(log n) insert (heap operation) and O(n) memory for the queue entries \u2014 fine for thousands of keys, problematic for millions.\n\n**Time complexity:** `get` and `put` are O(1) \u2014 ConcurrentHashMap operations. The active expiration sweep is O(sampleSize) per invocation, amortized across all keys. **Space:** O(n) for n entries, plus 16 bytes per entry for the `expiresAt` timestamp.\n\nFor production use, consider **max-memory eviction** on top of TTL: when the store reaches a size threshold, evict the oldest entries even if they have not expired. This prevents OOM when clients set very long TTLs on large values."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ConcurrentHashMap` + `ScheduledExecutorService`** \u2014 map stores entries with expiration timestamps.\n- **Lazy expiration on access** \u2014 check `entry.isExpired()` on every `get()`; return null and remove if expired.\n- **Sweeper interval vs sweep cost trade-off** \u2014 sweeping every 100ms adds CPU overhead; every 60 seconds means expired entries linger.\n- **`Instant.now()` vs `System.nanoTime()`** \u2014 use `System.nanoTime()` for TTL calculations (monotonic, immune to clock adjustments).\n- **Entry wrapping, not map inheritance** \u2014 `class Entry<V> { V value; long expiresAt; }` is cleaner than extending `ConcurrentHashMap`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An in-memory key-value store with per-key TTL requires two things working together: O(1) get/put operations and automatic expiration without a timer per key. A timer per key creates one thread or timer object per stored entry \u2014 at 10 million entries, that's 10 million threads, which is clearly wrong.\n\n**The two-layer expiration design:**\n- Store each value wrapped in an `Entry` object that holds the value and the `expiresAt` timestamp; `ConcurrentHashMap` provides the O(1) lookup\n- Lazy expiration on access: every `get` checks `entry.isExpired()` and returns null if expired, removing the entry immediately; this prevents stale values from being returned without waiting for the background sweeper\n- Background sweeper: a `ScheduledExecutorService` iterates the map every 1\u20135 seconds and removes entries where `expiresAt < System.nanoTime()`; this recovers memory from entries that are never accessed after expiration\n\n**Clock choice matters:**\n- Use `System.nanoTime()` for TTL calculations \u2014 it's monotonic and immune to clock adjustments (NTP sync, daylight saving) that can cause `System.currentTimeMillis()` to go backward or jump forward\n- Store the expiration as an absolute nanotime: `expiresAt = System.nanoTime() + ttlNanos`; comparison is a simple long comparison with no date arithmetic\n\n**Thread safety:**\n- `ConcurrentHashMap` handles concurrent get/put/remove safely; the only subtle case is check-then-act on expiration: two threads both see an expired entry and both try to remove it; `ConcurrentHashMap.remove(key, value)` (conditional remove) handles this atomically\n\nI recommend `System.nanoTime()` for TTL tracking, lazy expiration on every access, and a 1-second background sweeper as the baseline; Caffeine with `expireAfterWrite` is the production implementation that handles all these details correctly with much lower overhead."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Redis implement its active expiration cycle internally?",
+        "What is a timing wheel and when would you use it over a DelayQueue?",
+        "How would you add max-memory eviction (LRU or LFU) alongside TTL?"
+      ],
+      "seo": {
+        "metaTitle": "In-Memory Key-Value Store TTL Java \u2014 LLD Interview Guide",
+        "metaDescription": "Design an in-memory key-value store with per-key TTL in Java. Hybrid lazy and active expiration, CAS remove pattern, Redis-style sampling, and ConcurrentHashMap."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "An in-memory key-value store with per-key TTL requires two things working together: O(1) get/put operations and automatic expiration without a timer per key.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Any cache or session store needs key expiration. The naive approach \u2014 a Timer per key \u2014 creates one TimerTask object per entry, consuming heap proportional to total keys regardless of whether they are accessed. With millions of keys this is untenable. Two strategies exist, and production systems use both: 1. Lazy expiration \u2014 check expiresAt on every get. Expired? Delete and return null. Cost: zero background work. Risk: write-only keys leak memory forever. 2. Active expiration \u2014 a background thread periodically scans a sample of keys and deletes expired ones. Cost: CPU proportional to scan rate. Benefit: memory stays bounded even for write-only keys. Redis uses a hybrid: lazy on every access plus an active loop that samples 20."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Any cache or session store needs key expiration. The naive approach \u2014 a Timer per key \u2014 creates one TimerTask object per entry, consuming heap proportional to total keys regardless of whether they are accessed. With millions of keys this is untenable. Two strategies exist, and production systems use both: 1. Lazy expiration \u2014 check expiresAt on every get. Expired? Delete and return null. Cost: zero background work. Risk: write-only keys leak memory forever. 2. Active expiration \u2014 a background thread periodically scans a sample of keys and deletes expired ones. Cost: CPU proportional to scan rate. Benefit: memory stays bounded even for write-only keys. Redis uses a hybrid: lazy."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "The critical concurrency detail is in get(): we call store",
+              "remove(key, entry) \u2014 the two-argument version that only removes if the current value equals the expected entry",
+              "Without this, a race condition arises: Thread A reads an expired entry, Thread B puts a new entry with the same key, Thread A removes Thread B's fresh entry",
+              "The two-argument remove is a CAS (compare-and-swap) operation that prevents this",
+              "Alternative: DelayQueue-based eager eviction"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Any cache or session store needs key expiration. The naive approach \u2014 a Timer per key \u2014 creates one TimerTask object per entry, consuming heap proportional to total keys regardless of whether they are accessed. With millions of keys this is untenable. Two strategies exist, and production systems use both: 1. Lazy expiration \u2014 check expiresAt on every get. Expired? Delete and return null. Cost: zero background work. Risk: write-only keys leak memory forever. 2. Active expiration \u2014 a background thread periodically scans a sample of keys and deletes expired ones. Cost: CPU proportional to scan rate. Benefit: memory stays bounded even for write-only keys. Redis uses a hybrid: lazy on every access plus an active loop that samples 20."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Any cache or session store needs key expiration. The naive approach \u2014 a Timer per key \u2014 creates one TimerTask object per entry, consuming heap proportional to total keys regardless of whether they are accessed. With millions of keys this is untenable. Two strategies exist, and production systems use both: 1. Lazy expiration \u2014 check expiresAt on every get. Expired? Delete and return null. Cost: zero background work. Risk: write-only keys leak memory forever. 2. Active expiration \u2014 a background thread periodically scans a sample of keys and deletes expired ones. Cost: CPU proportional to scan rate. Benefit: memory stays bounded even for write-only keys. Redis uses a hybrid: lazy on every access plus an active loop that samples 20."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Only implementing lazy expiration \u2014 expired keys stay in memory until someone reads them, causing unbounded memory growth if keys are write-once-read-never"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "ConcurrentHashMap + ScheduledExecutorService \u2014 map stores entries with expiration timestamps. Lazy expiration on access \u2014 check entry.isExpired() on every get(); return null and remove if expired. Sweeper interval vs sweep cost trade-off \u2014 sweeping every 100ms adds CPU overhead; every 60 seconds means expired entries linger. Instant.now() vs System.nanoTime() \u2014 use System.nanoTime() for TTL calculations (monotonic, immune to clock adjustments). Entry wrapping, not map inheritance \u2014 class Entry<V> { V value; long expiresAt; } is cleaner than extending ConcurrentHashMap."
+          }
+        ],
+        "cap": "The two-layer expiration design: Store each value wrapped in an Entry object that holds the value and the expiresAt timestamp; ConcurrentHashMap provides the O(1) lookup Lazy expiration on access: eve",
+        "familiarity_anchors": [
+          "Store",
+          "ConcurrentHashMap",
+          "ScheduledExecutorService"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Redis implement its active expiration cycle internally?",
+          "What is a timing wheel and when would you use it over a DelayQueue?",
+          "How would you add max-memory eviction (LRU or LFU) alongside TTL?"
+        ]
+      }
+    }
+  ]
+}

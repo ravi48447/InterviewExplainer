@@ -1,0 +1,239 @@
+{
+  "topic": "Config Management",
+  "topicSlug": "config-management",
+  "questions": [
+    {
+      "id": "scc-002",
+      "slug": "spring-cloud-config-server-centralized-configuration",
+      "question": "How does Spring Cloud Config Server work and how do you set up centralized configuration?",
+      "title": "Spring Cloud Config Server: Centralized Configuration",
+      "direct_answer": "Spring Cloud Config Server serves application configuration from a Git repository (or filesystem/Vault) over HTTP. Clients fetch their properties on startup using /APP/PROFILE/LABEL. Config data is decoupled from the deployable artifact, and properties can be refreshed at runtime using Spring Cloud Bus without restarting services.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you understand the server/client architecture, how profile and label resolution works, and how you handle secret management \u2014 not storing passwords in plaintext in Git",
+        "common_mistake": "Storing unencrypted secrets (database passwords, API keys) in the Git config repository \u2014 Config Server provides encryption via JCE or delegating to HashiCorp Vault",
+        "to_stand_out": "Explain the {application}-{profile}.yml resolution order, describe how to use {cipher} prefixes for encrypted values, discuss using Vault as a backend for secrets and Git for non-sensitive config, and mention Config Server HA patterns (multiple instances, native filesystem as fallback)"
+      },
+      "company_tags": [
+        "pivotal",
+        "red-hat",
+        "intuit",
+        "zalando",
+        "klarna"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Config Server Centralizes Twelve Config Files Into One Git Repo \u2014 But It Also Creates a New Single Point of Failure Every Team Hits",
+            "content": "In a microservices fleet of twelve services, you have twelve separate `application.yml` files. When a database URL changes, you update twelve files, rebuild twelve JARs, and deploy twelve times. When production and staging drift \u2014 someone hotfixed the prod config directly without updating staging \u2014 you spend an afternoon debugging a difference that shouldn't exist.\n\n**Spring Cloud Config Server centralizes all configuration in a Git repository** and serves it to services over HTTP at startup. No config files bundled in the artifact. A URL change propagates to all services on their next restart, or immediately via a refresh endpoint. Every environment gets the right config automatically because environment is a parameter, not a separately-maintained file per service.\n\nThe trade-off announces itself the first time Config Server goes down during a production deployment: **every service that tries to start fails.** Config Server is a hard dependency during bootstrap \u2014 before the Spring `ApplicationContext` is even created, the client must fetch its configuration. If the server is unreachable, the client throws an `IllegalStateException` and halts. This surprises teams that treated Config Server as just another service \u2014 it's actually more critical than most, because without it, nothing else can start.\n\nUnderstanding Config Server means understanding two things equally: how the file resolution order determines which properties win, and how to make Config Server resilient enough that it's never the reason a production deploy fails."
+          },
+          {
+            "type": "step",
+            "title": "Server Setup and the File Resolution Order That Most Developers Get Backwards",
+            "content": "The Config Server is a Spring Boot application with two changes: `@EnableConfigServer` on the main class and a Git URI pointing to the config repository. Clients add `spring-cloud-starter-config` and set `spring.config.import=configserver:http://config-server:8888`.\n\nWhen `order-service` with profile `prod` connects, the server resolves properties from four sources in increasing precedence:\n\n1. `application.yml` \u2014 shared defaults, lowest priority\n2. `application-prod.yml` \u2014 shared production overrides\n3. `order-service.yml` \u2014 service-specific defaults\n4. `order-service-prod.yml` \u2014 service + environment overrides, highest priority\n\nThe counterintuitive rule: **application-name-specific files always beat application-wide files, regardless of profile.** `order-service.yml` wins over `application-prod.yml`. If your team puts shared production configuration in `application-prod.yml` expecting it to apply uniformly, but `order-service.yml` defines the same property, the service-specific value silently wins.\n\nThe **label** parameter (default: `main`) maps to a Git branch. Clients can set `spring.cloud.config.label=release/2025-Q2` to pull configuration from a release branch \u2014 enabling safe config deploys: update the branch, test against staging, then merge to main. This decouples config releases from code releases entirely.\n\nThe Git repo layout should mirror the precedence hierarchy. A flat repo with `application.yml`, `order-service.yml`, and `order-service-prod.yml` is easier to navigate than subdirectories, and Config Server's `search-paths` can accommodate both structures."
+          },
+          {
+            "type": "step",
+            "title": "When Config Server Goes Down, Services Can't Start \u2014 Three Mitigations Ranked by Reliability",
+            "content": "The default `spring.cloud.config.fail-fast=true` makes Config Server connectivity a hard requirement. If the server is unreachable at startup, the service dies immediately. This is intentional \u2014 starting with incomplete or missing configuration is often worse than not starting at all. But it means Config Server availability is as critical as your database.\n\n**Mitigation 1 \u2014 Retry with backoff (recommended always):** Adding `spring-retry` and `spring-boot-starter-aop` to the client classpath enables retry behavior automatically when `fail-fast=true`. Configure it in `bootstrap.yml`:\n\n```yaml\nspring:\n  cloud:\n    config:\n      fail-fast: true\n      retry:\n        initial-interval: 1000   # start at 1 second\n        max-attempts: 6          # try 6 times before giving up\n        multiplier: 1.5          # exponential backoff\n```\n\nA brief Config Server restart or network blip no longer kills the deployment. The service retries with backoff and usually succeeds within the first few attempts.\n\n**Mitigation 2 \u2014 Multiple Config Server instances:** Config Server is stateless \u2014 all state lives in the Git repo. Running two instances behind a load balancer (or registered in Eureka) means the client retries against healthy instances. This is the HA pattern for production and should be the default for any system where startup reliability matters.\n\n**Mitigation 3 \u2014 Optional import (development only):** `spring.config.import=optional:configserver:http://config-server:8888` lets the service start with local classpath properties when the server is unreachable. This eliminates developer friction when running locally without a Config Server. Remove `optional:` in production \u2014 a service starting with stale local properties in production is an incident waiting to happen."
+          },
+          {
+            "type": "step",
+            "title": "Secrets Don't Belong in Git \u2014 {cipher} Encryption for Basic Needs, Vault for Production",
+            "content": "The most common mistake: storing database passwords and API keys in the Git config repo in plaintext. Anyone with read access to the repo \u2014 including every developer, CI system, and contractor \u2014 has production credentials. This is a security incident in slow motion.\n\nConfig Server's `{cipher}` prefix provides encryption at rest. The server encrypts values using a symmetric key (`ENCRYPT_KEY` environment variable) and decrypts before serving to clients. Clients receive plaintext \u2014 no changes needed on the client side.\n\n```yaml\n# In the Git repo \u2014 order-service-prod.yml\nspring:\n  datasource:\n    url: jdbc:postgresql://prod-db:5432/orders\n    password: '{cipher}AQBd7FmKpL3Rt9xQvN2Yz8wW...'  # encrypted value\n```\n\nThe encryption key lives in the Config Server's environment, never in Git. This protects against repo exposure \u2014 someone cloning the config repo gets encrypted values they can't use without the key.\n\nThe limitation: **rotating the encryption key requires re-encrypting every encrypted value in the repository.** For a small number of secrets, manageable. For a large fleet with many secrets, operationally painful.\n\n**HashiCorp Vault is the production answer.** Spring Cloud Config has a Vault backend activated with `spring.profiles.active=vault`. Secrets live in Vault with proper ACL policies, audit logging, and key rotation. Non-sensitive config (timeouts, feature flags, service URLs) stays in Git. Sensitive values (database credentials, API keys, TLS certificates) live in Vault.\n\nBoth backends can run simultaneously \u2014 Git for config, Vault for secrets, both served through the same Config Server HTTP endpoint. Services don't know which backend provided which property. This split is the production pattern worth mentioning in interviews."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Cloud Config centralizes configuration in a Git repository and serves it to services at startup. Instead of managing config files across every service, you maintain one Git repo.\n\nServices bootstrap by contacting the Config Server, which resolves properties by **application name, profile, and Git branch.** `order-service` with profile `prod` gets `order-service-prod.yml`.\n\nThe trade-off: **Config Server is a single point of failure.** If it's down, services can't start. Run multiple instances behind a load balancer and enable client retry.\n\nConfig changes in Git don't auto-propagate. **`@RefreshScope`** recreates beans on `/actuator/refresh`. For many instances, **Spring Cloud Bus** broadcasts refresh events via RabbitMQ or Kafka.\n\nSensitive properties can be encrypted in Git with `{cipher}` prefix \u2014 the Config Server decrypts before serving to clients.\n\nIn practice, Config Server works well for non-secret configuration. For secrets, pair it with HashiCorp Vault or a cloud secret manager."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Config Server resolves properties by application name, profile, and label** \u2014 `order-service-prod.yml` is served when `order-service` requests profile `prod`; label maps to Git branch.\n- **Config Server is a single point of failure** \u2014 if down during startup, services fail to load configuration; run multiple instances behind a load balancer and enable client retry.\n- **@RefreshScope recreates beans without restart** \u2014 a POST to `/actuator/refresh` re-reads config from the server; only beans annotated with `@RefreshScope` are recreated.\n- **Spring Cloud Bus broadcasts refresh events via message broker** \u2014 one POST to `/actuator/busrefresh` triggers all connected instances to refresh; requires RabbitMQ or Kafka.\n- **{cipher} prefix encrypts sensitive properties in Git** \u2014 Config Server decrypts before serving to clients; encryption key must be stored outside the repository in an environment variable."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you trigger a live configuration refresh without restarting services?",
+        "What happens if the Config Server is unreachable when a service starts?",
+        "How would you manage environment-specific secrets securely with Spring Cloud Config?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Cloud Config Server Centralized Configuration | Java Intermediate Interview | InterviewExplainer",
+        "metaDescription": "Spring Cloud Config Server setup, Git repo layout, property resolution order, secret encryption, and Vault integration \u2014 Java intermediate interview guide."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Spring Cloud Config centralizes configuration in a Git repository and serves it to services at startup.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "In a microservices fleet of twelve services, you have twelve separate application.yml files. When a database URL changes, you update twelve files, rebuild twelve JARs, and deploy twelve times. When production and staging drift \u2014 someone hotfixed the prod config directly without updating staging \u2014 you spend an afternoon debugging a difference that shouldn't exist. Spring Cloud Config Server centralizes all configuration in a Git repository and serves it to services over HTTP at startup. No config files bundled in the artifact. A URL change propagates to all services on."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The Config Server is a Spring Boot application with two changes: @EnableConfigServer on the main class and a Git URI pointing to the config repository.",
+              "Clients add spring-cloud-starter-config and set spring.config.import=configserver:http://config-server:8888.",
+              "When order-service with profile prod connects, the server resolves properties from four sources in increasing precedence: 1.",
+              "application.yml \u2014 shared defaults, lowest priority 2.",
+              "application-prod.yml \u2014 shared production overrides 3.",
+              "order-service.yml \u2014 service-specific defaults 4."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Config Server resolves properties by application name, profile, and label \u2014 order-service-prod",
+              "yml is served when order-service requests profile prod; label maps to Git branch",
+              "Config Server is a single point of failure \u2014 if down during startup, services fail to load configuration; run multiple instances behind a load balancer and enable client retry",
+              "@RefreshScope recreates beans without restart \u2014 a POST to /actuator/refresh re-reads config from the server; only beans annotated with @RefreshScope are recreated",
+              "Spring Cloud Bus broadcasts refresh events via message broker \u2014 one POST to /actuator/busrefresh triggers all connected instances to refresh; requires RabbitMQ or Kafka"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Storing unencrypted secrets (database passwords, API keys) in the Git config repository \u2014 Config Server provides encryption via JCE or delegating to HashiCorp Vault"
+          }
+        ],
+        "cap": "For secrets, pair it with HashiCorp Vault or a cloud secret manager.",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Config"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you trigger a live configuration refresh without restarting services?",
+          "What happens if the Config Server is unreachable when a service starts?",
+          "How would you manage environment-specific secrets securely with Spring Cloud Config?"
+        ]
+      }
+    },
+    {
+      "id": "scc-012",
+      "slug": "spring-cloud-config-profiles-environment-specific-configuration",
+      "question": "How do you manage environment-specific configuration with Spring profiles in Spring Cloud Config?",
+      "title": "Config Profiles and Environment-Specific Configuration",
+      "direct_answer": "Spring profiles drive environment-specific configuration in Spring Cloud Config: the active profile (dev, staging, prod) determines which files the Config Server serves to a client. File resolution is hierarchical \u2014 application.yml sets shared defaults, {app}-{profile}.yml overrides for specific environments. Secret values are encrypted in Git or delegated to Vault.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you can design a configuration structure that avoids duplication (DRY), is safe for production (no plaintext secrets in Git), and supports multiple environments without requiring code changes",
+        "common_mistake": "Putting environment-specific properties inside the application code as @Profile @Configuration classes \u2014 this couples environment differences to the deployable artifact and means rebuilding to change a config value",
+        "to_stand_out": "Describe using Spring Boot Actuator's /actuator/env endpoint to verify which configuration values are active at runtime, explain the Config Server's property override feature (spring.cloud.config.server.overrides) for emergency values, and discuss using CI/CD to trigger git commits to the config repo as part of a deployment pipeline"
+      },
+      "company_tags": [
+        "pivotal",
+        "ibm-cloud",
+        "sap",
+        "intuit",
+        "klarna"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "easy",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Profile-Specific Config Has a Resolution Order That Silently Violates Most Developers' Expectations",
+            "content": "The most common mistake in Spring profile configuration is not misusing the files \u2014 it's coupling environment differences to the compiled artifact. A `@Configuration` class annotated with `@Profile(\"prod\")` that hardcodes a database pool size or a feature flag means: to change that value in production, you modify Java code, rebuild the JAR, run your CI pipeline, and redeploy. Configuration that should be injectable at runtime is baked into the artifact.\n\nSpring Cloud Config moves environment differences entirely out of code and into Git files. Change a production config value, commit to the repo, trigger a refresh \u2014 no rebuild, no redeployment. This is the 12-factor app principle applied to configuration.\n\nBut there's a counterintuitive precedence rule that trips up experienced developers. Most people assume a profile-specific file like `application-prod.yml` (shared, production-scoped) overrides a service-specific file like `order-service.yml`. It does not. **Application-name-specific files always override application-wide files, regardless of profile.** The precedence order, from lowest to highest:\n\n1. `application.yml` \u2014 shared defaults, lowest priority\n2. `application-{profile}.yml` \u2014 shared environment overrides\n3. `{appname}.yml` \u2014 service-specific defaults\n4. `{appname}-{profile}.yml` \u2014 service + environment overrides, highest priority\n\nA property in `application-prod.yml` expecting to apply uniformly in production is silently overridden by the same property in `order-service.yml`. If your team maintains shared production configuration in `application-prod.yml` without knowing this, the effective configuration is not what anyone intended."
+          },
+          {
+            "type": "step",
+            "title": "Designing the Config Hierarchy \u2014 What Goes at Each Level and Why Secrets Never Belong in Git",
+            "content": "The three-level pattern that keeps configuration maintainable across many services and environments:\n\n**Level 1 \u2014 `application.yml`:** shared infrastructure defaults. Logging format and pattern, actuator endpoint exposure, Spring Security base configuration, default HTTP client timeouts. If a value is identical across every service in every environment, it lives here \u2014 defined once, inherited everywhere.\n\n**Level 2 \u2014 `{appname}.yml`:** service identity and non-sensitive defaults. The service's database schema name (not credentials), default thread pool sizes, Feign client connection settings, feature flags that are off everywhere but prod. Anything service-specific but environment-neutral.\n\n**Level 3 \u2014 `{appname}-{profile}.yml`:** environment-specific overrides. Database hostname for prod (not the password), the external payment API endpoint for staging, feature flags that differ between dev and prod, region-specific configuration.\n\nThis layering means most properties are defined once. The only values duplicated across environments are the ones that genuinely differ \u2014 a small set. Configuration drift between environments is minimized because the shared layers are shared, not copied.\n\n**Secrets never belong in any of these files** \u2014 not even with `{cipher}` encryption. The `{cipher}` mechanism protects secrets at rest in Git but makes key rotation painful: changing the encryption key requires re-encrypting every encrypted value in the repository. For a small number of secrets, manageable once; painful at scale.\n\nUse **Spring Cloud Vault** or a cloud secret manager (AWS Secrets Manager, GCP Secret Manager) for credentials and API keys. Store only non-sensitive, environment-specific values in profile-specific Git files. Vault serves secrets through the same Config Server HTTP endpoint \u2014 services don't know which backend provided which property."
+          },
+          {
+            "type": "step",
+            "title": "Profile Activation, Git Branch Labels, and Verifying What's Actually Active at Runtime",
+            "content": "Services activate profiles via environment variable: `SPRING_PROFILES_ACTIVE=prod`. Never hardcode the active profile in `application.yml` \u2014 that defeats the purpose of external configuration. The profile must come from the deployment environment, set by the orchestration platform (Kubernetes environment variable, ECS task definition, Helm values).\n\n**Multiple profiles stack additively.** `SPRING_PROFILES_ACTIVE=prod,featureX` loads `{appname}-prod.yml` and `{appname}-featureX.yml`. The last profile wins on conflicts. This enables **feature flag profiles** \u2014 activate `featureX` on a specific deployment without affecting other environments or services. Deactivating a feature means removing it from the profile list in the deployment configuration, with no code change.\n\nThe **label** parameter (defaulting to `main`) maps to a Git branch. Setting `spring.cloud.config.label=release/2025-Q2` points all clients at a release branch for testing configuration changes before they merge. Your CI/CD pipeline can commit to the config repo as part of a deployment pipeline \u2014 config changes become versioned, reviewable pull requests with the same rigor as code changes.\n\n**Runtime verification** is the to_stand_out operational practice. After deploying, `GET /actuator/env` returns every active property source and the effective value for every property. You can see exactly which file provided each value and whether the expected environment-specific override took effect. `GET /actuator/env/spring.datasource.url` shows the full source chain for a single property \u2014 which file defined it, whether it was overridden, and what the final value is. This eliminates the manual config audit that consumes hours during incident response: \"Is production actually using the right database URL?\""
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Cloud Config resolves properties in a specific order that most developers get wrong. **App-specific files always beat application-wide files.** `order-service.yml` overrides `application-prod.yml`. Only `order-service-prod.yml` overrides `order-service.yml`.\n\nThe pattern: shared defaults in `application.yml`, service-specific overrides in `{appname}.yml`, environment-specific values in `{appname}-{profile}.yml`.\n\nMultiple profiles can be active simultaneously \u2014 `prod,ssl` loads both. Last profile wins on conflicts.\n\nLabels map to Git branches \u2014 test config changes on a branch before merging.\n\n**Never store secrets in profile-specific config files in Git** \u2014 use Vault or cloud secret managers. Store only non-sensitive values like hostnames and feature flags.\n\nFor local development, `spring.config.import=optional:configserver:` makes the Config Server optional \u2014 the app starts with local properties if the server is down.\n\nIn practice, I use three levels: shared defaults, app-specific config, and environment-specific overrides, with secrets always in Vault."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **App-specific files override application-wide files regardless of profile** \u2014 `order-service.yml` beats `application-prod.yml`; only `order-service-prod.yml` overrides `order-service.yml`; most developers assume profile wins over app name.\n- **Multiple active profiles load additively with last-profile-wins precedence** \u2014 `spring.profiles.active=prod,ssl` loads both `{appname}-prod.yml` and `{appname}-ssl.yml`; the `ssl` profile overrides `prod` on conflicts.\n- **Labels map to Git branches for config versioning** \u2014 test configuration changes on a feature branch before merging to the main config; `spring.cloud.config.label=release/v2.1`.\n- **optional:configserver: prevents startup failures when Config Server is down** \u2014 the application falls back to local properties for development; without `optional:`, the app fails to start if the server is unreachable.\n- **Never store secrets in profile-specific config files** \u2014 even with `{cipher}` encryption, key rotation is complex; use Spring Cloud Vault or cloud secret managers for credentials and API keys."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the order of precedence when the same property is defined in multiple Spring profile configuration files?",
+        "How do you prevent accidental deployment of development configuration to production?",
+        "How would you handle rotating a database password stored in Spring Cloud Config without downtime?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Cloud Config Profiles Environment Configuration | Java Intermediate Interview | InterviewExplainer",
+        "metaDescription": "Spring Cloud Config with profiles \u2014 file resolution hierarchy, environment-specific YAML, encrypted secrets, profile activation, and Actuator verification for Java."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Spring Cloud Config resolves properties in a specific order that most developers get wrong.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The most common mistake in Spring profile configuration is not misusing the files \u2014 it's coupling environment differences to the compiled artifact. A @Configuration class annotated with @Profile(\"prod\") that hardcodes a database pool size or a feature flag means: to change that value in production, you modify Java code, rebuild the JAR, run your CI pipeline, and redeploy. Configuration that should be injectable at runtime is baked into the artifact. Spring Cloud Config moves environment differences entirely out of code and into Git files. Change a production config value, commit."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The three-level pattern that keeps configuration maintainable across many services and environments: Level 1 \u2014 application.yml: shared infrastructure defaults.",
+              "Logging format and pattern, actuator endpoint exposure, Spring Security base configuration, default HTTP client timeouts.",
+              "If a value is identical across every service in every environment, it lives here \u2014 defined once, inherited everywhere.",
+              "Level 2 \u2014 {appname}.yml: service identity and non-sensitive defaults.",
+              "The service's database schema name (not credentials), default thread pool sizes, Feign client connection settings, feature flags that are off everywhere but prod.",
+              "Anything service-specific but environment-neutral."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "App-specific files override application-wide files regardless of profile \u2014 order-service",
+              "yml beats application-prod",
+              "yml; only order-service-prod",
+              "yml overrides order-service",
+              "yml; most developers assume profile wins over app name"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Putting environment-specific properties inside the application code as @Profile @Configuration classes \u2014 this couples environment differences to the deployable artifact and means rebuilding to change a config value"
+          }
+        ],
+        "cap": "In practice, I use three levels: shared defaults, app-specific config, and environment-specific overrides, with secrets always in Vault.",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Config"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the order of precedence when the same property is defined in multiple Spring profile configuration files?",
+          "How do you prevent accidental deployment of development configuration to production?",
+          "How would you handle rotating a database password stored in Spring Cloud Config without downtime?"
+        ]
+      }
+    }
+  ]
+}

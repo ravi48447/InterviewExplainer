@@ -1,0 +1,73 @@
+{
+  "topic": "Connection Pooling",
+  "topicSlug": "connection-pooling",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "database",
+  "questions": [
+    {
+      "id": "hikaricp-configuration",
+      "title": "HikariCP and Connection Pool Tuning",
+      "slug": "hikaricp-configuration",
+      "question": "How does connection pooling work and how do you configure HikariCP in Spring Boot?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Pool keeps connections warm \u2014 avoids TCP handshake + auth on every query**\n- **HikariCP: default pool in Spring Boot \u2014 fastest Java pool**\n- **`maximumPoolSize`: key setting \u2014 rule of thumb: num_cores \u00d7 2 + num_disk_spindles**\n- **`connectionTimeout`: how long to wait for pool to give you a connection**\n- **`idleTimeout`, `maxLifetime`: evict stale/old connections**\n- **Under-sizing causes connection wait; over-sizing overwhelms DB (context switching)**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Connection pooling pre-establishes a set of database connections that application threads reuse. Without a pool, every query would require a TCP handshake, authentication, and session setup \u2014 typically 20-50ms of overhead per query. With a pool, a thread acquires an existing connection in microseconds.\n\nHikariCP is Spring Boot's default pool and is widely considered the fastest JVM connection pool. The most important setting is `maximumPoolSize`. A common mistake is setting it very large \u2014 say 200 \u2014 thinking more connections means more throughput. The opposite is often true: too many connections cause the database to spend CPU on context switching between sessions rather than executing queries. A commonly cited formula is (CPU cores \u00d7 2) + number of disk spindles, which for a 4-core server with SSDs gives about 9 connections.\n\n`connectionTimeout` controls how long a thread waits if the pool is exhausted. If this is too short and your pool is undersized, you'll get `SQLTransientConnectionException` under load."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## HikariCP Configuration in Spring Boot\n\n```yaml\n# application.yml\nspring:\n  datasource:\n    url: jdbc:postgresql://localhost:5432/mydb\n    username: myuser\n    password: mypassword\n    hikari:\n      # === CORE SETTINGS ===\n      maximum-pool-size: 10       # Max connections in pool\n                                   # Rule: (cores \u00d7 2) + disk spindles\n                                   # 4 cores + SSD \u2192 9-10\n      minimum-idle: 5             # Keep 5 connections warm at all times\n                                   # Set = maximumPoolSize to disable idle eviction\n\n      # === TIMEOUT SETTINGS ===\n      connection-timeout: 30000   # 30s: max wait for a connection from pool\n                                   # Throws exception if no connection available\n      idle-timeout: 600000        # 10min: evict connections idle longer than this\n      max-lifetime: 1800000       # 30min: replace connections older than this\n                                   # Set < DB's wait_timeout (MySQL) or\n                                   # tcp_keepalives (PostgreSQL)\n      keepalive-time: 30000       # 30s: send keepalive ping to prevent timeout\n\n      # === HEALTH SETTINGS ===\n      validation-timeout: 5000    # 5s: timeout for connection validation query\n      connection-test-query: \"SELECT 1\"  # Test query (auto-detected for most DBs)\n\n      # === METADATA ===\n      pool-name: MainPool         # Name for JMX/logging\n      register-mbeans: true       # Enable JMX monitoring\n```\n\n## Pool Sizing \u2014 The Formula\n\n```\nPGBouncer (PostgreSQL team) recommendation:\n  pool_size = num_cores \u00d7 2 + effective_io_concurrency\n\nFor a 4-core server with SSD (io_concurrency=1):\n  pool_size = 4 \u00d7 2 + 1 = 9 \u2192 use 10\n\nFor a 8-core server with SSD:\n  pool_size = 8 \u00d7 2 + 1 = 17 \u2192 use 20\n\nIntuition:\n  When a thread is waiting on I/O (disk read, network), the CPU is free.\n  \u00d7 2 accounts for the CPU being useful while I/O completes.\n  Beyond ~2\u00d7 cores, you hit diminishing returns then throughput DROPS.\n\n  Experiment: measure throughput with pool_size = 5, 10, 20, 50, 100.\n  You'll often find 10 outperforms 100 because less DB context switching.\n\nMULTIPLE APP INSTANCES:\n  If you run 10 instances of your app, each with pool_size=10:\n  \u2192 100 connections to DB\n  \u2192 DB sees 100 concurrent connections\n  \u2192 Configure DB's max_connections accordingly\n  \u2192 Use PgBouncer as connection proxy if needed (pool at DB level)\n```\n\n## Connection Lifecycle\n\n```java\n// What happens internally when you call:\n@Transactional\npublic Order createOrder(CreateOrderRequest request) {\n    // 1. Transaction starts \u2192 HikariCP provides connection from pool\n    //    (microseconds if connection available, up to connectionTimeout if pool exhausted)\n\n    Order order = orderRepository.save(buildOrder(request));\n    // 2. SQL executed on the borrowed connection\n\n    return order;\n    // 3. Transaction commits \u2192 connection RETURNED to pool (not closed)\n    //    Pool resets connection state (auto-commit, isolation level, etc.)\n    //    Connection is ready for next borrower\n}\n// Actual TCP connection to DB stays open and is reused\n// No TCP handshake, no auth \u2014 just execute SQL directly\n\n// If pool is exhausted:\n// Thread 100 requests connection \u2192 pool has 0 available \u2192 waits up to 30s\n// If no connection freed within 30s \u2192 SQLTransientConnectionException thrown\n// Solution: increase pool size OR find query taking too long (holding connection)\n```\n\n## Monitoring Connection Pool Health\n\n```java\n// Via Spring Boot Actuator:\n// GET /actuator/metrics/hikaricp.connections.active\n// GET /actuator/metrics/hikaricp.connections.idle\n// GET /actuator/metrics/hikaricp.connections.pending  \u2190 critical metric!\n// GET /actuator/metrics/hikaricp.connections.timeout  \u2190 alert if > 0\n\n// Prometheus metrics (if micrometer-registry-prometheus added):\n// hikaricp_connections_active\n// hikaricp_connections_idle\n// hikaricp_connections_pending  \u2190 Alert: threads waiting for connection\n// hikaricp_connections_timeout_total  \u2190 Alert: connections timed out\n// hikaricp_connection_acquire_seconds  \u2190 How long to get connection\n\n// Set up alerts:\n//   pending > 0 for > 30s \u2192 pool undersized or slow queries holding connections\n//   timeout_total increases \u2192 immediate action needed\n\n// JMX monitoring (if register-mbeans: true):\n// Connect VisualVM or JConsole to see pool stats in real time\n```\n\n## Common Pool Exhaustion Scenarios\n\n```\nSCENARIO 1: Slow query holding connection\n  Thread A acquires connection \u2192 runs 30-second report query\n  30 threads \u00d7 30-second queries = pool exhausted for 30 seconds\n  FIX: Add query timeout; run reports via dedicated read replica\n\nSCENARIO 2: Connection leak\n  Code acquires connection but throws before returning it\n  FIX: Use try-with-resources / @Transactional / Spring template\n  DETECT: leak-detection-threshold: 2000  # Warn if connection held > 2s\n\nSCENARIO 3: N+1 queries in loop\n  for (Order o : orders) { o.getUser().getName(); }\n  100 orders \u00d7 1 user query = 100 connections needed simultaneously\n  FIX: Eager fetch or JOIN FETCH\n\nSCENARIO 4: Undersized pool for traffic spike\n  Normal load: 3 concurrent queries \u2192 pool-size=5 is fine\n  Traffic spike: 50 concurrent queries \u2192 45 threads waiting\n  FIX: Increase pool-size, add connection queue monitoring\n```\n\n## Production Reality\n\nStart with `maximum-pool-size: 10` and monitor. Set `leak-detection-threshold: 2000` in production \u2014 any connection held for more than 2 seconds is likely a leak or slow query worth investigating. Configure `max-lifetime` to be less than your database's connection timeout setting to avoid getting dead connections from the pool. For PostgreSQL, the default `tcp_keepalives_idle` is 2 hours \u2014 set `max-lifetime` to 1800000ms (30 minutes) to stay well under that."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Connection pooling pre-establishes a set of database connections that application threads reuse.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "If this is too short and your pool is undersized, you'll get SQLTransientConnectionException under load.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

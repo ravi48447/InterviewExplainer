@@ -1,0 +1,291 @@
+{
+  "topic": "Caching",
+  "topicSlug": "caching",
+  "questions": [
+    {
+      "id": "hib-002",
+      "slug": "hibernate-caching-l1-l2-query-cache",
+      "question": "Explain Hibernate's three-level caching strategy: first-level cache, second-level cache, and query cache.",
+      "title": "Hibernate Caching — L1, L2, and Query Cache",
+      "direct_answer": "Hibernate has **three cache layers**. **L1** is the persistence context — always on, scoped to a single `EntityManager`/transaction, and lookups are by `(type, id)`. **L2** is `SessionFactory`-scoped, shared across sessions, **opt-in**, and requires a provider (Ehcache, Caffeine, Hazelcast, Infinispan). The **query cache** stores the **ID list** for a JPQL/criteria query and only pays off when L2 is enabled. The lookup chain is `L1 -> L2 -> database`, with the query cache adding `query-cache -> L2 -> database`. Misunderstanding scope, invalidation, or bulk-DML interaction is the most common source of stale-data bugs in Hibernate apps.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Awareness of cache scoping, eviction semantics, and the risk of serving stale data in concurrent and multi-instance environments",
+        "common_mistake": "Assuming the second-level cache is enabled by default, that it auto-syncs with the database, or that bulk JPQL updates evict it",
+        "to_stand_out": "Discuss cache region tuning, concurrency strategies (READ_ONLY vs READ_WRITE), distributed providers, and when a service-layer Redis cache beats Hibernate L2"
+      },
+      "company_tags": [
+        "high-traffic",
+        "fintech",
+        "e-commerce",
+        "saas",
+        "Hibernate",
+        "Hazelcast"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Caches, Three Scopes — and Only One Is on by Default",
+            "content": "**L1 cache** is the persistence context itself. It is always enabled, scoped to a single `EntityManager`, and a `find(User.class, 42)` repeated inside the same transaction returns the same Java object without a second SQL.\n\n**L2 cache** is `SessionFactory`-scoped and shared across sessions.\n- Enabling it requires a provider — Ehcache, Caffeine, Hazelcast, or Infinispan — plus `@Cache(usage = ...)` on each entity you want cached.\n- L2 is **disabled by default**, and the most common production bug is enabling it without understanding invalidation: any write that bypasses Hibernate (raw SQL, another app, replication) leaves L2 stale until TTL expiry or manual eviction.\n\nThe **query cache** stores the **IDs returned by a JPQL/HQL query**, keyed by query text plus parameters. It only pays off when L2 is enabled, because the cached IDs still need entity loads. Without L2, a cached query returning 100 IDs triggers 100 round-trips."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Lookup Chain — L1 to L2 to Database, with Query Cache",
+            "content": "```mermaid\nflowchart TD\n    req[\"Application call: findById(42)\"] --> l1{\"L1 hit?\"}\n    l1 -- yes --> ret1[\"return managed entity\"]\n    l1 -- no --> l2{\"L2 enabled and hit?\"}\n    l2 -- yes --> hydrate[\"hydrate entity, attach to L1\"]\n    hydrate --> ret2[\"return entity\"]\n    l2 -- no --> db[(\"database SELECT\")]\n    db --> putL2[\"populate L2 if cacheable\"]\n    putL2 --> hydrate\n\n    qreq[\"JPQL query\"] --> qcache{\"query cache hit?\"}\n    qcache -- yes --> ids[\"cached ID list\"]\n    ids --> loop[\"for each ID -> L2 lookup\"]\n    loop --> l2\n    qcache -- no --> dbq[(\"execute query, get IDs\")]\n    dbq --> putQc[\"store IDs in query cache\"]\n    putQc --> loop\n```"
+          },
+          {
+            "type": "phase",
+            "title": "Cache Concurrency Strategies — Pick One Per Entity",
+            "content": "Not all entities can share the same strategy. The **concurrency strategy** controls how Hibernate handles concurrent reads/writes against L2.\n\n**READ_ONLY:**\n- **Fastest** — no locking, no invalidation overhead.\n- For reference data that never changes: countries, currencies, enum-like tables.\n- Attempting to update a READ_ONLY cached entity throws an exception.\n\n**NONSTRICT_READ_WRITE:**\n- Allows updates with **eventual consistency** — small window of stale reads after commit.\n- For data updated infrequently where slight staleness is tolerable (config tables).\n- Cheaper than READ_WRITE; not safe for money or inventory.\n\n**READ_WRITE:**\n- **Soft locks** prevent stale reads during in-flight updates.\n- Entry is locked during the transaction and replaced after commit.\n- The default safe choice for mutable cached data.\n\n**TRANSACTIONAL:**\n- Requires JTA + an XA-capable cache provider.\n- Full ACID consistency between database and cache.\n- Rare outside Java EE / WildFly + Infinispan.\n\n**Decision heuristic:**\n- **Reference data -> READ_ONLY.**\n- **Frequently read, occasionally written -> READ_WRITE.**\n- **Highly volatile -> do not cache at all.**"
+          },
+          {
+            "type": "step",
+            "title": "Why L2 Goes Wrong — Bulk DML, External Writers, Multi-Instance",
+            "content": "L2 is dangerous in production not because it is broken but because **Hibernate only invalidates entries for writes it performs through its own EntityManager**.\n\n**Bulk JPQL and native SQL bypass L2:**\n- `@Modifying @Query(\"UPDATE Product p SET p.price = p.price * 1.1\")` updates the database directly — L2 is untouched.\n- `@Modifying(clearAutomatically = true, flushAutomatically = true)` only clears L1, not L2.\n- Fix: explicitly evict — `sessionFactory.getCache().evict(Product.class)` after the bulk update.\n- Safer rule: **if you use bulk DML on an entity, do not cache that entity in L2.**\n\n**External writers bypass L2 entirely:**\n- Another microservice writes to the same database — Hibernate cannot know.\n- DBA runs ad-hoc SQL in production — no invalidation event.\n- Replication stream from another region inserts rows — L2 is unaware.\n- Implication: cache only entities owned exclusively by this application.\n\n**Multi-instance deployments need a distributed cache:**\n- Three pods each have their own in-process L2.\n- Pod A writes -> Pod A evicts; Pods B and C still hold the stale entry.\n- Solution 1: distributed L2 provider (Hazelcast, Infinispan in cluster mode) that broadcasts invalidations.\n- Solution 2: keep L2 disabled and use a Redis cache at the service layer (`@Cacheable`).\n\n**When L2 is appropriate — all four must hold:**\n- Entity is read **far more often** than written.\n- All writes go through this application — no external writers.\n- Single instance, or distributed L2 provider in use.\n- Brief staleness is tolerable.\n\n**When in doubt, prefer service-layer Redis caching:**\n- Keys are explicit, observable, easy to invalidate.\n- Not coupled to entity lifecycle or Hibernate semantics.\n- Reserve Hibernate L2 for genuinely immutable reference data with daily flushes."
+          },
+          {
+            "type": "step",
+            "title": "Operational Concerns — Query Cache, L1 Memory, and Statistics",
+            "content": "**Query cache invalidation is aggressive:**\n- Cache key = query text + parameters.\n- Any write to an entity in the result type **evicts every cached query for that type** — even queries that would not have returned the modified row.\n- A single `Order` UPDATE evicts every cached query over `Order`.\n- Reserve the query cache for entities that are read almost exclusively (navigation menus, lookup tables).\n\n**L1 cache can grow unboundedly in long transactions:**\n- L1 holds every entity loaded by the current persistence context.\n- A batch job streaming 1M rows in one transaction holds 1M references — OOM in production.\n- Fixes:\n  - **Paginate** — process N records per transaction and commit.\n  - **`StatelessSession`** — no L1 at all.\n  - **`em.clear()`** every batch to detach in-progress entities.\n\n**Statistics are mandatory in production:**\n- Enable: `spring.jpa.properties.hibernate.generate_statistics=true`.\n- Expose via Actuator (`/actuator/metrics/hibernate.cache.region.hit_count`).\n- Key metrics:\n  - `second-level-cache-hit-count` / `miss-count` — high miss ratio = cache is not helping.\n  - `second-level-cache-put-count` — high puts with low hits = thrashing.\n  - `query-cache-put-count` / `hit-count` — same analysis for queries.\n- Without these metrics, teams enable L2 'for performance' and discover later it makes things worse."
+          },
+          {
+            "type": "comparison_table",
+            "title": "L1 vs L2 vs Query Cache",
+            "content": "Quick reference for scope, default state, invalidation, and best-fit data.\n\n| Aspect | L1 (Persistence Context) | L2 (Second-Level) | Query Cache |\n|---|---|---|---|\n| Scope | Single `EntityManager` / transaction | `SessionFactory` / JVM (or cluster) | `SessionFactory` / JVM |\n| Default | Always on | Off | Off |\n| Stores | Managed entities `(type, id)` | Disassembled entity state by id | ID lists by query+params |\n| Invalidation | Cleared at txn end | On entity write through EM; manual for bulk DML | Aggressive — any write to entity type |\n| Best for | Repeated reads in one txn | Read-mostly reference data | Heavy reads, almost no writes |\n| Risk | Memory growth in long txns | Stale data from external writers | Constant invalidation, low hit ratio |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Caching Helps, When It Hurts, What to Watch",
+            "content": "**When it helps:**\n- **Read-mostly reference data** (countries, categories, feature flags) sees 95%+ hit ratios.\n- **L1 within a transaction** removes redundant SELECTs for free.\n- **Distributed L2** with Hazelcast/Infinispan can offload large fractions of read load.\n\n**When it hurts:**\n- **Frequently written entities** in L2 cause cache thrashing — more puts than hits.\n- **Bulk DML** silently strands L2 entries, producing stale reads.\n- **Multi-instance L2 without invalidation broadcasting** guarantees inconsistent reads.\n\n**Watch for:**\n- **Query cache hit rate < 50%** — disable it; the bookkeeping costs more than it saves.\n- **L1 OOM in batch jobs** — paginate, use `StatelessSession`, or call `em.clear()`.\n- **External writers** (other apps, triggers, replication) — L2 will lie about row state.\n- **Caching collections** — `@Cache` on `@OneToMany` requires caching both the parent and the children consistently.\n- **`@Cache` without `@org.hibernate.annotations.Cache` import** — JPA's `@Cacheable` alone needs the SPI annotation to actually take effect."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot L2 + Query Cache Configuration",
+            "content": "Minimal working setup for Hibernate L2 with Caffeine and the query cache.\n\n```yaml\nspring:\n  jpa:\n    properties:\n      hibernate:\n        cache:\n          use_second_level_cache: true\n          use_query_cache: true\n          region.factory_class: org.hibernate.cache.jcache.JCacheRegionFactory\n        javax.cache.provider: com.github.benmanes.caffeine.jcache.spi.CaffeineCachingProvider\n        generate_statistics: true\n```\n\n```java\n@Entity\n@org.hibernate.annotations.Cache(\n    usage = CacheConcurrencyStrategy.READ_WRITE,\n    region = \"products\")\npublic class Product { /* ... */ }\n\npublic interface ProductRepo extends JpaRepository<Product, Long> {\n    @QueryHints(@QueryHint(name = HINT_CACHEABLE, value = \"true\"))\n    @Query(\"select p from Product p where p.category = :c\")\n    List<Product> byCategory(@Param(\"c\") String c);\n}\n```\n\n```java\n@Service\npublic class PriceService {\n    @Autowired SessionFactory sf;\n\n    @Transactional\n    public int bumpPrices(double pct) {\n        int n = em.createQuery(\"update Product p set p.price = p.price * :f\")\n                  .setParameter(\"f\", 1 + pct).executeUpdate();\n        sf.getCache().evict(Product.class);\n        return n;\n    }\n}\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **L1 is automatic and per-transaction** — `find` repeated inside a `@Transactional` method returns the same object without re-executing SQL.\n- **L2 is opt-in and shared** — requires `@Cache(usage = ...)` plus a provider; survives transaction boundaries.\n- **Query cache stores IDs, not entities** — only worth enabling alongside L2.\n- **Bulk DML bypasses L2** — explicitly `evict` after `@Modifying` updates or do not cache that entity.\n- **Multi-instance L2 needs broadcast invalidation** — Hazelcast/Infinispan in cluster mode, or use Redis at the service layer.\n- **Concurrency strategy per entity** — READ_ONLY for immutable data, READ_WRITE for mutable, never cache hot writes.\n- **Statistics are mandatory** — `generate_statistics=true` plus Actuator metrics; otherwise you cannot tell if L2 helps."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Hibernate has three cache layers, each with a different scope and lifecycle.\n\n**L1 — first level, per session:**\n- Map of `(type, id) -> entity` inside one `EntityManager`\n- Always on, cleared at transaction end\n- Repeated `findById` inside one transaction fires one SQL\n\n**L2 — second level, shared:**\n- Configured per entity with `@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)`\n- Needs a provider — Ehcache, Caffeine, Hazelcast, Infinispan\n- Survives transactions; any write through the EM invalidates the entry\n- Disabled by default; bulk DML and external writers bypass it\n\n**Query cache — ID list cache:**\n- Stores result IDs keyed by query text + parameters\n- Aggressive invalidation: any write to the entity type evicts every cached query\n- Only useful with L2 enabled\n\n**When L2 helps versus hurts:**\n- Helps: reference data, single instance or distributed provider\n- Hurts: frequently written entities, multi-instance without invalidation, external writers\n\n**Practical alternative:**\n- A Redis cache at the `@Cacheable` service layer is often simpler — explicit keys, easy invalidation, observable, decoupled from Hibernate"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Which CacheConcurrencyStrategy would you choose for a Product entity that is updated several times per day?",
+        "How does a bulk JPQL UPDATE affect the second-level cache, and how do you handle it?",
+        "What are the trade-offs between in-process caches like Caffeine and distributed caches like Hazelcast for L2?",
+        "When would you prefer a service-layer Redis cache over Hibernate L2?"
+      ],
+      "seo": {
+        "metaTitle": "Hibernate L1, L2, and Query Cache — Java Interview Guide",
+        "metaDescription": "Deep dive into Hibernate's first-level cache, second-level cache, and query cache: scope, invalidation, concurrency strategies, and Spring Boot configuration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Hibernate has three cache layers, each with a different scope and lifecycle.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "L1 cache is the persistence context itself. It is always enabled, scoped to a single EntityManager, and a find(User.class, 42) repeated inside the same transaction returns the same Java object without a second SQL. L2 cache is SessionFactory-scoped and shared across sessions. Enabling it requires a provider — Ehcache, Caffeine, Hazelcast, or Infinispan — plus @Cache(usage = ...) on each entity you want cached. L2 is disabled by default, and the most common production bug is enabling it without understanding."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Awareness of cache scoping, eviction semantics, and the risk of serving stale data in concurrent and multi-instance environments"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "L1 is automatic and per-transaction — find repeated inside a @Transactional method returns the same object without re-executing SQL",
+              "L2 is opt-in and shared — requires @Cache(usage =",
+              ") plus a provider; survives transaction boundaries",
+              "Query cache stores IDs, not entities — only worth enabling alongside L2",
+              "Bulk DML bypasses L2 — explicitly evict after @Modifying updates or do not cache that entity"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Minimal working setup for Hibernate L2 with Caffeine and the query cache. ``yaml spring: jpa: properties: hibernate: cache: use_second_level_cache: true use_query_cache: true region.factory_class: org.hibernate.cache.jcache.JCacheRegionFactory javax.cache.provider: com.github.benmanes.caffeine.jcache.spi.CaffeineCachingProvider generate_statistics: true ` `java @Entity @org.hibernate.annotations.Cache( usage = CacheConcurrencyStrategy.READ_WRITE, region = \"products\") public class Product { / ... / } public interface ProductRepo extends JpaRepository<Product, Long> { @QueryHints(@QueryHint(name = HINT_CACHEABLE, value = \"true\")) @Query(\"select p from Product p where p.category = :c\") List<Product> byCategory(@Param(\"c\") String c); } ` `java @Service public class PriceService { @Autowired SessionFactory sf; @Transactional public int bumpPrices(double pct) { int n = em.createQuery(\"update Product p set p.price = p.price * :f\") .setParameter(\"f\", 1 + pct).executeUpdate(); sf.getCache().evict(Product.class); return n; } } ``"
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Assuming the second-level cache is enabled by default, that it auto-syncs with the database, or that bulk JPQL updates evict it"
+            ]
+          }
+        ],
+        "cap": "L1 — first level, per session: Map of (type, id) -> entity inside one EntityManager Always on, cleared at transaction end Repeated findById inside one transaction fires one SQL L2 — second level, shar",
+        "familiarity_anchors": [
+          "Hibernate",
+          "EntityManager",
+          "SessionFactory"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Which CacheConcurrencyStrategy would you choose for a Product entity that is updated several times per day?",
+          "How does a bulk JPQL UPDATE affect the second-level cache, and how do you handle it?",
+          "What are the trade-offs between in-process caches like Caffeine and distributed caches like Hazelcast for L2?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "hib-cache-002",
+      "slug": "hibernate-second-level-cache-and-query-cache-config",
+      "question": "How do you configure the Hibernate second-level cache and query cache in Spring Boot, and how do you choose a provider?",
+      "title": "Configuring L2 + Query Cache — Providers, Regions, and Tuning",
+      "direct_answer": "Enable **`use_second_level_cache=true`** and **`use_query_cache=true`** in `application.yml`, choose a **JCache** (`JSR-107`) provider — **Caffeine** for single-instance, **Hazelcast** or **Infinispan** for clusters, **Ehcache 3** for legacy parity — and annotate cacheable entities with `@org.hibernate.annotations.Cache(usage = READ_WRITE, region = \"...\")`. Configure **per-region size, TTL, and eviction** in the provider config (e.g., `caffeine.spec`), opt queries into the cache with **`HINT_CACHEABLE`**, and turn on **`generate_statistics`** plus Actuator. Provider choice depends on **topology** (single JVM vs cluster), **invalidation requirements** (broadcast vs local), and **operational maturity**.",
+      "layout_type": "implementation-guide",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can move from theory to a working configuration: providers, regions, TTLs, query hints, and observability",
+        "common_mistake": "Adding `@Cacheable` (JPA) and assuming it works — without a provider, region factory, or `@org.hibernate.annotations.Cache`, nothing is actually cached",
+        "to_stand_out": "Talk about region-level tuning, distributed invalidation, JCache vs Hibernate-native SPIs, and how to verify hit ratios in production"
+      },
+      "company_tags": [
+        "Hibernate",
+        "Spring",
+        "Hazelcast",
+        "Red Hat",
+        "fintech",
+        "high-traffic"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Configuration Has Three Moving Parts — Hibernate, JCache, Provider",
+            "content": "Hibernate L2 is **provider-agnostic**: Hibernate exposes an SPI, and a provider plugs in via JCache (JSR-107) or a Hibernate-native region factory. The path that works in modern Spring Boot is **Hibernate -> `JCacheRegionFactory` -> JCache provider**.\n\nThe three pieces that must align: **Hibernate properties** (`use_second_level_cache`, `region.factory_class`), the **JCache provider** on the classpath (Caffeine, Ehcache 3, Hazelcast, Infinispan), and the **provider's own config** (region size, TTL, eviction). Forget any one and caching silently no-ops.\n\nThe **provider choice** is the strategic decision. Caffeine is a fast in-process cache — perfect for a single instance. Hazelcast and Infinispan are distributed — invalidations broadcast across nodes. Ehcache 3 sits in the middle. Pick based on **deployment topology**, not benchmarks."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Pick a Provider That Matches Your Topology",
+            "content": "**Single JVM (one pod, dev, single-instance app):**\n- **Caffeine + JCache adapter** — fastest in-process cache on the JVM, sub-microsecond hits.\n- Bytecode-tuned, W-TinyLFU eviction, near-zero coordination overhead.\n- Dependency: `com.github.ben-manes.caffeine:jcache`.\n\n**Single JVM with disk overflow needed:**\n- **Ehcache 3** — JCache-compliant, tiered storage (heap -> offheap -> disk).\n- Useful for very large reference datasets that exceed heap.\n- Dependency: `org.ehcache:ehcache`.\n\n**Multi-instance cluster (Kubernetes, multiple pods):**\n- **Hazelcast** — embedded or client/server; broadcasts invalidations natively.\n- **Infinispan** — Red Hat-backed, JBoss/WildFly native, stronger consistency modes (TRANSACTIONAL).\n- Both implement JCache; both replicate or invalidate across nodes.\n\n**Avoid:**\n- **Ehcache 2** — end-of-life, JSR-107 incomplete, no modern Spring Boot starter.\n- **Hibernate's deprecated in-memory provider** — for tests only.\n\n**Decision heuristic:**\n- One pod -> Caffeine.\n- Multiple pods, simple replication -> Hazelcast embedded.\n- Multiple pods, need transactional cache -> Infinispan.\n- Reference data > heap -> Ehcache 3 with offheap tier."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Wire It Up in `application.yml` and `pom.xml`",
+            "content": "**Maven dependencies (Caffeine example):**\n\n```xml\n<dependency>\n  <groupId>org.hibernate.orm</groupId>\n  <artifactId>hibernate-jcache</artifactId>\n</dependency>\n<dependency>\n  <groupId>com.github.ben-manes.caffeine</groupId>\n  <artifactId>jcache</artifactId>\n</dependency>\n```\n\n**`application.yml` — full L2 + query cache enablement:**\n\n```yaml\nspring:\n  jpa:\n    properties:\n      hibernate:\n        cache:\n          use_second_level_cache: true\n          use_query_cache: true\n          region.factory_class: org.hibernate.cache.jcache.JCacheRegionFactory\n        javax.cache.provider: com.github.benmanes.caffeine.jcache.spi.CaffeineCachingProvider\n        javax.cache.uri: classpath:caffeine-jcache.xml\n        generate_statistics: true\n```\n\n**`caffeine-jcache.xml` — per-region tuning:**\n\n```xml\n<config xmlns=\"http://www.jsr107.org/cache\">\n  <cache name=\"products\">\n    <caffeine spec=\"maximumSize=10_000,expireAfterWrite=10m,recordStats\"/>\n  </cache>\n  <cache name=\"countries\">\n    <caffeine spec=\"maximumSize=500,expireAfterWrite=24h,recordStats\"/>\n  </cache>\n  <cache name=\"default-query-results-region\">\n    <caffeine spec=\"maximumSize=2_000,expireAfterWrite=5m,recordStats\"/>\n  </cache>\n</config>\n```\n\n**Hazelcast cluster swap (only the dependency and config URL change):**\n\n```yaml\nspring:\n  jpa:\n    properties:\n      hibernate:\n        javax.cache.provider: com.hazelcast.cache.HazelcastCachingProvider\n        javax.cache.uri: classpath:hazelcast.yaml\n```"
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Annotate Entities and Opt Queries In",
+            "content": "**Entity-level caching:**\n\n```java\nimport org.hibernate.annotations.Cache;\nimport org.hibernate.annotations.CacheConcurrencyStrategy;\n\n@Entity\n@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = \"products\")\npublic class Product {\n    @Id private Long id;\n    private String sku;\n    private BigDecimal price;\n}\n\n@Entity\n@Cache(usage = CacheConcurrencyStrategy.READ_ONLY, region = \"countries\")\npublic class Country { /* immutable reference data */ }\n```\n\n**Critical detail:** use `org.hibernate.annotations.Cache`, **not** the bare `@jakarta.persistence.Cacheable`. JPA's `@Cacheable` alone does nothing without the Hibernate SPI annotation.\n\n**Caching a `@OneToMany` collection:**\n\n```java\n@Entity\n@Cache(usage = READ_WRITE)\npublic class Order {\n    @OneToMany(mappedBy = \"order\")\n    @Cache(usage = READ_WRITE)\n    private List<OrderLine> lines;\n}\n```\n\n**Caching is per-association** — annotate both the entity and the collection.\n\n**Opting queries into the query cache:**\n\n```java\nimport static org.hibernate.jpa.HibernateHints.HINT_CACHEABLE;\nimport static org.hibernate.jpa.HibernateHints.HINT_CACHE_REGION;\n\npublic interface ProductRepo extends JpaRepository<Product, Long> {\n    @QueryHints({\n        @QueryHint(name = HINT_CACHEABLE, value = \"true\"),\n        @QueryHint(name = HINT_CACHE_REGION, value = \"product-by-cat\")\n    })\n    @Query(\"select p from Product p where p.category = :c\")\n    List<Product> byCategory(@Param(\"c\") String c);\n}\n```\n\n**Region naming matters** — each cacheable query should target a named region so size and TTL can be tuned independently."
+          },
+          {
+            "type": "step",
+            "title": "Step 4 — Verify, Tune, and Operate",
+            "content": "**Verify caching is actually happening:**\n- Enable SQL logging: `spring.jpa.show-sql=true`.\n- Call the same query twice in separate transactions — second call should fire **no SELECT**.\n- If both fire SQL, the cache is silently disabled (missing provider, missing annotation, wrong region factory).\n\n**Expose statistics:**\n\n```java\n@RestController\n@RequestMapping(\"/admin/cache\")\npublic class CacheStatsController {\n    @Autowired SessionFactory sf;\n\n    @GetMapping(\"/stats\")\n    public Statistics stats() { return sf.getStatistics(); }\n\n    @PostMapping(\"/evict/{type}\")\n    public void evict(@PathVariable String type) throws Exception {\n        sf.getCache().evict(Class.forName(type));\n    }\n}\n```\n\n**Key metrics to watch:**\n- **`secondLevelCacheHitCount` / `MissCount`** — target hit ratio > 80% for cached entities.\n- **`secondLevelCachePutCount` >> hit count** — cache thrashing; entity is too volatile.\n- **`queryCacheHitCount` / `MissCount`** — if query cache hit ratio < 50%, disable it.\n- **`updateTimestampsCachePutCount`** — invalidation activity; spikes indicate write-heavy load.\n\n**Tune iteratively:**\n- Start small — 1K entries per region — and grow based on hit ratio.\n- Long-lived reference data: TTL hours/days; volatile data: minutes or do not cache.\n- For multi-instance deployments, monitor invalidation latency — Hazelcast's `nearCache` adds local copies but needs careful consistency tuning."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Provider Comparison",
+            "content": "Choose a provider based on topology, consistency needs, and operational tooling.\n\n| Provider | Topology | Distribution | Strengths | Watch out for |\n|---|---|---|---|---|\n| Caffeine (JCache) | Single JVM | None | Fastest in-process, W-TinyLFU eviction | No clustering — multi-pod = inconsistent |\n| Ehcache 3 | Single JVM, optional cluster | Terracotta cluster | Heap/offheap/disk tiers | Clustering needs Terracotta server |\n| Hazelcast | Embedded or client/server | Native replication | Easy clustering, Spring Boot integration | Memory pressure on every node |\n| Infinispan | Embedded or remote | Replicated/distributed | Transactional cache, Red Hat support | Heavier; richer config surface |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Configuration Trade-offs",
+            "content": "**When it helps:**\n- **Per-region tuning** — different sizes/TTLs for hot reference data vs occasional lookups.\n- **JCache compliance** — swap providers without code changes when scaling from one pod to many.\n- **Statistics on by default** — find cold caches and thrashing before customers do.\n\n**When it hurts:**\n- **Over-caching mutable entities** — cache puts dominate; net cost is positive.\n- **Distributed providers in tiny clusters** — replication overhead exceeds the savings.\n- **Default region** as a dumping ground — every entity competes for the same eviction budget.\n\n**Watch for:**\n- **`@jakarta.persistence.Cacheable` alone** — no caching happens; need `@org.hibernate.annotations.Cache`.\n- **Wrong region factory** — `JCacheRegionFactory` is the modern choice; older `EhCacheRegionFactory` is dead.\n- **Provider missing on classpath** — Hibernate logs a warning and disables L2 silently.\n- **Cluster invalidation lag** — Hazelcast `nearCache` can serve stale data for milliseconds; tune `max-idle-seconds`.\n- **Eviction events lost on crash** — pessimistic invalidation policies (`invalidateAll`) reduce risk."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Three pieces must align** — Hibernate properties, JCache provider on classpath, provider config file.\n- **JCache + `JCacheRegionFactory`** is the modern path; native region factories are deprecated.\n- **Caffeine for single JVM, Hazelcast/Infinispan for clusters, Ehcache 3 for tiered storage.**\n- **`@org.hibernate.annotations.Cache(usage = ...)`** is required — JPA's `@Cacheable` alone is a no-op.\n- **Per-region tuning** (size, TTL, eviction) lets hot data and cold data coexist without competition.\n- **Opt queries in with `HINT_CACHEABLE`** and a named region so volatility can be managed independently.\n- **`generate_statistics=true`** plus Actuator metrics is the only way to know caching is helping."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Hibernate L2 is provider-agnostic. The modern path is JCache plus a provider — Caffeine for single JVMs, Hazelcast or Infinispan for clusters.\n\n**Configuration steps:**\n- Enable `use_second_level_cache` and `use_query_cache` in application.yml\n- Set `region.factory_class` to `JCacheRegionFactory`\n- Add the provider on the classpath and point `javax.cache.provider` at it\n- Tune regions in the provider's own config — size, TTL, eviction policy\n\n**Annotations:**\n- Use `@org.hibernate.annotations.Cache(usage = READ_WRITE, region = \"...\")` on entities\n- JPA's `@Cacheable` alone does nothing — the Hibernate SPI annotation is required\n- Annotate `@OneToMany` collections separately\n- Opt queries in with `HINT_CACHEABLE` and a named region\n\n**Choosing a provider:**\n- Single instance — Caffeine; fastest in-process cache on the JVM\n- Multiple pods — Hazelcast for easy embedded clustering, Infinispan for transactional consistency\n- Reference data larger than heap — Ehcache 3 with offheap tier\n\n**Verification:**\n- Enable SQL logging; second call to the same query should not fire SQL\n- Turn on `generate_statistics` and expose hit/miss counts via Actuator\n- Target > 80% hit ratio for cached entities; below that, retune or remove the cache"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you migrate an Ehcache 2 setup to JCache + Caffeine without breaking entity caching?",
+        "What's the difference between Hazelcast embedded mode and client/server mode for L2?",
+        "How does Infinispan's TRANSACTIONAL strategy differ from READ_WRITE, and when is it worth the overhead?",
+        "How would you size cache regions for a Product table with 10M rows but a hot set of 50K?"
+      ],
+      "seo": {
+        "metaTitle": "Hibernate L2 + Query Cache Configuration in Spring Boot",
+        "metaDescription": "Configure Hibernate second-level and query caches with JCache providers (Caffeine, Hazelcast, Infinispan, Ehcache 3): regions, TTL, statistics, and provider selection."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Hibernate L2 is provider-agnostic.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Hibernate L2 is provider-agnostic: Hibernate exposes an SPI, and a provider plugs in via JCache (JSR-107) or a Hibernate-native region factory. The path that works in modern Spring Boot is Hibernate -> JCacheRegionFactory -> JCache provider. The three pieces that must align: Hibernate properties (use_second_level_cache, region.factory_class), the JCache provider on the classpath (Caffeine, Ehcache 3, Hazelcast, Infinispan), and the provider's own config (region size, TTL, eviction). Forget any one and caching silently no-ops. The provider choice is the strategic decision. Caffeine is a fast in-process cache — perfect for a."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Single JVM (one pod, dev, single-instance app): Caffeine + JCache adapter — fastest in-process cache on the JVM, sub-microsecond hits.",
+              "Bytecode-tuned, W-TinyLFU eviction, near-zero coordination overhead.",
+              "Dependency: com.github.ben-manes.caffeine:jcache.",
+              "Single JVM with disk overflow needed: Ehcache 3 — JCache-compliant, tiered storage (heap -> offheap -> disk).",
+              "Useful for very large reference datasets that exceed heap.",
+              "Dependency: org.ehcache:ehcache."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Three pieces must align — Hibernate properties, JCache provider on classpath, provider config file",
+              "JCache + JCacheRegionFactory is the modern path; native region factories are deprecated",
+              "Caffeine for single JVM, Hazelcast/Infinispan for clusters, Ehcache 3 for tiered storage",
+              "annotations",
+              "Cache(usage ="
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Adding @Cacheable (JPA) and assuming it works — without a provider, region factory, or @org.hibernate.annotations.Cache, nothing is actually cached"
+          }
+        ],
+        "cap": "Configuration steps: Enable use_second_level_cache and use_query_cache in application.yml Set region.factory_class to JCacheRegionFactory Add the provider on the classpath and point javax.cache.provid",
+        "familiarity_anchors": [
+          "Enable",
+          "JCache",
+          "Caffeine"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you migrate an Ehcache 2 setup to JCache + Caffeine without breaking entity caching?",
+          "What's the difference between Hazelcast embedded mode and client/server mode for L2?",
+          "How does Infinispan's TRANSACTIONAL strategy differ from READ_WRITE, and when is it worth the overhead?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

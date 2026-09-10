@@ -1,0 +1,120 @@
+{
+  "topic": "Item Reader Writer Processor",
+  "topicSlug": "item-reader-writer-processor",
+  "questions": [
+    {
+      "id": "sb-002",
+      "slug": "spring-batch-itemreader-itemprocessor-itemwriter-chunk-processing",
+      "question": "How do ItemReader, ItemProcessor, and ItemWriter work together in Spring Batch chunk processing?",
+      "title": "ItemReader, ItemProcessor, and ItemWriter: Chunk Processing in Spring Batch",
+      "direct_answer": "In chunk-oriented processing, ItemReader reads one item at a time until the chunk size is reached, ItemProcessor optionally transforms or filters each item, and ItemWriter receives the complete chunk as a list to persist in a single transaction. This separation of concerns makes each piece independently testable and swappable without touching the others.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can wire a real-world data pipeline and understands the transaction boundary at the write phase",
+        "common_mistake": "Returning null from ItemProcessor to skip an item is correct, but many candidates try to throw an exception instead, which triggers retry/skip logic unintentionally",
+        "to_stand_out": "Explain that ItemReader.read() returns null to signal end-of-data, and that ItemWriter receives a Chunk<O> (Spring Batch 5) rather than a plain List"
+      },
+      "company_tags": [
+        "TCS",
+        "Wipro",
+        "Accenture",
+        "Deutsche Bank",
+        "Barclays"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Chunk Pipeline Is a Transaction Loop, Not a Stream \u2014 Understanding What Happens When Processing Fails Mid-Chunk",
+            "content": "ItemReader, ItemProcessor, and ItemWriter are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the **transaction boundary**: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction.\n\nThe flow per chunk: call `ItemReader.read()` until the chunk size is reached (or null signals end-of-data) \u2192 collect items \u2192 pass each through `ItemProcessor.process()` \u2192 collect surviving items \u2192 call `ItemWriter.write(chunk)` with the entire list in one transaction. The critical insight: **ItemWriter receives a list, not a single item.** This enables batch inserts (`JdbcBatchItemWriter`, `JpaItemWriter`) that are 10-100x faster than individual inserts.\n\n**Returning null from ItemProcessor** is the correct way to filter items. The null-returned item is silently discarded \u2014 it will not appear in the ItemWriter's list. Many candidates try to throw an exception to skip items, which triggers retry logic and potentially rolls back the chunk. Null-return is the clean skip signal.\n\nThe transaction boundary also explains why **write-phase failures are more expensive than read-phase failures.** If ItemWriter fails partway through a chunk, the entire chunk rolls back \u2014 all the read and processing work is repeated on the next restart from the last committed checkpoint. Design ItemWriters to be idempotent to tolerate this re-execution safely.\n\nSpring Batch 5 changed the `ItemWriter` interface signature: `write(List<T> items)` became `write(Chunk<T> chunk)`. The `Chunk` object wraps the list but also carries the `ChunkContext`, making it possible to access step context metadata inside the writer. If you're migrating from Spring Batch 4 to 5, this is the breaking change that requires updating custom `ItemWriter` implementations. The Spring Data and JDBC built-in writers (`JpaItemWriter`, `JdbcBatchItemWriter`) were updated by the framework."
+          },
+          {
+            "type": "step",
+            "title": "Wiring Reader, Processor, and Writer \u2014 The @StepScope Annotation That Solves Concurrent Job Execution",
+            "content": "A `FlatFileItemReader` reads CSV files; a `JdbcCursorItemReader` streams from a database query; a `JpaPagingItemReader` uses offset-based pagination. The choice depends on data source and volume. **Cursor-based readers hold a database connection open for the entire step** \u2014 appropriate for large datasets but requires a transaction manager that supports long-running transactions. **Paging readers** close the connection after each page, making them safer for very large datasets at the cost of potential gaps if data changes during processing.\n\n`@StepScope` is the annotation that makes readers and writers safe for concurrent job execution and for receiving `@Value(\"#{jobParameters['key']}\")` injection. Without `@StepScope`, the reader bean is a singleton \u2014 if two job instances run concurrently, they share the same reader state and corrupt each other's processing. With `@StepScope`, Spring creates a new reader instance for each Step execution.\n\nA `CompositeItemProcessor` chains multiple `ItemProcessor` instances in sequence, applying each in order and passing the result to the next. This is cleaner than a single monolithic processor with mixed concerns \u2014 a validation processor, an enrichment processor, and a transformation processor can be developed and tested independently, then composed.\n\nFor the `ItemWriter`, prefer **batch-aware writers** over looping implementations. `JdbcBatchItemWriter` issues one batch SQL statement for the entire chunk. Writing one item at a time in a loop inside `ItemWriter.write()` defeats the purpose of chunking \u2014 you lose the batch insert optimization that makes chunk processing fast.\n\n**Testing chunk processing** requires special consideration. Use `@SpringBatchTest` (added in Spring Batch 4.1) to get a `JobLauncherTestUtils` that simplifies launching jobs in tests. For isolated step testing, `JobLauncherTestUtils.launchStep(\"stepName\")` runs a single step without executing the full job. Mock the reader with a `ListItemReader` that provides a fixed dataset, run the step, and assert on the writer output or the database state. This pattern catches most chunk-processing bugs \u2014 null returns from processor, incorrect chunk size, idempotency failures \u2014 without requiring a full integration test setup."
+          },
+          {
+            "type": "step",
+            "title": "Fault Tolerance: Retry, Skip, and the Transaction Interaction You Must Understand",
+            "content": "Spring Batch's fault tolerance operates at two levels: **retry** (attempt the same item again) and **skip** (discard the item and continue). Both interact with the transaction boundary in ways that catch candidates off guard.\n\n**Retry** works for transient failures \u2014 a `DeadlockLoserDataAccessException` from the database, a temporary network error calling an API in ItemProcessor. Configure `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3)` on the step. Spring Batch will reprocess the item up to 3 times before giving up. For retry to work, the reader must support re-reading \u2014 database readers do, file readers generally do not without `@StepScope` and savestate.\n\n**Skip** handles poison records \u2014 items that consistently fail processing or writing and should be excluded from the result. `skip(ValidationException.class).skipLimit(100)` allows up to 100 items to fail with `ValidationException` before the step itself fails. These skipped items are recorded in step execution metadata for audit.\n\nThe subtle interaction: **skip on write failures requires a chunk-level rollback followed by single-item retry.** When a write fails, Spring Batch can't know which item in the chunk caused the failure. It rolls back the chunk, then retries each item individually to identify and skip only the failing item. This means every item in a failed chunk is re-read and re-processed \u2014 ensure idempotency in your processor and that readers support repositioning.\n\nFor non-transactional operations (sending emails, calling external APIs) in a chunk step, be aware that rollback doesn't undo these effects. Handle compensating logic explicitly or move external calls to a separate Tasklet step that runs after the chunk step completes successfully."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ItemReader.read()` returns `null` to signal end of data** \u2014 Spring Batch calls `read()` in a loop until it returns `null`; throwing an exception is for errors, not end-of-input.\n- **`ItemProcessor.process()` returns `null` to skip an item** \u2014 the null item is filtered out and does not reach the `ItemWriter`; the skip is not counted unless configured.\n- **`ItemWriter.write()` receives the entire chunk as a list** \u2014 one write call per chunk; bulk INSERT/UPDATE is possible and recommended; writing item-by-item inside `ItemWriter` defeats chunk batching.\n- **`CompositeItemProcessor` chains multiple processors** \u2014 useful for validation \u2192 transformation \u2192 enrichment pipelines; each processor receives the output of the previous one.\n- **`ItemReader` implementations are not thread-safe by default** \u2014 `FlatFileItemReader` and `JdbcCursorItemReader` maintain cursor state; wrap in `SynchronizedItemStreamReader` for multi-threaded steps."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The chunk-oriented step's three components \u2014 `ItemReader`, `ItemProcessor`, `ItemWriter` \u2014 each have a specific contract. Understanding the contracts prevents subtle bugs like phantom skips or inefficient writes.\n\n**`ItemReader` \u2014 read one item at a time**\n- Spring Batch calls `read()` repeatedly until it returns `null`\n- `null` = end of input; this is the normal termination signal, not an exception\n- Built-in readers: `FlatFileItemReader` (CSV/fixed-width), `JdbcCursorItemReader`, `JdbcPagingItemReader`, `JpaPagingItemReader`, `KafkaItemReader`\n\n**`ItemProcessor` \u2014 transform or filter one item**\n- Receives one item; returns the transformed item or `null` to skip it\n- `null` silently removes the item from the chunk \u2014 it does not reach `ItemWriter`\n- Stateless by design; thread-safe; can be composed with `CompositeItemProcessor` for pipeline steps\n\n**`ItemWriter` \u2014 write the entire chunk**\n- Receives `List<T>` \u2014 all processed items from the chunk\n- Bulk INSERT/UPDATE the entire list in one database call; never loop and write one at a time inside `ItemWriter`\n- Built-in writers: `JdbcBatchItemWriter` (batch SQL), `JpaItemWriter`, `FlatFileItemWriter`, `KafkaItemWriter`\n\n**Thread safety**\n- `FlatFileItemReader` maintains a file cursor \u2014 calling `read()` from multiple threads corrupts the cursor\n- Wrap with `SynchronizedItemStreamReader` or use `JdbcPagingItemReader` (which is re-entrant by page) for multi-threaded steps"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you chain multiple ItemProcessors together for different transformation stages?",
+        "What is the difference between ItemWriter receiving a List versus a Chunk in Spring Batch 5?",
+        "How does Spring Batch handle a scenario where ItemProcessor throws a runtime exception mid-chunk?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch ItemReader, ItemProcessor & ItemWriter: Chunk Processing Guide",
+        "metaDescription": "Learn how ItemReader, ItemProcessor, and ItemWriter collaborate in Spring Batch chunk processing, with Java examples covering CSV reading, filtering with null returns, and JPA writing."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "The chunk-oriented step's three components \u2014 ItemReader, ItemProcessor, ItemWriter \u2014 each have a specific contract.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "ItemReader, ItemProcessor, and ItemWriter are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the transaction boundary: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction. The flow per chunk: call ItemReader.read() until the chunk size is reached (or null signals end-of-data) \u2192 collect items \u2192 pass each through ItemProcessor.process() \u2192 collect surviving items \u2192 call ItemWriter.write(chunk) with the entire list in one transaction. The critical insight: ItemWriter receives a list, not."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "A FlatFileItemReader reads CSV files; a JdbcCursorItemReader streams from a database query; a JpaPagingItemReader uses offset-based pagination.",
+              "The choice depends on data source and volume.",
+              "Cursor-based readers hold a database connection open for the entire step \u2014 appropriate for large datasets but requires a transaction manager that supports long-running transactions.",
+              "Paging readers close the connection after each page, making them safer for very large datasets at the cost of potential gaps if data changes during processing.",
+              "@StepScope is the annotation that makes readers and writers safe for concurrent job execution and for receiving @Value(\"#{jobParameters['key']}\") injection.",
+              "Without @StepScope, the reader bean is a singleton \u2014 if two job instances run concurrently, they share the same reader state and corrupt each other's processing."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "read() returns null to signal end of data \u2014 Spring Batch calls read() in a loop until it returns null; throwing an exception is for errors, not end-of-input",
+              "ItemProcessor",
+              "process() returns null to skip an item \u2014 the null item is filtered out and does not reach the ItemWriter; the skip is not counted unless configured",
+              "write() receives the entire chunk as a list \u2014 one write call per chunk; bulk INSERT/UPDATE is possible and recommended; writing item-by-item inside ItemWriter defeats chunk batching",
+              "CompositeItemProcessor chains multiple processors \u2014 useful for validation \u2192 transformation \u2192 enrichment pipelines; each processor receives the output of the previous one"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Returning null from ItemProcessor to skip an item is correct, but many candidates try to throw an exception instead, which triggers retry/skip logic unintentionally"
+          }
+        ],
+        "cap": "ItemReader \u2014 read one item at a time Spring Batch calls read() repeatedly until it returns null null = end of input; this is the normal termination signal, not an exception Built-in readers: FlatFileI",
+        "familiarity_anchors": [
+          "ItemReader",
+          "ItemProcessor",
+          "ItemWriter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you chain multiple ItemProcessors together for different transformation stages?",
+          "What is the difference between ItemWriter receiving a List versus a Chunk in Spring Batch 5?",
+          "How does Spring Batch handle a scenario where ItemProcessor throws a runtime exception mid-chunk?"
+        ]
+      }
+    }
+  ]
+}

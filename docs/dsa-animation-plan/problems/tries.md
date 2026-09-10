@@ -1,0 +1,10 @@
+# Tries animation plan
+
+4 canonical problems from `content/dsa/_index.json`. Each row names the primary reusable engine and the concrete explanation direction. Full storyboards and readiness metadata live in `../problem-animation-matrix.json`.
+
+| Problem | Difficulty | Primary engine | Supporting engine | How we explain it | Learner action | Wave |
+| --- | --- | --- | --- | --- | --- | --- |
+| Design Add and Search Words Data Structure | medium | Trie Pathfinder | — | Teach the authored optimal approach, Bucket Words by Length + Linear Scan (Naive Baseline), inside a prefix tree with shared prefixes kept visible; light one character edge at a time and prune dead branches when justified. The decisive moment is how shared prefixes eliminate repeated search work. | type a prefix and follow or backtrack the matching path | 2 |
+| Implement Trie (Prefix Tree) | medium | Trie Pathfinder | — | Teach the authored optimal approach, Trie with Children Map + isEnd Flag (Optimal), inside a prefix tree with shared prefixes kept visible; light one character edge at a time and prune dead branches when justified. The decisive moment is how shared prefixes eliminate repeated search work. | type a prefix and follow or backtrack the matching path | 1 |
+| Replace Words | medium | Trie Pathfinder | Array + Memory Ledger | Teach the authored optimal approach, Trie of Roots — Stop at First isEnd (Optimal), inside a prefix tree with shared prefixes kept visible; light one character edge at a time and prune dead branches when justified. The decisive moment is how shared prefixes eliminate repeated search work. | type a prefix and follow or backtrack the matching path | 2 |
+| Word Search II | hard | Trie Pathfinder | Grid Frontier | Teach the authored optimal approach, Trie + Single Grid DFS with Pruning (Optimal), inside a prefix tree with shared prefixes kept visible; light one character edge at a time and prune dead branches when justified. The decisive moment is how shared prefixes eliminate repeated search work. | type a prefix and follow or backtrack the matching path | 3 |

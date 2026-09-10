@@ -1,0 +1,56 @@
+{
+  "archetype": "internals",
+  "exemplars": [
+    {
+      "name": "HashMap internals",
+      "complexity": 4,
+      "question": "How does HashMap work internally in Java?",
+      "slug": "how-does-hashmap-work-internally-java",
+      "difficulty": "medium",
+      "interviewer_intent": {
+        "testing": "Whether you understand hashing, collision resolution, and the Java 8 treeification upgrade — not just the API surface",
+        "common_mistake": "Saying 'it's just a key-value store backed by an array' without explaining how hashCode maps to a bucket or how collisions are resolved",
+        "to_stand_out": "Mention the Java 8 upgrade from linked-list chains to red-black trees at TREEIFY_THRESHOLD=8, explain load factor math, and describe the pre-sizing pattern for production maps"
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One-Sentence Mental Model",
+            "content": "HashMap is a Node<K,V>[] array where the slot index is derived from the key's hashCode, and conflicts in the same slot are resolved first by chaining (linked list) then by treeifying (red-black tree) once the chain grows long enough."
+          },
+          {
+            "type": "phase",
+            "title": "Step 1 — Computing the bucket index",
+            "content": "Java does not use `key.hashCode()` directly because raw hash codes often have poor bit distribution — especially in the lower bits that determine the bucket index when the table is small. To fix this, Java applies a **spread function** that mixes the upper and lower halves of the hash:\n\n```java\nstatic final int hash(Object key) {\n    int h;\n    // XOR the top 16 bits into the bottom 16 bits\n    // This ensures both halves of the hash contribute to the bucket index\n    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);\n}\n```\n\nThe resulting hash is then masked with the table size to get the bucket index:\n\n```java\n// capacity is always a power of 2 (16, 32, 64...)\n// so (capacity - 1) is a bitmask: 15 = 0b1111, 31 = 0b11111, etc.\nint index = (capacity - 1) & hash(key);\n```\n\nThis bitwise AND is mathematically equivalent to `hash % capacity`, but faster because it avoids division. This is also why HashMap enforces power-of-two capacity — it makes this fast modulo trick possible."
+          },
+          {
+            "type": "phase",
+            "title": "Step 2 — Collision resolution: chains and trees",
+            "content": "When two keys land in the same bucket:\n\n- **Java 7 and earlier** — a singly-linked list grows at the head of the bucket. Worst-case lookup is O(n) if all keys hash to the same bucket — a real DoS vector.\n- **Java 8+** — once a bucket's chain exceeds `TREEIFY_THRESHOLD = 8` nodes, the chain converts to a **red-black tree**, capping worst-case lookup at O(log n). If the tree shrinks below `UNTREEIFY_THRESHOLD = 6`, it reverts to a linked list to save memory.\n\nA `null` key is always assigned to bucket 0."
+          },
+          {
+            "type": "phase",
+            "title": "Step 3 — Resize and rehash",
+            "content": "Resizing is the **hidden performance cost** of HashMap. The default initial capacity is **16** and load factor is **0.75**, meaning the map triggers a resize when just 12 entries are added. During resize, Java allocates a new array of **double the size**, then iterates every existing entry and recalculates its bucket index — this is an O(n) operation that happens on the thread that triggered it.\n\nIn high-throughput services, this resize-and-rehash can cause visible **p99 latency spikes** because one unlucky request pays the cost for all previous insertions. The fix is straightforward — **pre-size the map** when you have a reasonable estimate of the number of entries:\n\n```java\n// Without pre-sizing: starts at 16, resizes at 12, 24, 48, 96...\n// Each resize copies ALL existing entries to the new array\nMap<String, Integer> bad = new HashMap<>();  // default capacity 16\n\n// With pre-sizing: allocate enough upfront\n// Formula: expectedEntries / loadFactor → next power of two\n// For ~1000 entries: 1000 / 0.75 ≈ 1334 → next power of 2 = 2048\nMap<String, Integer> good = new HashMap<>(2048);  // no resize until 1536 entries\n```\n\nDuring rehashing, Java 8 uses a clever optimization: since the new capacity is exactly double, each entry either stays at its current index or moves to `oldIndex + oldCapacity`. This means the rehash doesn't need to recompute hashes — it just checks one additional bit of the existing hash."
+          },
+          {
+            "type": "code_example",
+            "title": "hashCode + equals contract and frequency-count pattern",
+            "content": "The **hashCode/equals contract** is the single most common source of HashMap bugs. The rule: if two objects are equal via `equals()`, they must return the same `hashCode()`. If this is violated, `put` stores the entry in one bucket but `get` looks in a different bucket — the entry is silently lost.\n\nHere's a concrete demonstration of the bug and the fix:\n\n```java\nimport java.util.*;\n\npublic class HashMapDemo {\n\n    // BAD: overrides equals but NOT hashCode\n    // Two BadKey(\"x\") objects are equal, but their hashCodes differ\n    // because hashCode() falls back to Object's identity-based default\n    record BadKey(String value) {\n        @Override public boolean equals(Object o) {\n            return o instanceof BadKey b && Objects.equals(value, b.value);\n        }\n    }\n\n    // GOOD: Java record auto-generates BOTH equals and hashCode\n    // based on all declared fields — no manual override needed\n    record GoodKey(String value) {}\n\n    public static void main(String[] args) {\n        // Broken: put and get create separate BadKey instances\n        // They are equals(), but have different hashCodes → different buckets\n        var broken = new HashMap<BadKey, String>();\n        broken.put(new BadKey(\"x\"), \"hello\");\n        System.out.println(broken.get(new BadKey(\"x\"))); // null — LOST!\n\n        // Fixed: GoodKey auto-generates consistent hashCode from fields\n        var working = new HashMap<GoodKey, String>();\n        working.put(new GoodKey(\"x\"), \"hello\");\n        System.out.println(working.get(new GoodKey(\"x\"))); // \"hello\" ✓\n    }\n}\n```\n\nA useful **HashMap pattern** for interviews is the frequency count using `merge()` — it's cleaner than the `getOrDefault` + `put` pattern:\n\n```java\npublic static Map<Character, Integer> frequency(String s) {\n    Map<Character, Integer> freq = new HashMap<>();\n    for (char c : s.toCharArray()) {\n        // merge: if key absent, insert value 1\n        //        if key present, apply Integer::sum to old and new values\n        freq.merge(c, 1, Integer::sum);\n    }\n    return freq;\n}\n// frequency(\"banana\") → {b=1, a=3, n=2}\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- HashMap is a **Node[] bucket array** — the index is computed by `(capacity - 1) & hash(key)`, where `hash()` XOR-spreads the upper 16 bits of `hashCode()` into the lower 16 for better distribution\n- Collisions form a **linked list** that upgrades to a **red-black tree** after 8 entries (Java 8+). Worst-case goes from O(n) to O(log n) — this was added to prevent hash-flooding DoS attacks\n- Default capacity is **16**, load factor **0.75** — resize triggers at just 12 entries. Pre-size with `new HashMap<>(1024)` when you know the volume to avoid O(n) rehashing spikes\n- The **equals/hashCode contract**: if `a.equals(b)` then `a.hashCode() == b.hashCode()` must be true. Java `record` types handle this automatically; manual classes that break it silently lose entries\n- HashMap allows **one null key** (bucket 0) and null values. `ConcurrentHashMap` allows neither — a common follow-up question"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "HashMap is essentially a **bucket array** — a `Node[]` where each slot is indexed by the key's hash. When you call `map.put(\"name\", \"John\")`, Java takes `\"name\".hashCode()`, spreads the bits using XOR to reduce clustering, and then masks with `capacity - 1` to get a bucket index. Because capacity is always a power of two, that mask works as a fast modulo. That's why `put` and `get` are O(1) on average.\n\nThe interesting part is **collision handling**. Say `\"Aa\"` and `\"BB\"` have the same hashCode in Java — they'd land in the same bucket. Before Java 8, this formed a linked list, and worst-case was O(n). Attackers actually exploited this for DoS attacks. **Java 8 introduced treeification**: once a chain exceeds 8 nodes, it converts to a red-black tree, capping worst-case at O(log n). Below 6 nodes it reverts to save overhead.\n\nThe production gotcha is **resizing**. Default capacity is 16, load factor 0.75, so resize hits at just 12 entries — it doubles the array and rehashes everything. I've seen this cause p99 latency spikes in hot paths. The fix is simple: `new HashMap<>(2048)` if you expect ~1000 entries.\n\nThe **equals/hashCode contract** is the classic interview follow-up. Here's a concrete example: if you have a class `Person` where you override `equals()` to compare by name, but forget `hashCode()`, then `map.put(new Person(\"Alice\"), \"data\")` and `map.get(new Person(\"Alice\"))` return `null` — the two Person objects are equal but the map looks in different buckets. Java `record` types generate both automatically, which is one reason I prefer them for map keys.\n\nOne more thing: HashMap allows one `null` key — it always goes to bucket 0. `ConcurrentHashMap` allows neither null keys nor null values, which is a very common follow-up."
+          }
+        ]
+      }
+    }
+  ]
+}

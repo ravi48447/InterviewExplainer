@@ -1,0 +1,886 @@
+{
+  "topic": "Github Actions",
+  "topicSlug": "github-actions",
+  "questions": [
+    {
+      "id": "ga-001",
+      "slug": "java-cicd-pipeline-github-actions",
+      "question": "How do you build a Java CI/CD pipeline with GitHub Actions?",
+      "title": "Building a Java CI/CD Pipeline with GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "recipe-builder",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "Netflix",
+        "Spotify",
+        "Atlassian",
+        "GitHub"
+      ],
+      "direct_answer": "A Java CI/CD pipeline with GitHub Actions uses workflow YAML files to automate building, testing, and deploying your application on every push or pull request using ubuntu runners and the actions/setup-java action.",
+      "interviewer_intent": {
+        "testing": "Whether you can configure automated pipelines and understand CI/CD principles in practice.",
+        "common_mistake": "Hardcoding credentials in workflow files instead of using GitHub Secrets, or not caching dependencies between runs.",
+        "to_stand_out": "Mention separating CI and CD workflows, using environments with approval gates, and artifact promotion between stages."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "From Push to Production in a YAML File Next to Your Code",
+            "content": "Before GitHub Actions, setting up CI for a new Java repository meant provisioning a Jenkins server, installing plugins, configuring webhooks, and maintaining infrastructure. GitHub Actions collapsed all of that into a YAML file committed to `.github/workflows/` — the pipeline lives in the same repository as the code it builds, version-controlled and reviewable through pull requests.\n\nA typical Java pipeline has two jobs: **build** (compile, test, package, optionally push a Docker image) and **deploy** (pull the artifact and push it to the target environment). Separating them matters because the build job produces a tested artifact, and the deploy job promotes that exact artifact — not a fresh rebuild — through environments. This artifact promotion model is what distinguishes a CI/CD pipeline from a script that happens to run `mvn deploy` on push.\n\nThe most common mistakes are **hardcoding credentials** in the workflow YAML instead of using `${{ secrets.NAME }}`, and failing to cache Maven or Gradle dependencies — which means every build downloads hundreds of megabytes of JARs over the network, turning a 90-second build into a five-minute wait. Both mistakes disappear with basic configuration, but both are surprisingly common in production repositories."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "End-to-End Java CI/CD Pipeline in GitHub Actions",
+            "content": "A production-ready pipeline has distinct phases: validate → build → test → scan → publish → deploy. Each phase has gates that must pass.\n\n```mermaid\nflowchart LR\n    Push[git push] --> Trig{Trigger}\n    Trig -->|PR| CI[CI: validate + test]\n    Trig -->|push to main| CD[CI/CD: + publish + deploy]\n    CI --> S1[Setup JDK 21<br/>actions/setup-java]\n    S1 --> S2[Cache Maven<br/>~/.m2/repository]\n    S2 --> S3[mvn verify<br/>unit + integration tests]\n    S3 --> S4[Trivy filesystem scan<br/>SAST]\n    S4 --> S5[SonarQube quality gate]\n    S5 --> CIP{All gates pass?}\n    CIP -->|Yes| PRStatus[PR check green]\n    CIP -->|No| FailPR[Block merge]\n    CD --> S1\n    PRStatus -.merge to main.-> CD\n    CD --> S6[Build Docker image<br/>buildx with cache]\n    S6 --> S7[Trivy image scan]\n    S7 --> S8[Cosign sign image]\n    S8 --> S9[Push to ECR/GHCR]\n    S9 --> S10[Deploy to staging<br/>kubectl / Helm / ArgoCD]\n    S10 --> S11[Smoke test]\n    S11 --> S12[Promote to prod<br/>with manual approval]\n    style CIP fill:#fff9c4\n    style FailPR fill:#ffcdd2\n    style PRStatus fill:#c8e6c9\n    style S12 fill:#bbdefb\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Build Job — Compile, Test, and Publish the Artifact",
+            "content": "The build job checks out the code, installs the JDK, restores cached dependencies, and runs the Maven or Gradle build. The `actions/setup-java` action handles JDK installation and has built-in cache support that eliminates the need for a separate `actions/cache` step.\n\n```yaml\nname: Java CI/CD\non:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with:\n          java-version: '17'\n          distribution: 'temurin'\n          cache: 'maven'\n      - run: mvn -B verify\n      - uses: actions/upload-artifact@v4\n        with:\n          name: app-jar\n          path: target/*.jar\n```\n\nThe `cache: 'maven'` parameter on `setup-java` restores `~/.m2/repository` using a hash of all `pom.xml` files as the cache key. When dependencies change, the cache invalidates automatically. The `upload-artifact` step saves the built JAR for the deploy job to consume — this is the **artifact handoff** that ensures the deploy job promotes what was tested rather than rebuilding from source."
+          },
+          {
+            "type": "step",
+            "title": "The Deploy Job — Artifact Promotion With Environment Gates",
+            "content": "The deploy job declares `needs: build` to enforce ordering and downloads the artifact published by the build job. Adding `environment: production` activates GitHub's protection rules — required reviewers, wait timers, and deployment branch restrictions.\n\n```yaml\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    environment: production\n    steps:\n      - uses: actions/download-artifact@v4\n        with:\n          name: app-jar\n      - name: Deploy to server\n        env:\n          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}\n        run: ./scripts/deploy.sh\n```\n\nThe **environment** keyword is the critical security boundary. Production secrets — SSH keys, database URLs, cloud credentials — are scoped to the `production` environment and only unlock when the job runs against that environment. A developer running the workflow from a feature branch cannot access production credentials because the environment protection rules restrict which branches can trigger deployment.\n\nThis two-job pattern enforces a clear separation of concerns: the build job is pure CI (test and package), and the deploy job is pure CD (promote and release). Mixing them into a single job means you cannot reuse the build artifact across environments, cannot add approval gates between build and deploy, and cannot independently retry a failed deployment without re-running tests."
+          },
+          {
+            "type": "step",
+            "title": "Permissions, Concurrency, and the Details That Prevent Waste",
+            "content": "Three configuration details separate a polished pipeline from a functional one. First, **workflow permissions** should default to least privilege by adding `permissions: contents: read` at the workflow level. Only elevate permissions where a job must publish packages or create releases. If a compromised third-party action executes in your workflow, restrictive permissions limit the damage.\n\nSecond, **concurrency groups** prevent redundant builds from piling up. When a developer pushes three commits in quick succession, only the latest should run — the earlier pushes are outdated and waste CI minutes.\n\n```yaml\nconcurrency:\n  group: ci-${{ github.ref }}\n  cancel-in-progress: true\n```\n\nThis cancels the previous in-progress run for the same branch whenever a new push arrives. Without it, a busy feature branch accumulates stale workflow runs that consume runner capacity and clutter the CI status page.\n\nThird, for **Java library publishing**, split snapshot verification on PRs from release tagging on protected tags. Signing keys and Sonatype credentials should never appear in forked PR workflows. Use `workflow_dispatch` or tag-triggered workflows for releases so the signing step only runs in a trusted context.\n\nThese details rarely appear in tutorials but are table stakes for production pipelines running hundreds of builds per day."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs in Pipeline Design",
+            "content": "**One workflow vs split CI/CD.** A single workflow keeps everything visible but mixes concerns. Splitting into `ci.yml` (PR validation) and `cd.yml` (deploy on main) keeps each focused. Use `workflow_call` to share reusable jobs between them.\n\n**Self-hosted vs hosted runners.** GitHub-hosted runners are zero-maintenance but cost-per-minute. Self-hosted runners are free at the runtime cost but require security hardening (each runner can be exploited to compromise the host). For private code with high CI volume, self-hosted Ephemeral runners on Kubernetes (via actions-runner-controller) are the cost-optimal choice.\n\n**Caching aggressiveness.** Caching Maven, Docker layers, SonarQube state can cut build time 70%+. The risk is cache poisoning — a malicious dependency pollutes the cache and persists across builds. Scope cache keys carefully and use `actions/cache@v4` with explicit invalidation on dependency-file changes.\n\n**Test parallelization.** Splitting tests across N runners with `--include` patterns reduces wall-clock time linearly but each runner cost is fixed — 4 runners cost 4x. Worth it when total test time exceeds 10 minutes; not worth it for sub-5-minute test suites.\n\n**Deploy gating.** Auto-deploy to staging on every main push is fast feedback but can cascade incidents. Manual approval for prod deploys is mandatory; for staging, smoke tests as gates strike a good balance."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Workflow YAML in `.github/workflows/`** — pipelines live in Git next to Java sources so every pipeline change goes through the same PR review process as application code\n- **`actions/setup-java` with `cache: 'maven'`** — pins the JDK and restores `~/.m2` automatically so CI feedback stays under two minutes instead of downloading hundreds of megabytes per build\n- **`needs:` between jobs enforces artifact promotion** — the deploy job downloads what the build job tested rather than rebuilding from source, ensuring the exact same artifact flows through environments\n- **`environment: production` gates with scoped secrets** — protection rules require reviewer approval and restrict which branches can trigger deployment, preventing feature branch pushes from accessing production credentials\n- **`concurrency` with `cancel-in-progress: true`** — cancels stale workflow runs when new commits arrive on the same branch, saving CI minutes and preventing outdated builds from cluttering the status page"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A GitHub Actions CI pipeline for Java is a YAML file in `.github/workflows/` that defines jobs triggered by push or pull request events. Jobs run on GitHub-managed runners and execute steps sequentially within each job.\n\n**Workflow trigger and checkout**\n- `on: [push, pull_request]` triggers the workflow on every push and PR; use `on: push: branches: [main]` plus `on: pull_request` to trigger differently for mainline pushes versus PR validation — PRs check but do not deploy, pushes to main deploy\n- `actions/checkout@v4` is always the first step — it clones the repository into the runner's workspace; without it, subsequent steps have no source code\n- Set `fetch-depth: 0` in the checkout action if SonarQube analysis is needed — SonarQube requires the full git history to compute new vs changed code; shallow clones (the default) report everything as new\n\n**Java setup and caching**\n- `actions/setup-java@v4` with `distribution: 'temurin'` and `java-version: '21'` installs the JDK and automatically configures the `JAVA_HOME` and `PATH` — no manual installation steps\n- Enable Maven dependency caching in the `setup-java` action with `cache: 'maven'`; GitHub Actions caches `~/.m2/repository` keyed on the `pom.xml` hash — a cache hit skips the 2–3 minute dependency download on every build\n- Gradle projects use `gradle/actions/setup-gradle@v3` which caches the Gradle home and the build cache simultaneously — the combination reduces a 6-minute Gradle build to under 2 minutes on cache hits\n\n**Build, test, and artifact publishing**\n- `run: mvn -B verify` runs the full lifecycle including integration tests and coverage; `-B` (batch mode) suppresses ANSI color codes and progress indicators that create noise in CI logs\n- Use `actions/upload-artifact@v4` to save test reports and JARs: subsequent jobs can download them with `actions/download-artifact`, enabling a build-once-deploy-many pattern where the image build job and the Kubernetes deploy job share the same compiled artifact"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you roll back a failed deployment in GitHub Actions?",
+        "How do you share workflow steps across multiple repositories?",
+        "What is the difference between a job and a step in GitHub Actions?"
+      ],
+      "seo": {
+        "metaTitle": "Java CI/CD Pipeline with GitHub Actions | Interview Answer",
+        "metaDescription": "Learn how to build a complete Java CI/CD pipeline using GitHub Actions with JDK setup, Maven caching, artifact upload, and environment-gated deployments."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "A GitHub Actions CI pipeline for Java is a YAML file in .github/workflows/ that defines jobs triggered by push or pull request events.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before GitHub Actions, setting up CI for a new Java repository meant provisioning a Jenkins server, installing plugins, configuring webhooks, and maintaining infrastructure. GitHub Actions collapsed all of that into a YAML file committed to .github/workflows/ — the pipeline lives in the same repository as the code it builds, version-controlled and reviewable through pull requests. A typical Java pipeline has two jobs: build (compile, test, package, optionally push a Docker image) and deploy (pull the artifact and push it to."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can configure automated pipelines and understand CI/CD principles in practice."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Workflow YAML in",
+              "github/workflows/ — pipelines live in Git next to Java sources so every pipeline change goes through the same PR review process as application code actions/setup-java with cache: 'maven' — pins the JDK and restores ~/",
+              "m2 automatically so CI feedback stays under two minutes instead of downloading hundreds of megabytes per build needs: between jobs enforces artifact promotion — the deploy job downloads what the build job tested rather than rebuilding from source, ensuring the exact same artifact flows through environments environment: production gates with scoped secrets — protection rules require reviewer approval and restrict which branches can trigger deployment, preventing feature branch pushes from accessing production credentials concurrency with cancel-in-progress: true — cancels stale workflow runs when new commits arrive on the same branch, saving CI minutes and preventing outdated builds from cluttering the status page"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before GitHub Actions, setting up CI for a new Java repository meant provisioning a Jenkins server, installing plugins, configuring webhooks, and maintaining infrastructure. GitHub Actions collapsed all of that into a YAML file committed to .github/workflows/ — the pipeline lives in the same repository as the code it builds, version-controlled and reviewable through pull requests. A typical Java pipeline has two jobs: build (compile, test, package, optionally push a Docker image) and deploy (pull the artifact and push it to the target environment). Separating them matters because the build job produces a tested artifact, and the deploy job promotes that exact artifact — not a fresh rebuild — through environments. This artifact promotion model is what distinguishes a CI/CD pipeline."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Hardcoding credentials in workflow files instead of using GitHub Secrets, or not caching dependencies between runs"
+            ]
+          }
+        ],
+        "cap": "Workflow trigger and checkout on: [push, pull_request] triggers the workflow on every push and PR; use on: push: branches: [main] plus on: pull_request to trigger differently for mainline pushes versu",
+        "familiarity_anchors": [
+          "GitHub",
+          "Actions"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you roll back a failed deployment in GitHub Actions?",
+          "How do you share workflow steps across multiple repositories?",
+          "What is the difference between a job and a step in GitHub Actions?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-002",
+      "slug": "manage-secrets-github-actions",
+      "question": "How do you manage secrets in GitHub Actions?",
+      "title": "Managing Secrets in GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "concept-explainer",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "GitHub",
+        "Microsoft",
+        "Twilio",
+        "HashiCorp"
+      ],
+      "direct_answer": "GitHub Actions secrets are encrypted environment variables stored at repository, environment, or organization level. You reference them in workflows via `${{ secrets.SECRET_NAME }}` and they are never exposed in logs.",
+      "interviewer_intent": {
+        "testing": "Your understanding of secrets management and security practices in automated pipelines.",
+        "common_mistake": "Printing secrets with `echo` (GitHub redacts them, but it is still bad practice), or committing secrets directly in workflow files.",
+        "to_stand_out": "Mention environment-scoped secrets for production gating, OIDC-based authentication to avoid long-lived credentials entirely, and secret rotation strategies."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Scopes, One Principle — Secrets Should Expire Before They Leak",
+            "content": "The most dangerous secret in a CI/CD pipeline is not the one a hacker steals — it is the one that has been sitting unchanged in repository settings for two years while three engineers who knew it have left the company. Static credentials that never rotate are the most common source of security incidents in GitHub Actions pipelines, and the platform's scoping model is designed to mitigate exactly this risk.\n\nGitHub provides three scopes for secrets. **Repository secrets** are available to all workflows in one repository. **Environment secrets** are tied to named deployment targets like staging or production, with protection rules that require approval before the secrets unlock. **Organization secrets** share credentials across multiple repositories, scoped to specific repos rather than all of them.\n\nAll secrets are AES-256 encrypted at rest and automatically masked in workflow logs when their exact value appears. But masking is not foolproof — if a script manipulates the secret string (base64 encoding, URL encoding, or concatenation), the transformed value bypasses the mask. The real protection comes from scoping secrets to the narrowest context and replacing long-lived credentials with **OIDC federation** that produces short-lived tokens requiring no rotation at all."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Secret Sources and Their Reach",
+            "content": "GitHub provides three scopes of secrets, each visible to a different blast radius. Picking the right scope limits exposure.\n\n```mermaid\nflowchart TB\n    subgraph Org[\"Organization secrets\"]\n        O1[available to all repos<br/>or repo allowlist]\n    end\n    subgraph Repo[\"Repository secrets\"]\n        R1[available to all workflows<br/>in this repo]\n    end\n    subgraph Env[\"Environment secrets\"]\n        E1[available only when<br/>job specifies environment:]\n        E1G[Plus: required reviewers<br/>before job runs]\n    end\n    subgraph OIDC[\"OIDC federation\"]\n        OD[Short-lived AWS / Azure / GCP<br/>tokens, no static credentials]\n    end\n    Job[Workflow job] --> O1\n    Job --> R1\n    Job --> E1\n    Job --> OD\n    O1 -.broad blast radius.-> Bad[hundreds of repos]\n    R1 -.medium.-> Mid[all workflows]\n    E1 -.narrow.-> Good[only deploy jobs]\n    OD -.zero static.-> Best[automatic rotation]\n    style Bad fill:#ffcdd2\n    style Mid fill:#fff9c4\n    style Good fill:#c8e6c9\n    style Best fill:#a5d6a7\n```\n\n**OIDC is the modern default for cloud credentials** — no static AWS/Azure/GCP keys stored in GitHub at all."
+          },
+          {
+            "type": "step",
+            "title": "Choosing the Right Scope for Every Credential",
+            "content": "The scope decision determines which workflows can access a secret and under what conditions. **Repository secrets** work for CI-only credentials like `SONAR_TOKEN` or `CODECOV_TOKEN` that do not change between environments. **Environment secrets** are the right choice for deployment credentials because they leverage protection rules.\n\nThe same secret name can have different values per environment, eliminating per-environment conditionals in workflow YAML.\n\n```yaml\njobs:\n  deploy-staging:\n    environment: staging\n    steps:\n      - name: Deploy\n        env:\n          DB_URL: ${{ secrets.DATABASE_URL }}\n\n  deploy-production:\n    environment: production\n    needs: deploy-staging\n    steps:\n      - name: Deploy\n        env:\n          DB_URL: ${{ secrets.DATABASE_URL }}\n```\n\nBoth jobs reference `secrets.DATABASE_URL`, but the staging job gets the staging connection string while the production job gets the production one. The workflow YAML is identical — only the environment declaration differs. This pattern scales cleanly to ten environments without a single `if` condition or branch name check.\n\n**Organization secrets** share credentials across repositories but should be scoped to specific repos rather than making them globally available. A shared Docker registry token scoped to five microservice repos is reasonable. The same token available to every fork in the organization is a liability."
+          },
+          {
+            "type": "step",
+            "title": "Eliminating Long-Lived Keys With OIDC Federation",
+            "content": "The most secure pattern eliminates stored secrets entirely. **OIDC federation** lets a GitHub Actions runner exchange a short-lived identity token for cloud provider credentials without any static keys stored in GitHub. The runner proves its identity to AWS, GCP, or Azure, and the cloud provider issues temporary credentials scoped to the specific role.\n\nThe trust relationship is conditioned on attributes like the repository name, branch, and environment. An AWS IAM role trust policy can require `repo:org/my-app:ref:refs/heads/main` so that only production deployments from the main branch of a specific repository can assume the role. Feature branch builds cannot access production resources even if someone modifies the workflow YAML.\n\nFor **secret rotation** when OIDC is not available, use a dual-credential strategy: the application accepts both old and new passwords during a transition window, you update the secret in GitHub settings, redeploy, then remove the old password. Audit secret access by reviewing workflow run logs — secret values are masked, but the workflow name and trigger event show which workflows touched which environments.\n\nThe `vars` context complements secrets for non-sensitive configuration. Feature flags, application environment names, and deployment URLs belong in `${{ vars.APP_ENV }}` rather than secrets. Using vars for non-sensitive values keeps the secrets list short and focused, making audit reviews faster."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and OIDC Migration",
+            "content": "**Static secrets vs OIDC.** Static AWS access keys in GitHub Secrets are easy but never rotated, and a leaked workflow file logging the key compromises the account. OIDC federation issues short-lived (15-minute) AWS STS tokens minted from GitHub's OIDC token — no static credentials at all. Migration takes a day; payoff is permanent.\n\n**Environment vs repo secrets.** Use environment-scoped secrets for production credentials so only deploy-to-prod jobs (which specify `environment: production`) can read them. A misconfigured PR build cannot accidentally use prod credentials.\n\n**Required reviewers on environments.** Add reviewers on the `production` environment so deploy jobs pause for human approval before consuming prod secrets. Adds friction; prevents accidental prod deploys.\n\n**Secret masking is best-effort.** GitHub auto-masks secret values in logs but only matches exact strings. A secret split across log lines or transformed (base64-decoded, JSON-parsed) is not masked. Never log decoded secret content.\n\n**Fork PR exposure.** Workflows triggered by `pull_request` from forks do NOT have access to repo secrets — a security feature. If you need preview environments for fork PRs, use `pull_request_target` carefully or use GitHub Apps with scoped tokens."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Environment secrets pair with protection rules** — production credentials require reviewer approval before unlocking, preventing feature branch workflows from accessing production database URLs or API keys\n- **`${{ secrets.NAME }}` masking scrubs exact matches** — GitHub redacts known secret values from logs, but base64-encoded or concatenated transformations bypass the mask, so never manipulate secrets in shell commands\n- **OIDC federation removes stored credentials entirely** — the runner exchanges a short-lived identity token for cloud role credentials, eliminating rotation work and shrinking the blast radius of a compromised workflow\n- **Same secret name, different values per environment** — `DATABASE_URL` resolves to staging or production connection strings based on the job's `environment:` declaration without any branch conditionals in YAML\n- **`vars` context for non-sensitive config** — use `${{ vars.APP_ENV }}` for feature flags and URLs, reserving `secrets` strictly for passwords, tokens, and private keys to keep the audit surface small"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "GitHub Actions secrets store encrypted values that are injected as environment variables into workflow steps. The most important rules are that secrets are not available to fork PRs by default, and they must never be printed or logged.\n\n**Secret storage and access**\n- Repository secrets are defined in Settings → Secrets and Variables → Actions; `${{ secrets.DOCKER_PASSWORD }}` references them in workflow YAML — GitHub masks the value in logs, but masking is pattern-based and fails for base64-encoded or URL-encoded versions of the secret\n- Organization secrets can be shared across multiple repositories in the organization — a `NEXUS_PASSWORD` used by 30 microservice repos is defined once at the org level rather than replicated in every repo\n- Environment secrets are scoped to a specific deployment environment (staging, production) and can require a reviewer approval before the environment's secrets are exposed — a production deployment that requires manual approval before the `PROD_KUBECONFIG` secret is available prevents accidental deployments\n\n**Fork PR security**\n- Pull requests from forks cannot access repository secrets — this prevents a malicious PR from exfiltrating credentials by adding a `run: echo ${{ secrets.DOCKER_PASSWORD }}` step\n- Use the `pull_request_target` trigger (instead of `pull_request`) with explicit `read` permissions to run CI on fork PRs without secret access — or use CodeQL's pattern of building untrusted code in a separate job with no secrets before a second job runs with secrets\n\n**Secret injection patterns**\n- Never put secrets in `env:` at the workflow level when only one step needs them — inject at the step level with `env: DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}` to limit the variable's availability to that step's subprocess\n- For AWS authentication, use OIDC (`id-token: write` permission) with `aws-actions/configure-aws-credentials@v4` to assume an IAM role directly from GitHub Actions — no long-lived `AWS_ACCESS_KEY_ID` stored as a secret; the role is assumed using a JWT token signed by GitHub's OIDC provider"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does OIDC authentication work between GitHub Actions and AWS?",
+        "How do you rotate a secret without causing a deployment outage?",
+        "What is the difference between secrets and variables in GitHub Actions?"
+      ],
+      "seo": {
+        "metaTitle": "Managing Secrets in GitHub Actions | Java Interview Answer",
+        "metaDescription": "Understand how to securely manage secrets in GitHub Actions using repository, environment, and organization scopes, plus OIDC for keyless authentication."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "GitHub Actions secrets store encrypted values that are injected as environment variables into workflow steps.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most dangerous secret in a CI/CD pipeline is not the one a hacker steals — it is the one that has been sitting unchanged in repository settings for two years while three engineers who knew it have left the company. Static credentials that never rotate are the most common source of security incidents in GitHub Actions pipelines, and the platform's scoping model is designed to mitigate exactly this risk. GitHub provides three scopes for secrets. Repository secrets are available."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Your understanding of secrets management and security practices in automated pipelines."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Environment secrets pair with protection rules — production credentials require reviewer approval before unlocking, preventing feature branch workflows from accessing production database URLs or API keys ${{ secrets",
+              "NAME }} masking scrubs exact matches — GitHub redacts known secret values from logs, but base64-encoded or concatenated transformations bypass the mask, so never manipulate secrets in shell commands OIDC federation removes stored credentials entirely — the runner exchanges a short-lived identity token for cloud role credentials, eliminating rotation work and shrinking the blast radius of a compromised workflow Same secret name, different values per environment — DATABASE_URL resolves to staging or production connection strings based on the job's environment: declaration without any branch conditionals in YAML vars context for non-sensitive config — use ${{ vars",
+              "APP_ENV }} for feature flags and URLs, reserving secrets strictly for passwords, tokens, and private keys to keep the audit surface small"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most dangerous secret in a CI/CD pipeline is not the one a hacker steals — it is the one that has been sitting unchanged in repository settings for two years while three engineers who knew it have left the company. Static credentials that never rotate are the most common source of security incidents in GitHub Actions pipelines, and the platform's scoping model is designed to mitigate exactly this risk. GitHub provides three scopes for secrets. Repository secrets are available to all workflows in one repository. Environment secrets are tied to named deployment targets like staging or production, with protection rules that require approval before the secrets unlock. Organization secrets share credentials across multiple repositories, scoped to specific repos rather."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Printing secrets with echo (GitHub redacts them, but it is still bad practice), or committing secrets directly in workflow files"
+            ]
+          }
+        ],
+        "cap": "Secret storage and access Repository secrets are defined in Settings → Secrets and Variables → Actions; ${{ secrets.DOCKER_PASSWORD }} references them in workflow YAML — GitHub masks the value in logs",
+        "familiarity_anchors": [
+          "GitHub",
+          "Actions"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does OIDC authentication work between GitHub Actions and AWS?",
+          "How do you rotate a secret without causing a deployment outage?",
+          "What is the difference between secrets and variables in GitHub Actions?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-004",
+      "slug": "cache-maven-gradle-dependencies-github-actions",
+      "question": "How do you cache Maven/Gradle dependencies in GitHub Actions?",
+      "title": "Caching Maven and Gradle Dependencies in GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "recipe-builder",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "GitHub",
+        "JetBrains",
+        "Pivotal",
+        "Atlassian"
+      ],
+      "direct_answer": "Use `actions/cache` to persist `~/.m2/repository` for Maven or `~/.gradle/caches` for Gradle between workflow runs. Cache the directory keyed by a hash of your dependency descriptor file so the cache invalidates automatically when dependencies change.",
+      "interviewer_intent": {
+        "testing": "Whether you understand how to optimize CI pipeline speed by avoiding redundant network calls.",
+        "common_mistake": "Using a static cache key that never invalidates, causing stale dependencies, or caching `target/` instead of the local repository.",
+        "to_stand_out": "Mention the built-in cache support inside `actions/setup-java`, the `restore-keys` fallback for partial cache hits, and cache size limits (10 GB per repository)."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Minutes of Downloading the Same JARs Every Build",
+            "content": "A typical Spring Boot application has 200+ transitive dependencies totaling 300–500 MB. Without caching, every workflow run downloads this entire dependency tree from Maven Central — even if nothing in `pom.xml` changed since the last build. On a busy repository with 30 builds per day, that is over 10 GB of redundant network traffic daily, adding two to four minutes to every pipeline.\n\nGitHub Actions caches are **per-repository key-value stores** persisted between workflow runs. You define a string key, and when a subsequent run matches that key, the cached directory is restored before the build step. The cache key strategy determines whether the cache stays fresh: **hash the dependency descriptor** (`pom.xml` or `build.gradle`) so the cache invalidates automatically when dependencies change, and use `restore-keys` as a prefix fallback so a partial cache miss still restores most artifacts.\n\nThe common mistake is caching the wrong directory. Caching `target/` is counterproductive — it contains compiled classes that change on every build and thrashes the cache constantly. The correct target is `~/.m2/repository` for Maven or `~/.gradle/caches` for Gradle — the local repository where resolved dependency JARs live. These change only when you bump a version in your POM or build file."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Dependency Cache Lifecycle in CI",
+            "content": "The cache lives in GitHub-managed storage (10GB per repo limit, 7-day eviction for unused entries).\n\n```mermaid\nsequenceDiagram\n    participant W as Workflow run\n    participant A as actions/cache\n    participant S as GitHub cache storage\n    participant M as Maven\n    W->>A: restore key=mvn-${{hashFiles('**/pom.xml')}}\n    A->>S: GET cache by key\n    alt Cache hit\n        S->>A: zip stream of ~/.m2\n        A->>W: extract to ~/.m2\n        W->>M: mvn verify (deps already local)\n    else Cache miss\n        S->>A: 404\n        W->>M: mvn verify (downloads everything)\n        M->>W: deps in ~/.m2\n        W->>A: save key=mvn-... (post-job step)\n        A->>S: upload zip\n    end\n    Note over S: 10GB per repo<br/>7-day eviction for stale\n```"
+          },
+          {
+            "type": "step",
+            "title": "Keying Caches on Dependency Descriptors So Staleness Is Impossible",
+            "content": "The cache key must change when dependencies change and stay stable otherwise. The `hashFiles` function computes a hash of one or more files, making it the natural choice for dependency descriptors.\n\nFor Maven, key on all `pom.xml` files across the project hierarchy.\n\n```yaml\n- name: Cache Maven dependencies\n  uses: actions/cache@v4\n  with:\n    path: ~/.m2/repository\n    key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}\n    restore-keys: |\n      ${{ runner.os }}-maven-\n```\n\nFor Gradle, cache both the dependency caches and the wrapper directory, keyed on all Gradle build files.\n\n```yaml\n- name: Cache Gradle dependencies\n  uses: actions/cache@v4\n  with:\n    path: |\n      ~/.gradle/caches\n      ~/.gradle/wrapper\n    key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}\n    restore-keys: |\n      ${{ runner.os }}-gradle-\n```\n\nThe **`restore-keys` prefix fallback** is the subtle but important detail. When the exact key misses — because you added one new dependency — GitHub restores the most recent cache whose key starts with the prefix. You get a warm cache with 199 out of 200 dependencies already present, downloading only the single new one. Without `restore-keys`, a single `pom.xml` change forces a cold cache and a full re-download."
+          },
+          {
+            "type": "step",
+            "title": "The One-Line Shortcut and the Cache Budget You Cannot Ignore",
+            "content": "The `actions/setup-java` action has a built-in `cache` parameter that handles all of the above automatically — path selection, key computation, and restore-keys fallback — in a single line.\n\n```yaml\n- uses: actions/setup-java@v4\n  with:\n    java-version: '17'\n    distribution: 'temurin'\n    cache: 'maven'\n```\n\nThis is the recommended approach for standard projects because it reduces configuration surface and applies sensible defaults. For monorepos or projects with unusual directory layouts, the explicit `actions/cache` step gives more control over paths and key composition.\n\nThe cache budget is a constraint most teams discover the hard way. GitHub allocates approximately **10 GB per repository** for all caches combined. When the budget is exhausted, the oldest caches are evicted. In a repository with matrix builds (three JDK versions × two OS variants = six cache entries), each consuming 500 MB, the total is 3 GB from a single workflow. Add Gradle build caches, npm caches from a frontend module, and Docker layer caches, and the budget fills quickly.\n\nKeep cache paths tight — cache only `~/.m2/repository`, not the entire home directory. Monitor cache hit rates in the Actions log: the \"Cache restored\" and \"Cache saved\" messages show whether your keys are working. A pattern of constant saves without restores means the key is too volatile or the cache is being evicted before the next run."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs of Dependency Caching",
+            "content": "**Cache hit ratio depends on key stability.** Use `hashFiles('**/pom.xml')` so cache invalidates only when dependencies change. Adding the OS to the key (`runs-on-${{ runner.os }}-mvn-...`) prevents Linux cache being restored on macOS where binaries differ.\n\n**Cache size limits.** GitHub allows 10GB per repo. A heavy Spring Boot project's `~/.m2/repository` can be 1–2GB. Across feature branches, the limit is often hit. Use restore-keys with prefixes so older caches can serve as a starting point: a partial cache with most deps is much better than no cache.\n\n**`actions/setup-java`'s built-in cache.** The recent versions of `setup-java` accept `cache: maven` and `cache: gradle` and handle caching automatically. Simpler than `actions/cache` for the common case, but less customizable.\n\n**Cache poisoning risk.** A malicious dependency that gets into the cache stays there until eviction. Pin Maven to download from a verified source (Maven Central via HTTPS, not random repositories) and consider scanning cache contents in security audits.\n\n**Cross-workflow cache sharing.** Caches are scoped per branch by default, with restore from base branch as fallback. Feature branches inherit main's cache; main builds fresh on dependency change. Tune the restore-keys hierarchy to match your branching strategy."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`hashFiles('**/pom.xml')` cache keys auto-invalidate** — the cache busts when dependency declarations change so you never reuse a stale `~/.m2/repository` after a version bump\n- **`restore-keys` prefix fallback warms partial misses** — on a key miss from one new dependency, the most recent matching cache restores 199 out of 200 JARs instead of starting cold\n- **Cache `~/.m2/repository`, never `target/`** — the local repo holds resolved dependency artifacts that rarely change; `target/` contains compiled classes that churn every build and thrash the cache\n- **`setup-java` built-in `cache: 'maven'`** — applies sensible cache paths and keys in one line, eliminating bespoke `actions/cache` YAML that reviewers must audit per service\n- **10 GB repository cache budget with LRU eviction** — matrix builds across JDK versions and OS variants multiply cache entries; tight paths and intentional key design prevent high-signal caches from being evicted"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Caching dependencies in GitHub Actions turns a 3-minute dependency download into a 10-second cache restore. Without caching, every CI run downloads the same JAR files from Maven Central, wasting time and network on a fully deterministic operation.\n\n**Maven caching**\n- The `actions/setup-java@v4` action caches `~/.m2/repository` automatically when `cache: 'maven'` is set — the cache key is a hash of all `pom.xml` files; adding a dependency invalidates the cache and triggers a fresh download on the next run\n- After the cache is populated, the next build's `dependency:go-offline` step hits the local repository instead of Maven Central — 3 minutes becomes 15 seconds\n- The cache is scoped to the branch by default with a fallback to the parent branch's cache — feature branches use the main branch's cache as a starting point, preventing cold starts on new branches\n\n**Gradle caching with the setup-gradle action**\n- `gradle/actions/setup-gradle@v3` caches both the Gradle home directory (wrapper, resolved plugins) and the Gradle build cache (compiled class files, task outputs) — the two-layer caching is what makes repeated Gradle builds fast in CI\n- The build cache is keyed by task input hash — a `compileJava` task whose inputs have not changed restores its outputs from cache and reports `UP-TO-DATE` without recompiling; this is the Gradle equivalent of `mvn -o` (offline mode)\n- Set `cache-read-only: true` on branches that should not push new cache entries — only the main branch's successful builds should update the shared cache; feature branches read from cache but do not pollute it with potentially stale compiled outputs\n\n**Cache invalidation**\n- For Maven, add `--no-transfer-progress` to suppress per-artifact download progress lines that create noisy CI logs and make it harder to see which dependency changes caused a cache miss\n- Periodically clear stale caches using the GitHub Cache API (`gh cache list`, `gh cache delete`) — old caches from deleted branches accumulate and can consume significant storage quota"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you force-clear a stale cache in GitHub Actions?",
+        "What is the maximum cache size per repository and what happens when it is exceeded?",
+        "How does caching interact with matrix builds — does each matrix job get its own cache?"
+      ],
+      "seo": {
+        "metaTitle": "Cache Maven and Gradle Dependencies in GitHub Actions | Java CI",
+        "metaDescription": "Speed up your Java CI builds by caching Maven and Gradle dependencies in GitHub Actions using actions/cache with smart invalidation keys."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Caching dependencies in GitHub Actions turns a 3-minute dependency download into a 10-second cache restore.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A typical Spring Boot application has 200+ transitive dependencies totaling 300–500 MB. Without caching, every workflow run downloads this entire dependency tree from Maven Central — even if nothing in pom.xml changed since the last build. On a busy repository with 30 builds per day, that is over 10 GB of redundant network traffic daily, adding two to four minutes to every pipeline. GitHub Actions caches are per-repository key-value stores persisted between workflow runs. You define a string key, and."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand how to optimize CI pipeline speed by avoiding redundant network calls."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "hashFiles('/pom",
+              "xml') cache keys auto-invalidate** — the cache busts when dependency declarations change so you never reuse a stale ~/",
+              "m2/repository after a version bump restore-keys prefix fallback warms partial misses — on a key miss from one new dependency, the most recent matching cache restores 199 out of 200 JARs instead of starting cold Cache ~/",
+              "m2/repository, never target/ — the local repo holds resolved dependency artifacts that rarely change; target/ contains compiled classes that churn every build and thrash the cache setup-java built-in cache: 'maven' — applies sensible cache paths and keys in one line, eliminating bespoke actions/cache YAML that reviewers must audit per service 10 GB repository cache budget with LRU eviction — matrix builds across JDK versions and OS variants multiply cache entries; tight paths and intentional key design prevent high-signal caches from being evicted"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A typical Spring Boot application has 200+ transitive dependencies totaling 300–500 MB. Without caching, every workflow run downloads this entire dependency tree from Maven Central — even if nothing in pom.xml changed since the last build. On a busy repository with 30 builds per day, that is over 10 GB of redundant network traffic daily, adding two to four minutes to every pipeline. GitHub Actions caches are per-repository key-value stores persisted between workflow runs. You define a string key, and when a subsequent run matches that key, the cached directory is restored before the build step. The cache key strategy determines whether the cache stays fresh: hash the dependency descriptor (pom.xml or build.gradle) so the cache invalidates automatically when dependencies."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using a static cache key that never invalidates, causing stale dependencies, or caching target/ instead of the local repository"
+            ]
+          }
+        ],
+        "cap": "Maven caching The actions/setup-java@v4 action caches ~/.m2/repository automatically when cache: 'maven' is set — the cache key is a hash of all pom.xml files; adding a dependency invalidates the cach",
+        "familiarity_anchors": [
+          "Maven",
+          "Gradle",
+          "Cache"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you force-clear a stale cache in GitHub Actions?",
+          "What is the maximum cache size per repository and what happens when it is exceeded?",
+          "How does caching interact with matrix builds — does each matrix job get its own cache?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-005",
+      "slug": "deploy-spring-boot-github-actions",
+      "question": "How do you deploy a Spring Boot app using GitHub Actions?",
+      "title": "Deploying a Spring Boot Application with GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "recipe-builder",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "AWS",
+        "Heroku",
+        "DigitalOcean",
+        "Pivotal"
+      ],
+      "direct_answer": "You deploy a Spring Boot app with GitHub Actions by building a JAR or Docker image in the CI job and then running a deployment job that pushes to your target platform — AWS Elastic Beanstalk, ECS, a bare VM via SSH, or a PaaS — using stored credentials from GitHub Secrets.",
+      "interviewer_intent": {
+        "testing": "Whether you can connect the build pipeline all the way through to a real deployment target.",
+        "common_mistake": "Running the build and deploy in a single job without an artifact handoff, which makes rollbacks harder and mixes concerns.",
+        "to_stand_out": "Mention environment protection rules for production approval, blue-green or rolling deployment strategies, and health-check verification steps after deployment."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why the Build Job and Deploy Job Must Be Separate",
+            "content": "The most common mistake in Spring Boot deployment workflows is putting everything in a single job: compile, test, build the Docker image, and deploy to production in one linear sequence. When the deploy fails, you cannot retry it without re-running the entire test suite. When you want to promote the same build to staging and then production, you must rebuild from source — which might produce a different artifact if a dependency snapshot changed between builds.\n\n**Separating build from deploy** creates an artifact promotion model. The build job compiles, tests, and publishes an immutable Docker image tagged with the Git SHA. The deploy job downloads or references that exact image and pushes it to the target environment. The same image flows through dev, staging, and production without a single recompilation. If the production deploy fails, you retry just the deploy job against the already-tested artifact.\n\nThe `environment` keyword in GitHub Actions is the critical security boundary. Declaring `environment: production` on the deploy job activates protection rules — required reviewers, wait timers, and deployment branch restrictions. Production secrets like database URLs and cloud credentials only unlock when the job runs in the context of that approved environment. A developer running the workflow from a feature branch cannot access production resources, even if the YAML references the same secret names."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Deploy Pipeline — Build, Push, Roll Out",
+            "content": "```mermaid\nflowchart LR\n    Tag[git tag v1.2.3<br/>or push to main] --> Build[Build artifact<br/>mvn package]\n    Build --> Image[Build Docker image<br/>tag = ${SHA}]\n    Image --> Scan[Trivy scan]\n    Scan -->|pass| Sign[Cosign sign]\n    Scan -->|fail| FailB[Block deploy]\n    Sign --> Push[Push to registry<br/>ECR / GHCR]\n    Push --> Choice{Deploy target}\n    Choice -->|VM / EC2| SSH[ssh + systemctl restart<br/>OR AWS CodeDeploy]\n    Choice -->|Kubernetes| Helm[helm upgrade --wait<br/>OR kubectl set image]\n    Choice -->|GitOps| Argo[Update gitops repo<br/>ArgoCD / Flux syncs]\n    Helm --> Verify[Smoke test<br/>curl /actuator/health]\n    SSH --> Verify\n    Argo --> Verify\n    Verify -->|pass| Done[Deploy complete]\n    Verify -->|fail| RB[Rollback:<br/>helm rollback / kubectl undo]\n    style FailB fill:#ffcdd2\n    style RB fill:#ff8a80\n    style Done fill:#c8e6c9\n```"
+          },
+          {
+            "type": "step",
+            "title": "Building and Publishing an Immutable Container Image",
+            "content": "The build job compiles the Spring Boot application, runs tests, builds a Docker image, and pushes it to a container registry. **Tagging with the Git SHA** ensures every image is immutable and traceable to a specific commit. The workflow uses `actions/setup-java` with built-in Maven caching to avoid downloading hundreds of megabytes of dependencies on every run.\n\n```yaml\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with:\n          java-version: '17'\n          distribution: 'temurin'\n          cache: 'maven'\n      - run: mvn -B verify\n      - name: Build and push image\n        env:\n          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}\n        run: |\n          docker build -t $ECR_REGISTRY/my-app:${{ github.sha }} .\n          aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY\n          docker push $ECR_REGISTRY/my-app:${{ github.sha }}\n```\n\nTagging with `github.sha` instead of `latest` is the difference between **deterministic rollbacks** and guesswork. During an incident, you can redeploy any previous SHA instantly because the image is immutable in the registry. With `latest`, every push overwrites the same tag and you lose the ability to know which version of the code is running. The ECR registry URL is stored as a secret so it never appears in workflow logs or version-controlled YAML."
+          },
+          {
+            "type": "step",
+            "title": "Promoting Through Environments With Approval Gates",
+            "content": "The deploy job declares `needs: build` to enforce ordering and uses the `environment` keyword to activate protection rules. Separate jobs for staging and production create a promotion chain where each stage must succeed before the next begins.\n\n```yaml\n  deploy-staging:\n    needs: build\n    runs-on: ubuntu-latest\n    environment: staging\n    steps:\n      - name: Update ECS service\n        run: |\n          aws ecs update-service --cluster staging --service my-app --force-new-deployment\n\n  deploy-production:\n    needs: deploy-staging\n    runs-on: ubuntu-latest\n    environment: production\n    steps:\n      - name: Update ECS service\n        run: |\n          aws ecs update-service --cluster production --service my-app --force-new-deployment\n```\n\nThe `production` environment requires a designated reviewer to approve the deployment. The reviewer sees the staging verification results before approving, creating a human checkpoint. **Environment-scoped secrets** mean the staging job uses staging AWS credentials while the production job uses production credentials, even though both reference `${{ secrets.AWS_ACCESS_KEY_ID }}`. The workflow YAML is identical for both environments — only the environment declaration changes the credentials and protection rules that apply."
+          },
+          {
+            "type": "step",
+            "title": "Health Verification That Proves the Deploy Actually Worked",
+            "content": "Declaring the deploy successful when the cloud API returns 200 is not enough. The ECS update-service call returns immediately — the actual container rollout happens asynchronously. New pods could fail Spring Boot startup due to a missing property, fail database connectivity, or OOM-kill under real traffic.\n\nA post-deploy health check polls the Spring Boot **Actuator health endpoint** in a retry loop to confirm the application is actually serving traffic.\n\n```yaml\n      - name: Verify deployment\n        run: |\n          for i in $(seq 1 20); do\n            STATUS=$(curl -s -o /dev/null -w \"%{http_code}\" https://api.example.com/actuator/health)\n            if [ \"$STATUS\" = \"200\" ]; then\n              echo \"Healthy after $i attempts\"\n              exit 0\n            fi\n            sleep 15\n          done\n          echo \"Health check failed\" && exit 1\n```\n\nThe retry loop handles the window between deploy and readiness — ECS needs time to pull the image, start the JVM, and pass readiness probes. Twenty attempts at 15-second intervals gives the deployment five minutes to stabilize. If health never reaches 200, the workflow fails and the team is notified.\n\nFor **blue-green or canary deployments** on ECS, separate the actuator liveness probe from the readiness probe. Liveness confirms the JVM is running; readiness confirms database migrations completed and the application can serve traffic. Traffic should shift to the new deployment only after readiness passes, not just liveness."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs of Deployment Approaches",
+            "content": "**Direct kubectl vs Helm vs GitOps.** Direct `kubectl set image` is fastest to set up but loses release history. Helm tracks releases and supports rollback (`helm rollback`). GitOps (ArgoCD/Flux) is the most decoupled — CI commits a manifest update, the cluster pulls and applies. GitOps wins for audit trail and disaster recovery; Helm is the pragmatic middle ground.\n\n**Push-based vs pull-based deploy.** Push (CI runs `kubectl apply`) requires CI to have cluster credentials — a security concern for prod. Pull-based (GitOps) flips this: clusters watch a git repo and pull updates; CI never touches the cluster API. Pull-based is the modern best practice.\n\n**Staging then prod vs single environment.** Auto-deploy to staging on main, manual approval for prod is the standard. Skipping staging is faster but loses an integration safety net. Skipping prod approval enables fully automated rollouts but only with strong test coverage and canary analysis.\n\n**Image tag strategy.** Tag with commit SHA (immutable, correlates with code), semver (release-friendly), or `latest` (NEVER for K8s — breaks rollback). SHA tags pair best with GitOps; semver pairs with release engineering.\n\n**Rollback automation.** A truly robust pipeline includes automated rollback on health check failure. Manual rollback is fine for low-traffic services; for revenue-critical paths, the runbook should be `argocd app rollback` or equivalent without human in the loop for the rollback decision."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Image tag = `github.sha` for deterministic rollbacks** — immutable tags let you redeploy any previous commit instantly; tagging with `latest` overwrites the previous version and destroys rollback traceability\n- **`needs: build` enforces artifact promotion** — the deploy job promotes what CI tested rather than rebuilding from source, eliminating the risk of snapshot dependency drift between build and deploy\n- **`environment: production` gates with scoped secrets** — protection rules require reviewer approval, and production credentials only unlock within the approved environment context, not from feature branch workflows\n- **Actuator `/actuator/health` post-deploy verification** — proves the JVM started, datasource connected, and the application is serving traffic, rather than trusting the cloud API's 202 response as proof of success\n- **Separate liveness from readiness for traffic shifting** — blue-green and canary deployments should shift traffic only after readiness probes pass, ensuring database migrations completed before the new version receives requests"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A GitHub Actions deployment workflow takes a built and tested artifact, packages it as a Docker image, and deploys it to Kubernetes. The workflow separates CI (build and test) from CD (deploy) using GitHub environments for approval gates and traceability.\n\n**Image build and push**\n- Build the Docker image after tests pass: `docker build -t registry.io/payment-service:${{ github.sha }} .` — use the full Git SHA as the image tag, not a semantic version or `latest`; the SHA is immutable, traceable to the exact commit, and avoids the image pull behavior issues with mutable tags\n- Push to the registry using OIDC-based authentication when the registry supports it (AWS ECR with `aws-actions/amazon-ecr-login@v2`); fall back to `docker/login-action@v3` with a stored secret for other registries\n- The image SHA tag is the link between the CI artifact and what runs in production — `kubectl describe pod` shows the image tag, and you can immediately identify which commit is deployed\n\n**Environment gates**\n- Define `environment: staging` or `environment: production` in the deploy job — GitHub tracks all deployments to each environment, shows the deployment history on the repository page, and optionally requires a reviewer approval before the job runs\n- Use `environment: production` with a required reviewer for the production deploy job — the job waits for manual approval before `PROD_KUBECONFIG` secrets are injected; this is the standard mechanism for human-in-the-loop production deployments in GitHub Actions\n\n**Kubernetes deploy and verification**\n- `kubectl set image deployment/payment-service app=registry.io/payment-service:${{ github.sha }} -n production` updates the Deployment with the new image SHA\n- `kubectl rollout status deployment/payment-service -n production --timeout=300s` waits for completion and fails the workflow if the rollout does not succeed within 5 minutes — the workflow shows red if deployment failed, not just if the `kubectl` command ran\n- On failure, `kubectl rollout undo deployment/payment-service -n production` in the `if: failure()` step automatically rolls back to the previous version; this keeps the production state consistent even when the workflow reports failure"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you implement a rollback in GitHub Actions if a deployment fails?",
+        "How do you pass the Docker image tag from the build job to the deploy job?",
+        "What is the difference between using ECS versus Elastic Beanstalk for Spring Boot deployments?"
+      ],
+      "seo": {
+        "metaTitle": "Deploy Spring Boot App with GitHub Actions | CI/CD Tutorial",
+        "metaDescription": "Step-by-step guide to deploying a Spring Boot application using GitHub Actions, Docker, Amazon ECR, ECS, and health-check verification."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "A GitHub Actions deployment workflow takes a built and tested artifact, packages it as a Docker image, and deploys it to Kubernetes.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common mistake in Spring Boot deployment workflows is putting everything in a single job: compile, test, build the Docker image, and deploy to production in one linear sequence. When the deploy fails, you cannot retry it without re-running the entire test suite. When you want to promote the same build to staging and then production, you must rebuild from source — which might produce a different artifact if a dependency snapshot changed between builds. Separating build from deploy."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can connect the build pipeline all the way through to a real deployment target."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Image tag = github",
+              "sha for deterministic rollbacks — immutable tags let you redeploy any previous commit instantly; tagging with latest overwrites the previous version and destroys rollback traceability needs: build enforces artifact promotion — the deploy job promotes what CI tested rather than rebuilding from source, eliminating the risk of snapshot dependency drift between build and deploy environment: production gates with scoped secrets — protection rules require reviewer approval, and production credentials only unlock within the approved environment context, not from feature branch workflows Actuator /actuator/health post-deploy verification — proves the JVM started, datasource connected, and the application is serving traffic, rather than trusting the cloud API's 202 response as proof of success Separate liveness from readiness for traffic shifting — blue-green and canary deployments should shift traffic only after readiness probes pass, ensuring database migrations completed before the new version receives requests"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common mistake in Spring Boot deployment workflows is putting everything in a single job: compile, test, build the Docker image, and deploy to production in one linear sequence. When the deploy fails, you cannot retry it without re-running the entire test suite. When you want to promote the same build to staging and then production, you must rebuild from source — which might produce a different artifact if a dependency snapshot changed between builds. Separating build from deploy creates an artifact promotion model. The build job compiles, tests, and publishes an immutable Docker image tagged with the Git SHA. The deploy job downloads or references that exact image and pushes it to the target environment. The same image."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Running the build and deploy in a single job without an artifact handoff, which makes rollbacks harder and mixes concerns"
+            ]
+          }
+        ],
+        "cap": "— use the full Git SHA as the image tag, not a semantic version or latest; the SHA is immutable, traceable to the exact commit, and avoids the image pull behavior issues with mutable tags.",
+        "familiarity_anchors": [
+          "Spring",
+          "GitHub",
+          "Actions"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you implement a rollback in GitHub Actions if a deployment fails?",
+          "How do you pass the Docker image tag from the build job to the deploy job?",
+          "What is the difference between using ECS versus Elastic Beanstalk for Spring Boot deployments?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-006",
+      "slug": "github-actions-reusable-workflows",
+      "question": "What are GitHub Actions reusable workflows?",
+      "title": "GitHub Actions Reusable Workflows Explained",
+      "difficulty": "intermediate",
+      "layout_type": "concept-explainer",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "GitHub",
+        "Microsoft",
+        "Shopify",
+        "Stripe"
+      ],
+      "direct_answer": "Reusable workflows are workflow files triggered by `workflow_call` that can be called from other workflows. They let you define a build or deployment pattern once and reference it across many repositories, avoiding copy-paste drift.",
+      "interviewer_intent": {
+        "testing": "Whether you understand how to reduce duplication and enforce consistency across many pipelines.",
+        "common_mistake": "Confusing reusable workflows with composite actions — reusable workflows run in their own isolated runner context, while composite actions run as steps inside the caller's job.",
+        "to_stand_out": "Mention that reusable workflows can accept inputs and secrets, that you can chain them (a workflow calling a reusable workflow that itself calls another), and that organization-level reusable workflows enforce enterprise-wide standards."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Copy-Paste Pipeline Problem That Grows With Every Microservice",
+            "content": "An organization with twenty Java microservices starts with one well-crafted CI workflow. Within six months, that workflow has been copied into twenty repositories, each with slight variations — a different JDK version here, a missing cache step there, a deploy stage that nobody updated when the registry URL changed. When a security practice needs updating, the platform team must submit twenty pull requests and hope every team merges them promptly.\n\n**Reusable workflows** solve this by allowing you to define a pipeline once in a central repository and call it from every service. A reusable workflow is a normal YAML file that adds `workflow_call` to its `on:` triggers, declares inputs for parameters like Java version and build tool, and declares secrets it requires. Calling workflows reference it with `uses:` at the job level, passing the inputs and secrets.\n\nThe common mistake in interviews is confusing reusable workflows with **composite actions**. Composite actions encapsulate a sequence of steps that run inside the caller's job — they share the same runner and workspace. Reusable workflows encapsulate entire jobs with their own runners, their own environments, and their own logs. The isolation boundary is fundamentally different, and choosing the wrong abstraction leads to either over-scoped permissions or unnecessary runner overhead."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Reusable Workflow vs Composite Action vs Org Template",
+            "content": "Three reuse mechanisms with different scopes and trade-offs.\n\n```mermaid\nflowchart TB\n    subgraph RW[\"Reusable workflow (workflow_call)\"]\n        R1[Full job graph<br/>own runners, secrets, matrix]\n        R2[Caller passes inputs +<br/>secrets via with: + secrets:]\n    end\n    subgraph CA[\"Composite action\"]\n        C1[Reusable steps inside<br/>a single job]\n        C2[Lightweight; runs on caller's runner]\n    end\n    subgraph OT[\"Org-level workflow template\"]\n        O1[Starter workflow<br/>copied into new repos]\n        O2[Diverges over time;<br/>not centrally updated]\n    end\n    Use{What you need} --> RW\n    Use --> CA\n    Use --> OT\n    RW -.best for.-> RWUse[Cross-repo standard pipelines<br/>centrally maintained]\n    CA -.best for.-> CAUse[Reusable steps within workflows<br/>e.g., setup, login, deploy]\n    OT -.best for.-> OTUse[Bootstrapping new repos]\n    style RW fill:#bbdefb\n    style CA fill:#c8e6c9\n    style OT fill:#fff9c4\n```"
+          },
+          {
+            "type": "step",
+            "title": "How workflow_call Turns a Pipeline Into a Callable Template",
+            "content": "A reusable workflow declares its contract through `inputs` (parameters) and `secrets` (credentials). The caller satisfies this contract with `with:` and `secrets:` mappings. **Input defaults** minimize configuration for the common case while allowing overrides for services with different requirements.\n\n```yaml\non:\n  workflow_call:\n    inputs:\n      java-version:\n        type: string\n        default: '21'\n    secrets:\n      REGISTRY_PASSWORD:\n        required: true\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with:\n          java-version: ${{ inputs.java-version }}\n          distribution: temurin\n          cache: maven\n      - run: mvn -B verify\n```\n\nThe caller workflow becomes minimal — often just three lines per job that specify the reusable workflow path, inputs, and secrets.\n\n```yaml\njobs:\n  ci:\n    uses: org/platform/.github/workflows/java-ci.yml@v2\n    with:\n      java-version: '17'\n    secrets:\n      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}\n```\n\nThe `@v2` tag reference is critical. Pinning to a version tag means consuming repositories are not broken by upstream changes. When making a breaking change like renaming an input, the platform team creates a new major version tag and communicates the migration path. Using `@main` means every repository picks up YAML edits immediately — a single syntax error in the reusable workflow breaks twenty services simultaneously."
+          },
+          {
+            "type": "step",
+            "title": "Versioning, Secrets Forwarding, and Organization-Wide Enforcement",
+            "content": "For organizations managing dozens of repositories, three capabilities make reusable workflows practical at scale. First, **`secrets: inherit`** in the caller forwards all available secrets without listing each name individually. This reduces boilerplate when the reusable workflow needs five or six secrets, though it trades convenience for the principle of least privilege.\n\nSecond, reusable workflows support **outputs** that flow back to the caller. A build workflow can expose the Docker image tag as an output that a separate deploy workflow consumes. This chains reusable workflows into multi-stage pipelines where each stage is independently maintainable.\n\nThird, **organization rulesets** can require every repository to call the approved central CI workflow before merging. This enforcement mechanism means individual teams cannot bypass the standard pipeline — they can extend it by adding jobs before or after the reusable workflow call, but they cannot skip it. For compliance-heavy industries, this guarantees that every service passes the same security scans and quality gates.\n\nThe versioning strategy deserves explicit mention. Semantic versioning through Git tags (`@v1`, `@v2`) lets the platform team iterate on the pipeline without disrupting consumers. Release notes on GitHub releases communicate changes, and keeping the previous major version supported for at least one quarter gives teams time to migrate. This discipline turns a shared workflow from a fragile dependency into a reliable internal product."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and When to Use Each",
+            "content": "**Reusable workflow vs composite action.** Reusable workflows can have multiple jobs and run on their own runners; composite actions are inline steps. Use reusable workflows for full pipelines (build-test-scan-publish); use composite actions for sequences of steps (login + cache + setup).\n\n**Versioning.** Pin reusable workflows to a tag or SHA, not a branch — `org/.github/.github/workflows/build.yml@v1.2.0`. Pinning to `main` means anyone with write access to the central repo can change behavior in every consuming pipeline.\n\n**Secrets passing.** Reusable workflows do not inherit caller secrets by default. Pass explicitly with `secrets:` block or use `secrets: inherit` (passes everything — use carefully). Inheriting all secrets is convenient but expands the blast radius if the reusable workflow has a vulnerability.\n\n**Output and reuse limits.** A reusable workflow can be called from another reusable workflow (max nesting depth 4). Beyond that, GitHub rejects. Plan the abstraction levels: caller → deploy.yml → helm.yml is two levels and easy to reason about; deeper than that loses readability.\n\n**Org template drift.** Starter workflows copied into new repos diverge over weeks as teams modify them. The 50th repo is wildly different from the 1st. Reusable workflows are the only way to centrally maintain pipeline behavior across many repos."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`workflow_call` marks a workflow as callable** — platform teams publish one golden pipeline instead of maintaining twenty forked copies that drift apart across microservice repositories\n- **Job-level `uses:` runs in an isolated runner** — unlike composite actions that share the caller's workspace and job context, reusable workflows get their own runner and log stream with separate environment scope\n- **Declared `inputs` and `secrets` document the contract** — callers must satisfy required parameters or the workflow fails fast, preventing silent misconfiguration when a team forgets to pass a registry password\n- **`@v2` tag pinning prevents upstream breakage** — version tags let the platform team iterate while consuming repositories control when they adopt changes, unlike `@main` which propagates every commit instantly\n- **`secrets: inherit` reduces boilerplate forwarding** — avoids listing dozens of secret names in every microservice caller, though it trades least-privilege for convenience at the org-secret level"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Reusable workflows in GitHub Actions let one repository define a workflow that other repositories (or other workflows in the same repository) can call. They solve the copy-paste problem that emerges when 30 microservice repositories all have identical CI pipelines.\n\n**Defining a reusable workflow**\n- A reusable workflow uses `on: workflow_call:` instead of push or pull_request triggers — this marks it as callable by other workflows, not directly triggerable by events\n- Define `inputs:` and `secrets:` blocks to parameterize the workflow — `java-version` as an input, `DOCKER_PASSWORD` as a secret that the caller passes through; the reusable workflow does not have access to the caller's secrets unless explicitly passed\n- Publish reusable workflows in a dedicated `.github` repository in your organization — `org/.github/.github/workflows/java-ci.yml`; callers reference it as `uses: org/.github/.github/workflows/java-ci.yml@main`\n\n**Calling a reusable workflow**\n- A caller workflow invokes a reusable workflow with `uses: org/.github/.github/workflows/java-ci.yml@v1.2` and passes inputs and secrets with `with:` and `secrets:` blocks\n- `secrets: inherit` passes all of the caller's secrets to the reusable workflow without listing them individually — convenient but removes the explicit contract of which secrets the workflow needs; prefer explicit `secrets:` passing for clarity\n- Pin reusable workflow references to a tag or commit SHA (`@v1.2` or `@sha`), not `@main` — calling `@main` means a change to the shared workflow immediately affects all callers without a coordinated rollout\n\n**Governance benefits**\n- The platform team owns and maintains the reusable workflow; security patches (updated Trivy scan step, new SonarQube version) apply to all 30 consumers on the next merge without touching any consumer repository\n- Callers cannot skip mandatory steps — a `required-checks` step in the shared workflow that calls SonarQube quality gate cannot be removed by individual teams, enforcing organization-wide standards"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a reusable workflow and a composite action?",
+        "How do you version a reusable workflow so consumers can pin to a stable release?",
+        "Can a reusable workflow call another reusable workflow?"
+      ],
+      "seo": {
+        "metaTitle": "GitHub Actions Reusable Workflows | Java Interview Answer",
+        "metaDescription": "Understand GitHub Actions reusable workflows: how to create them with workflow_call, pass inputs and secrets, and share them across repositories."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Reusable workflows in GitHub Actions let one repository define a workflow that other repositories (or other workflows in the same repository) can call.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "An organization with twenty Java microservices starts with one well-crafted CI workflow. Within six months, that workflow has been copied into twenty repositories, each with slight variations — a different JDK version here, a missing cache step there, a deploy stage that nobody updated when the registry URL changed. When a security practice needs updating, the platform team must submit twenty pull requests and hope every team merges them promptly. Reusable workflows solve this by allowing you to define a."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand how to reduce duplication and enforce consistency across many pipelines."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "workflow_call marks a workflow as callable",
+              "platform teams publish one golden pipeline instead of maintaining twenty forked copies that drift apart across microservice repositories Job-level uses: runs in an isolated runner",
+              "unlike composite actions that share the caller's workspace and job context, reusable workflows get their own runner and log stream with separate environment scope Declared inputs and secrets document the contract",
+              "callers must satisfy required parameters or the workflow fails fast, preventing silent misconfiguration when a team forgets to pass a registry password @v2 tag pinning prevents upstream breakage"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "An organization with twenty Java microservices starts with one well-crafted CI workflow. Within six months, that workflow has been copied into twenty repositories, each with slight variations — a different JDK version here, a missing cache step there, a deploy stage that nobody updated when the registry URL changed. When a security practice needs updating, the platform team must submit twenty pull requests and hope every team merges them promptly. Reusable workflows solve this by allowing you to define a pipeline once in a central repository and call it from every service. A reusable workflow is a normal YAML file that adds workflow_call to its on: triggers, declares inputs for parameters like Java version and build tool, and declares secrets."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing reusable workflows with composite actions",
+              "reusable workflows run in their own isolated runner context, while composite actions run as steps inside the caller's job"
+            ]
+          }
+        ],
+        "cap": "Defining a reusable workflow A reusable workflow uses on: workflow_call: instead of push or pull_request triggers — this marks it as callable by other workflows, not directly triggerable by events Def",
+        "familiarity_anchors": [
+          "Reusable"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a reusable workflow and a composite action?",
+          "How do you version a reusable workflow so consumers can pin to a stable release?",
+          "Can a reusable workflow call another reusable workflow?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-007",
+      "slug": "sonarqube-code-quality-github-actions",
+      "question": "How do you set up code quality checks (SonarQube) in GitHub Actions?",
+      "title": "Setting Up SonarQube Code Quality Checks in GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "recipe-builder",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "SonarSource",
+        "ThoughtWorks",
+        "Deloitte",
+        "Accenture"
+      ],
+      "direct_answer": "Integrate SonarQube into GitHub Actions by adding a `sonar:sonar` Maven goal (or the SonarScanner Gradle task) to your workflow, pointing it to your SonarQube server URL via environment variables, and storing the authentication token in GitHub Secrets.",
+      "interviewer_intent": {
+        "testing": "Whether you understand static code analysis integration and how to enforce quality gates in CI.",
+        "common_mistake": "Running Sonar analysis without first running the test phase, so code coverage data is missing from the report.",
+        "to_stand_out": "Mention Quality Gate status polling, PR decoration that comments analysis results directly on pull requests, and using SonarCloud as a managed alternative to a self-hosted server."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Quality Dashboard Nobody Checks Until the Gate Blocks a Merge",
+            "content": "Most Java teams install SonarQube, run analysis in CI, and then ignore the dashboard for months. Code smells accumulate, coverage drifts below the threshold, and nobody notices until a new engineer asks why the quality gate is permanently red. The problem is not the analysis — it is the **enforcement loop**. Without a mechanism that blocks a pull request when quality drops, SonarQube becomes an expensive dashboard that produces metrics nobody acts on.\n\nIntegrating SonarQube with GitHub Actions requires wiring three pieces together. First, the **analysis phase** runs after `mvn verify` so JaCoCo coverage data exists before Sonar reads it. Running analysis before tests means Sonar evaluates code smells and duplication but has zero coverage information, which either silently passes the gate or fails for the wrong reason. Second, the **quality gate check** polls the SonarQube server for the gate decision and fails the workflow if it does not pass. Third, **PR decoration** surfaces issues directly in pull request comments so developers see new bugs inline on the diff rather than navigating to a separate dashboard.\n\nThe critical architectural choice is whether to use self-hosted SonarQube or the managed **SonarCloud** service. SonarCloud removes patching, scaling, and infrastructure concerns. Self-hosted gives you control over data residency, custom plugins, and network isolation for air-gapped compliance environments."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "SonarQube Quality Gate in PR Workflow",
+            "content": "```mermaid\nsequenceDiagram\n    participant Dev as Developer\n    participant GH as GitHub\n    participant W as Workflow\n    participant SQ as SonarQube/SonarCloud\n    Dev->>GH: open PR\n    GH->>W: pull_request event\n    W->>W: mvn verify with jacoco\n    W->>W: mvn sonar:sonar -Dsonar.pullrequest.key=...\n    W->>SQ: upload analysis\n    SQ->>SQ: compute new code coverage<br/>+ duplications + smells\n    SQ->>SQ: evaluate Quality Gate<br/>(e.g. coverage >= 80% on new code)\n    SQ->>GH: post status check<br/>+ inline PR comments\n    GH->>Dev: PR check shows pass/fail<br/>+ comments on lines\n    alt Quality Gate fail\n        GH->>Dev: merge button blocked\n    else Quality Gate pass\n        GH->>Dev: merge button enabled\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Sequencing the Build So Coverage Data Exists Before Sonar Reads It",
+            "content": "The workflow must run `mvn verify` before `sonar:sonar` because **JaCoCo generates its XML report** during the Maven test phase. The `pom.xml` needs the JaCoCo plugin configured with `prepare-agent` and `report` goals so the coverage report exists at the expected path.\n\nThe workflow step combines both commands and authenticates using the **Sonar token stored in GitHub Secrets**.\n\n```yaml\n- name: Build, test, and analyze\n  env:\n    SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n    SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}\n  run: |\n    mvn -B verify sonar:sonar \\\n      -Dsonar.projectKey=my-java-app \\\n      -Dsonar.host.url=$SONAR_HOST_URL \\\n      -Dsonar.token=$SONAR_TOKEN\n```\n\nThe command runs `verify` first (which includes compile, test, and JaCoCo report generation), then `sonar:sonar` uploads the compiled classes and coverage XML to the SonarQube server. If you run `sonar:sonar` after `package` instead of `verify`, integration tests bound to the `verify` phase are skipped and coverage data reflects only unit tests.\n\nFor multi-module Maven projects, tune `sonar.coverage.exclusions` to skip generated sources — protobuf stubs, MapStruct mappers, and OpenAPI client code inflate the codebase and deflate coverage percentages. Quality gates should measure hand-written production logic, not punish teams for using code generation tools."
+          },
+          {
+            "type": "step",
+            "title": "Closing the Loop — Quality Gate Polling and PR Decoration",
+            "content": "After the scanner uploads results, the SonarQube server evaluates the quality gate asynchronously. The `sonarqube-quality-gate-action` polls the server and fails the workflow if the gate does not pass, closing the loop between analysis and enforcement.\n\n```yaml\n- name: Check Quality Gate\n  uses: sonarsource/sonarqube-quality-gate-action@master\n  timeout-minutes: 5\n  env:\n    SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}\n    SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}\n```\n\nThe five-minute timeout is a safety valve. If SonarQube is down or the webhook between SonarQube and the action misconfigures, the step would hang indefinitely without it. In organizations where SonarQube downtime should not block all deployments, consider making the quality gate a non-required status check on feature branches while keeping it required on `main`.\n\n**PR decoration** is the feature that changes developer behavior. When SonarQube comments inline on pull request diffs — highlighting new bugs, security hotspots, and coverage drops — reviewers see quality issues where they already work. This shifts feedback left into the review workflow rather than requiring a separate dashboard visit. Configure branch analysis in SonarQube project settings and ensure the GitHub App integration is enabled for the repository.\n\nSonarCloud simplifies all of this for teams that do not want to host infrastructure. It provides native GitHub integration, automatic PR decoration, and quality gate checks without managing a server. The trade-off is that code is analyzed on SonarSource's infrastructure, which may not meet data residency requirements in regulated industries."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs of Quality Gates",
+            "content": "**SonarCloud (hosted) vs SonarQube (self-hosted).** SonarCloud is cheaper for small teams and zero-maintenance; SonarQube is required if you have policy reasons to keep code internal. SonarCloud is free for public repos.\n\n**Quality Gate strictness.** A common gate: `Coverage on New Code >= 80%`, `Duplicated Lines on New Code <= 3%`, `Maintainability rating <= A`. Strict gates catch issues but block merges — calibrate to your team's reality. Starting too strict creates revolt; starting too loose makes the gate ceremonial.\n\n**Blocking vs informational.** Configure the SonarQube check as Required in branch protection to block merges, or Informational so the team sees results without blocking. Blocking is the right default for new code metrics; informational is fine for retrofitting onto a legacy codebase.\n\n**Coverage metric choice.** \"New code coverage\" focuses on PR diffs — fair to legacy code. \"Overall coverage\" is harder to game but penalizes legacy. Use new-code coverage as the primary blocker.\n\n**SonarQube vs JaCoCo + GitHub Actions report.** SonarQube adds duplication, code smells, security hotspots, technical debt estimation. JaCoCo alone gives just coverage. For coverage-only, JaCoCo + a GitHub Action like `madrapps/jacoco-report` is simpler and free."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JaCoCo XML must exist before `sonar:sonar` runs** — `mvn verify` generates coverage reports during the test phase; running analysis before tests means the quality gate evaluates with zero coverage data\n- **`SONAR_TOKEN` from GitHub Secrets authenticates uploads** — tokens stay out of `pom.xml` and workflow forks, preventing exfiltration from untrusted PR builds\n- **Quality Gate polling action closes the enforcement loop** — fails CI when the server marks the gate red even if the scanner step exited zero, blocking bad code from merging\n- **PR decoration surfaces issues inline on diffs** — reviewers see new code smells and coverage drops directly in the pull request instead of checking a separate SonarQube dashboard\n- **SonarCloud vs self-hosted SonarQube** — managed SaaS removes server patching and scales automatically; self-hosted fits air-gapped compliance requirements and custom plugin needs"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "SonarQube analysis in GitHub Actions runs after tests complete and uses the Quality Gate API to either pass or fail the build based on code quality thresholds. The setup involves SonarCloud (hosted) or a self-hosted SonarQube instance, the Maven/Gradle SonarQube plugin, and a token stored as a GitHub secret.\n\n**Analysis configuration**\n- Add `sonar.projectKey`, `sonar.organization` (SonarCloud), and `sonar.host.url` to `sonar-project.properties` at the repository root — this avoids cluttering the `mvn` command with many `-D` properties and makes the configuration visible in the repository\n- The SonarQube token goes in GitHub Secrets (`SONAR_TOKEN`); `mvn sonar:sonar -Dsonar.token=${{ secrets.SONAR_TOKEN }}` injects it for a single command without it appearing in logs\n- Run `mvn verify sonar:sonar` in one command so JaCoCo executes and produces the coverage report before the sonar goal reads it — the coverage report must exist at analysis time; running sonar in a separate step after a step that did not produce the exec file reports zero coverage\n\n**PR decoration**\n- For pull requests, pass `sonar.pullrequest.key=${{ github.event.pull_request.number }}` and `sonar.pullrequest.branch=${{ github.head_ref }}`; SonarCloud annotates the PR with inline comments on changed lines that introduce issues\n- PR analysis runs against only the changed code, not the full project — the Quality Gate for a PR checks new code quality, not the full project baseline; this is the intended behavior and makes the gate meaningful on incremental changes\n\n**Quality Gate results**\n- The GitHub Actions SonarQube Quality Gate action (`sonarsource/sonarqube-quality-gate-action@master`) polls SonarQube after analysis and fails the step if the gate status is not `OK`\n- Without the quality gate check step, analysis runs but never blocks the workflow — teams see the results in SonarQube but nothing stops a merge; add the quality gate action and make the CI job a required status check to close that gap"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you configure a custom Quality Gate in SonarQube?",
+        "How does SonarQube PR decoration work with GitHub pull requests?",
+        "What is the difference between SonarQube and SonarCloud?"
+      ],
+      "seo": {
+        "metaTitle": "SonarQube Code Quality in GitHub Actions | Java CI Setup",
+        "metaDescription": "Learn how to integrate SonarQube static analysis and quality gates into your GitHub Actions Java CI pipeline with JaCoCo coverage reporting."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "SonarQube analysis in GitHub Actions runs after tests complete and uses the Quality Gate API to either pass or fail the build based on code quality thresholds.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most Java teams install SonarQube, run analysis in CI, and then ignore the dashboard for months. Code smells accumulate, coverage drifts below the threshold, and nobody notices until a new engineer asks why the quality gate is permanently red. The problem is not the analysis — it is the enforcement loop. Without a mechanism that blocks a pull request when quality drops, SonarQube becomes an expensive dashboard that produces metrics nobody acts on. Integrating SonarQube with GitHub Actions requires wiring."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand static code analysis integration and how to enforce quality gates in CI."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "JaCoCo XML must exist before sonar:sonar runs — mvn verify generates coverage reports during the test phase; running analysis before tests means the quality gate evaluates with zero coverage data SONAR_TOKEN from GitHub Secrets authenticates uploads — tokens stay out of pom",
+              "xml and workflow forks, preventing exfiltration from untrusted PR builds Quality Gate polling action closes the enforcement loop — fails CI when the server marks the gate red even if the scanner step exited zero, blocking bad code from merging PR decoration surfaces issues inline on diffs — reviewers see new code smells and coverage drops directly in the pull request instead of checking a separate SonarQube dashboard SonarCloud vs self-hosted SonarQube — managed SaaS removes server patching and scales automatically; self-hosted fits air-gapped compliance requirements and custom plugin needs"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most Java teams install SonarQube, run analysis in CI, and then ignore the dashboard for months. Code smells accumulate, coverage drifts below the threshold, and nobody notices until a new engineer asks why the quality gate is permanently red. The problem is not the analysis — it is the enforcement loop. Without a mechanism that blocks a pull request when quality drops, SonarQube becomes an expensive dashboard that produces metrics nobody acts on. Integrating SonarQube with GitHub Actions requires wiring three pieces together. First, the analysis phase runs after mvn verify so JaCoCo coverage data exists before Sonar reads it. Running analysis before tests means Sonar evaluates code smells and duplication but has zero coverage information, which either silently passes."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Running Sonar analysis without first running the test phase, so code coverage data is missing from the report"
+            ]
+          }
+        ],
+        "cap": "Analysis configuration Add sonar.projectKey, sonar.organization (SonarCloud), and sonar.host.url to sonar-project.properties at the repository root — this avoids cluttering the mvn command with many -",
+        "familiarity_anchors": [
+          "Integrate",
+          "SonarQube",
+          "GitHub"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you configure a custom Quality Gate in SonarQube?",
+          "How does SonarQube PR decoration work with GitHub pull requests?",
+          "What is the difference between SonarQube and SonarCloud?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-008",
+      "slug": "environment-specific-deployments-github-actions",
+      "question": "How do you implement environment-specific deployments with GitHub Actions?",
+      "title": "Environment-Specific Deployments with GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "recipe-builder",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "AWS",
+        "Microsoft Azure",
+        "Heroku",
+        "Google Cloud"
+      ],
+      "direct_answer": "GitHub Actions environments let you define named deployment targets (dev, staging, production) each with their own secrets, variables, and protection rules. Jobs declare `environment: name` to access those scoped values and trigger any configured approval or wait-timer rules.",
+      "interviewer_intent": {
+        "testing": "Whether you understand the concept of promotion pipelines and how to gate production deployments.",
+        "common_mistake": "Using a single job that checks an `if:` condition on the branch name instead of using proper GitHub environments with protection rules.",
+        "to_stand_out": "Mention combining environments with deployment status APIs for audit trails, using environment variables versus secrets for non-sensitive config, and environment-specific URLs for health checks."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Branch Conditions Are a Poor Substitute for Proper Environments",
+            "content": "The naive approach to environment-specific deployments is an `if: github.ref == 'refs/heads/main'` condition on a deploy step that switches between staging and production credentials based on the branch name. This works until someone pushes a workflow change to a feature branch that removes the condition — and suddenly a feature branch build deploys to production with no approval gate and no audit trail.\n\n**GitHub environments** solve this structurally rather than through YAML conditionals. You create named environments in repository settings — development, staging, production — and attach protection rules to each. Protection rules can require designated reviewers, enforce a wait timer before execution, restrict which branches can trigger deployment, and scope secrets to the environment. These rules are enforced by GitHub's platform, not by YAML logic that any contributor can edit.\n\nThe **promotion pipeline pattern** chains environment-specific deploy jobs with `needs:` dependencies. Development deploys automatically on every push. Staging deploys after development succeeds, and production deploys after staging succeeds and a reviewer approves.\n\nEach job uses the same `${{ secrets.DATABASE_URL }}` reference, but the value resolves to the correct environment's connection string — no conditionals, no branch checks, no duplication. The `url:` field on each environment records the deployment URL in GitHub's deployment history, creating an audit trail of what artifact reached which environment and when."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Environment Promotion Pipeline",
+            "content": "```mermaid\nflowchart LR\n    Build[Build artifact<br/>once] --> ImgT[image: SHA]\n    ImgT --> DevD[Deploy to dev<br/>environment: dev]\n    DevD --> DevT[Smoke test]\n    DevT -->|pass| StgApprove{Approve<br/>staging?}\n    StgApprove -->|approved| StgD[Deploy to staging<br/>environment: staging]\n    StgD --> StgT[Integration tests +<br/>load test]\n    StgT -->|pass| ProdApprove{Approve<br/>prod?<br/>2 reviewers}\n    ProdApprove -->|approved| ProdD[Deploy to prod<br/>environment: production]\n    ProdD --> Canary[Canary 5%]\n    Canary --> SLO{SLO check}\n    SLO -->|pass| Full[Full rollout 100%]\n    SLO -->|fail| Rollback[Auto rollback]\n    style ProdApprove fill:#fff9c4\n    style Rollback fill:#ff8a80\n    style Full fill:#c8e6c9\n```\n\n**Build once, promote the same artifact.** Never rebuild for prod — the artifact tested in staging must be the artifact deployed to prod. Different builds = different bugs."
+          },
+          {
+            "type": "step",
+            "title": "Modeling the Promotion Chain — Dev to Staging to Production",
+            "content": "The workflow chains three deploy jobs, each scoped to a different environment. The **`needs:` dependency** enforces ordering, and the `environment:` declaration activates the appropriate protection rules and secret scope. Each job references the same `${{ secrets.DATABASE_URL }}`, but the value resolves to that environment's connection string automatically.\n\n```yaml\njobs:\n  deploy-dev:\n    runs-on: ubuntu-latest\n    environment:\n      name: development\n      url: https://dev.example.com\n    steps:\n      - run: ./deploy.sh dev\n        env:\n          DB_URL: ${{ secrets.DATABASE_URL }}\n\n  deploy-staging:\n    needs: deploy-dev\n    runs-on: ubuntu-latest\n    environment:\n      name: staging\n    steps:\n      - run: ./deploy.sh staging\n        env:\n          DB_URL: ${{ secrets.DATABASE_URL }}\n\n  deploy-production:\n    needs: deploy-staging\n    runs-on: ubuntu-latest\n    environment:\n      name: production\n    steps:\n      - run: ./deploy.sh production\n        env:\n          DB_URL: ${{ secrets.DATABASE_URL }}\n```\n\nThe development environment has no protection rules, so it deploys automatically. **Staging is restricted** to the `develop` branch, while production requires at least one reviewer plus a ten-minute wait timer. These rules are configured centrally in GitHub settings, versioned separately from the workflow YAML, and cannot be bypassed by editing the workflow file. This structural enforcement is what makes environments superior to `if:` conditionals that any contributor could modify."
+          },
+          {
+            "type": "step",
+            "title": "Scoped Secrets, Variables, and the Deployment Audit Trail",
+            "content": "Environment-scoped secrets eliminate per-environment branching logic entirely. When you store `DATABASE_URL`, `AWS_ACCESS_KEY_ID`, and `REDIS_URL` in each environment, the deploy script is identical across all stages. The workflow YAML never contains environment names in conditionals — the environment declaration handles everything.\n\n**Variables** (`vars` context) complement secrets for non-sensitive configuration. Use `${{ vars.APP_ENV }}` for Spring profile names, `${{ vars.JAVA_OPTS }}` for JVM tuning, and `${{ vars.REPLICAS }}` for environment-specific scaling. Variables are visible in workflow logs, making debugging easier. Secrets should be strictly for passwords, tokens, and private keys.\n\nThe `url:` field on each environment declaration creates entries in GitHub's **deployment timeline**. Auditors can trace which commit reached which environment URL and when, without parsing workflow logs. Combined with the GitHub Deployments API, external systems like ServiceNow or Jira can receive the same deployment events, integrating CI/CD status with change management workflows.\n\nFor Kubernetes deployments, map each environment to a distinct kubeconfig secret and cluster endpoint variable. The same `kubectl set image` step works across environments while RBAC policies differ per cluster. This pattern scales cleanly: adding a new environment means creating it in GitHub settings, populating its secrets, and adding one more job to the workflow chain."
+          },
+          {
+            "type": "step",
+            "title": "Verification Gates and Automated Rollback Between Stages",
+            "content": "A promotion pipeline without verification between stages is just an ordered deployment script. Each stage should include a health check that verifies the application is serving traffic before the next stage begins.\n\nFor Spring Boot services, polling the `/actuator/health` endpoint after deployment catches startup failures, database connectivity issues, and configuration errors. If the staging health check fails, the production deploy never starts — the pipeline stops at the broken stage.\n\n**Automated rollback** turns verification failures into actionable recovery. For Kubernetes, `kubectl rollout undo` reverts to the previous ReplicaSet. For ECS, redeploying the previous task definition restores the last known-good version. The key insight is that rollback should be a **first-class pipeline stage**, not a manual emergency procedure that requires SSH access and tribal knowledge.\n\nProduction approval gates add a human checkpoint between automated staging verification and production deployment. The reviewer sees staging health check results and can inspect the staging environment before approving. Combining reviewer approval with a mandatory wait timer (ten to fifteen minutes) gives the staging deployment time to soak under real traffic patterns, catching issues that instant health checks might miss.\n\nThe complete pattern — automated deploy, automated verify, human approve, automated promote — is what separates a promotion pipeline from a series of scripts that happen to run in order."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Promotion Patterns",
+            "content": "**Build-once vs rebuild-per-env.** Build-once is the only safe pattern — rebuilding for prod risks dependency drift, build environment differences, and the artifact-tested-not-deployed gap. Use the same image SHA from dev through prod.\n\n**GitHub Actions environments vs Helm values per env.** GitHub environments give you required reviewers, environment secrets, and deployment history. Helm values files give you per-env Kubernetes config. They compose well: GitHub environment for approval gates, Helm values for cluster config.\n\n**Auto-promote vs manual gate.** Auto-promote dev → staging on green tests is fast and safe. Auto-promote staging → prod is risky for any service with revenue or user impact — always require manual approval. Exception: feature flags can decouple deploy from release, making auto-promotion safer.\n\n**Per-PR preview environments.** Spin up an ephemeral env per PR for review — invaluable for frontend, useful for backend. Cost: each preview env consumes resources. Use `workflow_dispatch` to deploy on demand or `pull_request` event with cleanup on close.\n\n**Secrets rotation per environment.** Each env has its own secrets in GitHub environments. Rotation is per-env. Critical detail: prod secrets should NEVER appear in non-prod workflows — environment-scoped secrets enforce this automatically."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`environment:` replaces branch conditionals** — protection rules and scoped secrets are enforced by GitHub's platform, not by YAML logic that any contributor can edit or accidentally bypass\n- **Same secret name resolves per environment** — `DATABASE_URL` returns the staging value in the staging job and the production value in the production job without any `if:` conditions in the workflow\n- **Chained `needs:` encodes promotion order structurally** — production cannot start until staging health checks pass, preventing accidental deployments when an earlier stage fails silently\n- **`url:` metadata feeds the deployment audit trail** — GitHub's deployment timeline shows which artifact reached which URL and when, satisfying compliance traceability without custom tooling\n- **Wait timers plus reviewer gates enforce soak time** — the mandatory pause between staging deploy and production approval gives the application time to reveal issues under real traffic before promotion"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Environment-specific deployments in GitHub Actions use GitHub Environments with different protection rules, secrets, and deployment histories for staging and production — same workflow, different gates.\n\n**Environment definition and protection**\n- Create environments (staging, production) in repository Settings → Environments — each environment can require reviewer approval, restrict deployment to protected branches, and hold environment-specific secrets\n- The production environment typically requires one or two reviewers; the staging environment deploys automatically on merge to main — this gives the team a fast feedback loop on staging while keeping production gated\n- `environment: name: production` in the workflow job makes the job wait for approval and injects only that environment's secrets; a reviewer who approves in the GitHub UI unblocks the job\n\n**Secret segregation**\n- Each environment holds its own secrets: `staging` has `STAGING_KUBECONFIG` and `STAGING_DB_URL`; `production` has `PROD_KUBECONFIG` and `PROD_DB_URL` — jobs can only access the secrets of the environment they declare\n- This scoping prevents a staging workflow from accidentally using production credentials — a mistake in the workflow that deploys to the wrong cluster fails with a missing secret rather than silently deploying to production\n- Combined with OIDC-based AWS authentication (assuming environment-specific IAM roles), there is no long-lived production credential stored anywhere in GitHub\n\n**Multi-environment pipeline pattern**\n- Deploy to staging first; require the staging deployment to succeed before production becomes available — use `needs: deploy-staging` in the production job to enforce this dependency\n- Add a smoke test job between staging and production: a few `curl` commands verifying the health endpoint and a key API response; if the smoke test fails, the production deployment never starts — a minimal but effective acceptance gate\n- GitHub's deployment API records each deployment with the environment, actor, SHA, and timestamp — the deployment history on the repository page is a complete audit trail of who deployed what to production and when"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you restrict which branches can deploy to production?",
+        "How do you implement a rollback to a previous environment deployment?",
+        "What is the difference between GitHub environment variables and secrets?"
+      ],
+      "seo": {
+        "metaTitle": "Environment-Specific Deployments with GitHub Actions | Java DevOps",
+        "metaDescription": "Implement dev, staging, and production deployment pipelines in GitHub Actions using environments, protection rules, and scoped secrets."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Environment-specific deployments in GitHub Actions use GitHub Environments with different protection rules, secrets, and deployment histories for staging and production — same workflow, different gates.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The naive approach to environment-specific deployments is an if: github.ref == 'refs/heads/main' condition on a deploy step that switches between staging and production credentials based on the branch name. This works until someone pushes a workflow change to a feature branch that removes the condition — and suddenly a feature branch build deploys to production with no approval gate and no audit trail. GitHub environments solve this structurally rather than through YAML conditionals. You create named environments in repository settings."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the concept of promotion pipelines and how to gate production deployments."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "environment: replaces branch conditionals",
+              "protection rules and scoped secrets are enforced by GitHub's platform, not by YAML logic that any contributor can edit or accidentally bypass Same secret name resolves per environment",
+              "DATABASE_URL returns the staging value in the staging job and the production value in the production job without any if: conditions in the workflow Chained needs: encodes promotion order structurally",
+              "production cannot start until staging health checks pass, preventing accidental deployments when an earlier stage fails silently url: metadata feeds the deployment audit trail"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The naive approach to environment-specific deployments is an if: github.ref == 'refs/heads/main' condition on a deploy step that switches between staging and production credentials based on the branch name. This works until someone pushes a workflow change to a feature branch that removes the condition — and suddenly a feature branch build deploys to production with no approval gate and no audit trail. GitHub environments solve this structurally rather than through YAML conditionals. You create named environments in repository settings — development, staging, production — and attach protection rules to each. Protection rules can require designated reviewers, enforce a wait timer before execution, restrict which branches can trigger deployment, and scope secrets to the environment. These rules are enforced by."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using a single job that checks an if: condition on the branch name instead of using proper GitHub environments with protection rules"
+            ]
+          }
+        ],
+        "cap": "Environment definition and protection Create environments (staging, production) in repository Settings → Environments — each environment can require reviewer approval, restrict deployment to protected",
+        "familiarity_anchors": [
+          "GitHub",
+          "Actions"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you restrict which branches can deploy to production?",
+          "How do you implement a rollback to a previous environment deployment?",
+          "What is the difference between GitHub environment variables and secrets?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    }
+  ]
+}

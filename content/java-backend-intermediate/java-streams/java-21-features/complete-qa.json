@@ -1,0 +1,556 @@
+{
+  "topic": "Java 21 Features",
+  "topicSlug": "java-21-features",
+  "questions": [
+    {
+      "id": "virtual-threads-java-21",
+      "slug": "virtual-threads-java-21",
+      "question": "What are virtual threads in Java 21? How do they differ from platform threads, and what are pinning and carrier threads?",
+      "title": "Virtual Threads (Project Loom) — Carrier Threads, Pinning, and Massive Concurrency",
+      "direct_answer": "**Virtual threads** (Java 21, JEP 444, preview in 19–20) are **JVM-managed lightweight threads** — each is a `java.lang.Thread` instance but scheduled by the JVM onto a small pool of **carrier threads** (OS threads). A typical JVM can run **millions of virtual threads** on a few dozen carrier threads because virtual threads **unmount from their carrier** whenever they block on I/O, `park()`, `sleep()`, or most blocking operations — freeing the carrier to run another virtual thread. This transforms the classic 'thread-per-request' model from a bottleneck (OS threads are ~1MB each, ~5k max) into a first-class approach (virtual threads are ~1KB, millions scale fine). The crucial caveat is **pinning**: if a virtual thread enters a `synchronized` block or a native method (`JNI`) and then blocks, it **can't unmount** — it sticks to its carrier, potentially starving other virtual threads. Modern JDK frameworks (JDBC drivers, HttpClient, Jackson) have been updated to use `ReentrantLock` instead of `synchronized` to avoid pinning. Virtual threads are created via `Thread.ofVirtual().start(runnable)` or `Executors.newVirtualThreadPerTaskExecutor()`. They support all `Thread` APIs (`interrupt`, `join`, `ThreadLocal`), debug the same way (named stack traces), and work transparently with existing blocking code — no `async/await` keywords, no `CompletableFuture` ceremony. Use them for **I/O-bound workloads with high concurrency** (web servers, microservice clients, database calls). Don't use them for **CPU-bound work** (no benefit over platform threads) or with **thread pinning** you can't remove.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the virtual thread model (carrier unmounting), the pinning problem, when to use them vs platform threads, and the implications for thread-per-request architectures",
+        "common_mistake": "Thinking virtual threads make CPU-bound work faster (they don't). Not understanding that `synchronized` causes pinning. Creating a bounded pool of virtual threads (defeats the purpose)",
+        "to_stand_out": "Explain carrier thread count tuning (`jdk.virtualThreadScheduler.parallelism`), discuss pinning diagnostics via `-Djdk.tracePinnedThreads`, mention the ThreadLocal memory implications with millions of threads, and reference the server architecture shift from async back to sync"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "spring",
+        "oracle"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem Virtual Threads Solve",
+            "content": "Before Java 21, Java threads were **platform threads** — each a thin wrapper over an OS thread. This had consequences:\n\n**1. Memory cost** — ~1MB default stack per thread. 10,000 threads ≈ 10 GB of address space. Practical limit: ~5–10k threads per JVM.\n\n**2. Scheduling cost** — the OS scheduler handles them. Context switches cost microseconds, and the kernel isn't optimized for tens of thousands of near-idle threads.\n\n**3. The thread-per-request dilemma** — a web server handling 10,000 concurrent requests can't give each a dedicated thread; it needs a small thread pool and async I/O (reactive streams, `CompletableFuture`).\n\n**4. Async complexity** — reactive/async code is harder to write, debug, and maintain. Stack traces are fragmented. `ThreadLocal` breaks. Exceptions are swallowed. The 'color of the function' problem (async functions can only call async functions) permeates the codebase.\n\nVirtual threads solve this by making thread creation **nearly free**:\n- ~1KB stack (grows on demand).\n- Scheduled by the JVM, not the OS.\n- Blocking operations don't waste an OS thread — the virtual thread unmounts.\n\nResult: you can **revert to the simple thread-per-request model** and scale to millions of concurrent requests — without learning a reactive library."
+          },
+          {
+            "type": "after_code",
+            "title": "Creating and Using Virtual Threads",
+            "content": "**Single virtual thread**:\n```java\nThread vt = Thread.ofVirtual().start(() -> {\n    System.out.println(\"hello from \" + Thread.currentThread());\n});\nvt.join();\n// Output: VirtualThread[#21,ForkJoinPool-1-worker-1]\n```\n\n**Virtual thread factory**:\n```java\nThread.Builder builder = Thread.ofVirtual().name(\"worker-\", 0);\nThread t1 = builder.start(this::work);   // worker-0\nThread t2 = builder.start(this::work);   // worker-1\n```\n\n**Executor — one virtual thread per task**:\n```java\ntry (ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor()) {\n    for (int i = 0; i < 1_000_000; i++) {\n        exec.submit(() -> {\n            Thread.sleep(Duration.ofSeconds(1));\n            return null;\n        });\n    }\n}\n// Runs 1M concurrent virtual threads; each sleeps 1s\n// Total: about 1 second, ~1GB of memory\n```\n\n**HTTP client pattern** — the canonical use case:\n```java\ntry (var exec = Executors.newVirtualThreadPerTaskExecutor()) {\n    List<Future<String>> futures = urls.stream()\n        .map(url -> exec.submit(() -> fetchUrl(url)))  // blocking call inside\n        .toList();\n\n    for (Future<String> f : futures) {\n        System.out.println(f.get());\n    }\n}\n\nstatic String fetchUrl(String url) throws Exception {\n    var req = HttpRequest.newBuilder(URI.create(url)).build();\n    return httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();\n}\n```\n\nEach call blocks synchronously, but the virtual thread unmounts from its carrier while waiting — so we can have thousands of pending HTTP calls with just a handful of carrier threads."
+          },
+          {
+            "type": "step",
+            "title": "Carrier Threads and the Mount/Unmount Dance",
+            "content": "Virtual threads don't run directly on OS threads; they run on **carrier threads**, which are platform threads managed by a `ForkJoinPool` (the 'virtual thread scheduler'). The default carrier pool size = available CPU cores.\n\n**Lifecycle**:\n1. Virtual thread **mounted** on a carrier → runs CPU instructions.\n2. Virtual thread **blocks** (I/O, `park`, `sleep`, lock acquisition) → it **unmounts**; the carrier runs another virtual thread.\n3. When the blocking operation completes, the virtual thread is placed back in the scheduler and **mounts** on some available carrier (possibly different from the original).\n\n**Key detail**: the JVM rewrote **all** blocking JDK APIs (`Socket`, `Files`, `NetworkChannel`, `Thread.sleep`, `LockSupport.park`, `CompletableFuture.get`, ...) to unmount the virtual thread instead of blocking the OS thread.\n\n**Tuning the carrier pool**:\n```bash\n-Djdk.virtualThreadScheduler.parallelism=8     # default: CPU cores\n-Djdk.virtualThreadScheduler.maxPoolSize=256   # max carriers (default ~256)\n-Djdk.virtualThreadScheduler.minRunnable=2\n```\nUsually the defaults are fine. Increase parallelism if CPU cores are underutilized; increase max pool size if you have lots of **pinned** threads (see next section).\n\n**Visualization**:\n```\nCarriers: [C1] [C2] [C3] [C4]\n\nTime 1: V1 on C1, V2 on C2, V3 on C3, V4 on C4\n        (V5–V1000 in ready queue)\n\nV1 does socket.read() → unmount\n\nTime 2: V5 on C1, V2 on C2, V3 on C3, V4 on C4\n        (V1 parked in the kernel waiting for data; V6–V1000 in ready queue)\n\nsocket.read() completes for V1 → V1 requeued\n\nTime 3: V5 on C1, V1 on C2, V3 on C3, V4 on C4\n        (V1 resumed on a different carrier!)\n```\n\nThis is the mechanism that lets millions of virtual threads share a handful of carriers."
+          },
+          {
+            "type": "step",
+            "title": "Pinning — The Gotcha You Must Understand",
+            "content": "A virtual thread is **pinned** to its carrier when it can't unmount despite being blocked. This happens in two cases:\n\n**1. Inside a `synchronized` block**\n```java\nsynchronized (lock) {\n    socket.read();  // PINS the virtual thread to its carrier\n}\n```\nThe JVM can't unmount a virtual thread that holds a monitor (`synchronized` lock) because monitors are associated with the OS thread (legacy JMM constraint). If the virtual thread blocks here, the carrier is stuck waiting with it. Other virtual threads can't use that carrier.\n\n**2. Inside a native method (JNI)**\n```java\nsomeNativeCode();  // PINS if it blocks\n```\nNative code often doesn't cooperate with the virtual thread machinery.\n\n**Why pinning is bad**:\n- Your carrier pool has ~CPU-count threads.\n- If many virtual threads pin while blocking, you can exhaust the carrier pool.\n- New virtual threads then wait for a carrier even though they could otherwise run.\n- Under load, this looks like sudden latency spikes or deadlocks.\n\n**Diagnosing pinning**:\n```bash\n-Djdk.tracePinnedThreads=full   # prints stack trace for every pinning event\n-Djdk.tracePinnedThreads=short  # shorter trace\n```\nIn tests or staging, run with this flag and review output — anything pinning in hot paths needs fixing.\n\n**Fixing pinning**:\n- **Replace `synchronized` with `ReentrantLock`** when the block contains blocking calls — `ReentrantLock` is virtual-thread-friendly.\n- **Move blocking I/O out of `synchronized` blocks** — lock for critical section, unlock before I/O.\n- **Avoid JNI blocking calls** or ensure they're fast.\n\n**The JDK has been updated** — most core classes (Socket, JDBC drivers like HikariCP 5+, PostgreSQL JDBC 42.5+, HttpClient) no longer pin. But third-party libraries may. Check with `-Djdk.tracePinnedThreads` in staging.\n\n**Future work**: JEP 491 (Java 24+) aims to remove `synchronized`-induced pinning by making monitors virtual-thread-aware. Once delivered, pinning becomes far less common."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use Virtual Threads vs Platform Threads",
+            "content": "**Use virtual threads for**:\n- **Web/microservice request handlers** — the canonical case. Spring Boot 3.2+, Helidon, Quarkus, Micronaut all support virtual threads per request natively.\n- **HTTP client calls**: massive fan-out / fan-in.\n- **Database calls**: many concurrent queries (ensure your connection pool supports it; HikariCP 5+ is virtual-thread-friendly).\n- **Message processing**: Kafka/RabbitMQ consumers fanning out to processors.\n- **Anywhere thread-per-task was previously prohibitive** due to OS thread limits.\n\n**DON'T use virtual threads for**:\n- **CPU-bound work** — they don't make computation faster. Use `ForkJoinPool.commonPool()` or a dedicated platform thread pool sized to CPU cores.\n- **GUI event dispatch threads** — virtual threads aren't for fixed-identity single-thread loops.\n- **Tasks with heavy `ThreadLocal` usage** — each virtual thread still has its own ThreadLocal storage; millions of threads with ThreadLocal data = memory blowup. Prefer **`ScopedValue`** (Java 21 preview/incubator).\n- **Tasks inside `synchronized` blocks that block** — pinning; convert to `ReentrantLock`.\n- **Pooling virtual threads in bounded pools** — this defeats the purpose. Use `Executors.newVirtualThreadPerTaskExecutor()` (unbounded).\n\n**Don't pool virtual threads**:\n```java\n// WRONG — defeats the purpose\nExecutorService pool = Executors.newFixedThreadPool(100, Thread.ofVirtual().factory());\n\n// RIGHT — unbounded, one thread per task\nExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();\n```\nThe whole point of virtual threads is 'free to create, unbounded concurrency.' Pooling them is like pooling `Integer` objects.\n\n**Rate limiting**: if you need to limit concurrency for backpressure (e.g., don't overload a downstream service), use a `Semaphore` inside the virtual thread, not a thread pool bound:\n```java\nSemaphore limiter = new Semaphore(100);  // at most 100 concurrent calls\n\nexec.submit(() -> {\n    limiter.acquire();\n    try {\n        downstreamCall();\n    } finally {\n        limiter.release();\n    }\n});\n```\n\n**Server architecture shift**: before Java 21, high-concurrency Java servers often reached for reactive (Project Reactor, WebFlux, RxJava) or async Netty. With virtual threads, **synchronous thread-per-request** is competitive and far simpler. Many teams are migrating back from reactive to sync + virtual threads on Spring Boot 3.2+."
+          },
+          {
+            "type": "step",
+            "title": "ThreadLocal and ScopedValue",
+            "content": "**ThreadLocal works with virtual threads**, but there's a concern: if you have 1 million virtual threads each using a `ThreadLocal<LargeObject>`, that's 1 million LargeObject references in memory.\n\n**ScopedValue** (Java 21 preview, JEP 429/446) is the virtual-thread-friendly successor:\n- Immutable (once set, can't change inside the scope).\n- Bounded to a well-defined scope (like a dynamic variable in Lisp).\n- Inherited across structured concurrency scopes.\n- Faster than ThreadLocal, with bounded lifetime.\n\n```java\nstatic final ScopedValue<String> USER_ID = ScopedValue.newInstance();\n\nScopedValue.where(USER_ID, \"alice\").run(() -> {\n    process();  // can read USER_ID.get() anywhere in the call tree\n});\n// USER_ID is not set outside this scope\n```\n\nFor new code on Java 21+, prefer `ScopedValue` over `ThreadLocal` for request-scoped data like user IDs, trace IDs, tenant IDs.\n\n**Inheritable ThreadLocal doesn't work well with virtual threads** — use `ScopedValue` instead, which inherits through structured concurrency."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Virtual threads** (Java 21, JEP 444) are JVM-managed lightweight threads, ~1KB each.\n- **Scheduled on carrier threads** (platform threads) by a `ForkJoinPool`.\n- **Unmount on blocking** — I/O, sleep, park, lock acquisition free the carrier for other virtual threads.\n- **Create**: `Thread.ofVirtual().start(r)` or `Executors.newVirtualThreadPerTaskExecutor()`.\n- **Don't pool virtual threads** — create one per task.\n- **Pinning**: `synchronized` blocks and native code pin virtual threads to carriers — can starve the carrier pool.\n- **Fix pinning**: replace `synchronized` with `ReentrantLock` when blocking.\n- **Diagnose with `-Djdk.tracePinnedThreads=full`**.\n- **JEP 491** (Java 24+) planned to remove `synchronized` pinning.\n- **Use for**: web servers, HTTP clients, database calls, high-concurrency I/O — any thread-per-request scenario.\n- **Don't use for**: CPU-bound work, GUI loops, pooled-thread-per-service architectures.\n- **ThreadLocal works** but with millions of threads, memory grows — prefer **`ScopedValue`** (Java 21 preview).\n- **Carrier tuning**: `-Djdk.virtualThreadScheduler.parallelism=N` (default = CPU cores).\n- **Server shift**: virtual threads + sync code is competitive with reactive (WebFlux, Reactor) with far simpler code."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Virtual threads (Java 21, JEP 444, Project Loom) are **JVM-managed lightweight threads** — each is a `java.lang.Thread` but scheduled by the JVM onto a small pool of carrier threads (real OS threads).\n\n**Why they matter**\n- Platform threads are expensive: ~1MB stack, practical limit ~5–10k per JVM\n- Virtual threads are ~1KB, can run millions in a single JVM\n- Unlock thread-per-request at massive scale, kill the need for reactive\n\n**The mount/unmount dance**\n- Virtual threads run on **carrier threads** (default: one per CPU core)\n- When a virtual thread blocks on I/O, `sleep`, `park`, lock acquisition — it **unmounts** from its carrier\n- The carrier is free to run another virtual thread\n- When the blocking operation completes, the virtual thread is requeued and mounts on some (possibly different) carrier\n- The JVM rewrote all blocking JDK APIs to enable this\n\n**Creating virtual threads**\n- `Thread.ofVirtual().start(runnable)`\n- `Executors.newVirtualThreadPerTaskExecutor()` — unbounded, one thread per task\n- **Don't pool virtual threads**; that defeats the purpose\n- For rate limiting, use a `Semaphore` inside, not a bounded pool\n\n**Pinning — the critical gotcha**\n\nA virtual thread is **pinned** when it can't unmount despite blocking. Happens in two cases:\n\n**1. Inside a `synchronized` block**\n- Monitors are tied to the OS thread; JVM can't unmount while holding one\n- If the thread blocks inside synchronized, the carrier is stuck with it\n- Under load, pins can exhaust the carrier pool\n\n**2. Inside a native method (JNI)**\n- Native code often doesn't cooperate with the virtual thread machinery\n\n**Diagnosing pinning**\n- `-Djdk.tracePinnedThreads=full` prints stack traces at every pin\n- Run in staging, review output, fix hot paths\n\n**Fixing pinning**\n- Replace `synchronized` with `ReentrantLock` when blocking inside\n- Move blocking calls out of synchronized blocks\n- Avoid blocking JNI\n- Most modern JDK classes and drivers (HikariCP 5+, PostgreSQL 42.5+, JDK HttpClient) are already virtual-thread-friendly\n- JEP 491 (Java 24+) plans to remove synchronized-induced pinning\n\n**When to use virtual threads**\n\n**YES**\n- Web/microservice request handlers (Spring Boot 3.2+, Helidon, Quarkus support this)\n- HTTP client calls (fan-out/fan-in)\n- Database calls with a virtual-thread-friendly pool (HikariCP 5+)\n- Message consumers fanning out\n- Anywhere thread-per-task was previously prohibitive\n\n**NO**\n- CPU-bound work — no benefit; use `ForkJoinPool.commonPool` or a sized pool\n- GUI event dispatch threads\n- Heavy ThreadLocal workloads with millions of threads (memory blowup)\n- Inside synchronized blocks that block (pinning)\n\n**ThreadLocal vs ScopedValue**\n- `ThreadLocal` works but memory grows with thread count\n- `ScopedValue` (Java 21 preview) is the virtual-thread-friendly successor\n- Immutable, bounded to a scope, faster, inherited through structured concurrency\n- Use for request-scoped data: user ID, trace ID, tenant ID\n\n**Carrier tuning**\n- `-Djdk.virtualThreadScheduler.parallelism=N` — default = CPU cores\n- Usually defaults are fine\n- Increase max pool size if you have unavoidable pinning\n\n**Server architecture shift**\n- Pre-Java 21: high-concurrency Java = reactive (Reactor, WebFlux, Netty async)\n- Java 21: sync code + virtual threads is competitive, far simpler\n- Many teams migrating back from reactive to sync\n- Stack traces are clean; debuggers work; ThreadLocal patterns mostly work\n\n**Debugging**\n- Same tools: jstack, debuggers, profilers\n- Stack traces show `VirtualThread[#N]`\n- Each virtual thread has its own stack in jstack\n\n**Recommendation:** For **I/O-bound, high-concurrency** workloads — web servers, HTTP clients, database calls — virtual threads are now the default choice on Java 21+. Use **`Executors.newVirtualThreadPerTaskExecutor()`**, one virtual thread per task, unbounded. Never pool them. For **CPU-bound** work, stick with platform thread pools sized to CPU cores. Always enable **`-Djdk.tracePinnedThreads=full`** in staging to catch pinning from `synchronized` blocks or native code — then replace problematic `synchronized` with **`ReentrantLock`**. For request-scoped data (user ID, trace ID), use **`ScopedValue`** instead of `ThreadLocal` once it's GA. On **Spring Boot 3.2+**, set `spring.threads.virtual.enabled=true` to run the web server on virtual threads; for most microservices this doubles throughput with zero code changes. Don't rush to delete your reactive code if it's working — but for new services, start with sync + virtual threads and reach for reactive only if a specific need (backpressure at the edge, streaming) demands it. Watch for **JEP 491** (Java 24+) which will remove `synchronized`-induced pinning entirely — one of the last adoption blockers."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is pinning and why is it a problem for virtual threads?",
+        "Why shouldn't you pool virtual threads?",
+        "How does `ScopedValue` differ from `ThreadLocal`?",
+        "When would you prefer platform threads over virtual threads?",
+        "How do virtual threads compare to reactive programming?"
+      ],
+      "seo": {
+        "metaTitle": "Java 21 Virtual Threads — Carrier Threads, Pinning, Massive Concurrency",
+        "metaDescription": "Master Java 21 virtual threads: carrier threads, mount/unmount, pinning from synchronized, tracing, ScopedValue, and when to use them vs platform threads."
+      },
+      "order": 1,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Virtual threads (Java 21, JEP 444, Project Loom) are JVM-managed lightweight threads — each is a java.lang.Thread but scheduled by the JVM onto a small pool of carrier threads (real OS threads).",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before Java 21, Java threads were platform threads — each a thin wrapper over an OS thread. This had consequences: 1. Memory cost — ~1MB default stack per thread. 10,000 threads ≈ 10 GB of address space. Practical limit: ~5–10k threads per JVM. 2. Scheduling cost — the OS scheduler handles them. Context switches cost microseconds, and the kernel isn't optimized for tens of thousands of near-idle threads. 3. The thread-per-request dilemma — a web server handling 10,000 concurrent requests."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the virtual thread model (carrier unmounting), the pinning problem, when to use them vs platform threads, and the implications for thread-per-request architectures"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Virtual threads (Java 21, JEP 444) are JVM-managed lightweight threads, ~1KB each",
+              "Scheduled on carrier threads (platform threads) by a ForkJoinPool",
+              "Unmount on blocking — I/O, sleep, park, lock acquisition free the carrier for other virtual threads",
+              "Create: Thread",
+              "ofVirtual()"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before Java 21, Java threads were platform threads — each a thin wrapper over an OS thread. This had consequences: 1. Memory cost — ~1MB default stack per thread. 10,000 threads ≈ 10 GB of address space. Practical limit: ~5–10k threads per JVM. 2. Scheduling cost — the OS scheduler handles them. Context switches cost microseconds, and the kernel isn't optimized for tens of thousands of near-idle threads. 3. The thread-per-request dilemma — a web server handling 10,000 concurrent requests can't give each a dedicated thread; it needs a small thread pool and async I/O (reactive streams, CompletableFuture). 4. Async complexity — reactive/async code is harder to write, debug, and maintain. Stack traces are fragmented. ThreadLocal breaks. Exceptions are swallowed."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking virtual threads make CPU-bound work faster (they don't)",
+              "Not understanding that synchronized causes pinning",
+              "Creating a bounded pool of virtual threads (defeats the purpose)"
+            ]
+          }
+        ],
+        "cap": "Watch for JEP 491 (Java 24+) which will remove synchronized-induced pinning entirely — one of the last adoption blockers.",
+        "familiarity_anchors": [
+          "Virtual",
+          "Thread",
+          "Modern"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is pinning and why is it a problem for virtual threads?",
+          "Why shouldn't you pool virtual threads?",
+          "How does `ScopedValue` differ from `ThreadLocal`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    },
+    {
+      "id": "structured-concurrency-java-21",
+      "slug": "structured-concurrency-java-21",
+      "question": "What is structured concurrency in Java 21? How does `StructuredTaskScope` improve over `ExecutorService`?",
+      "title": "Structured Concurrency (`StructuredTaskScope`) — Tree-Shaped Task Hierarchies",
+      "direct_answer": "**Structured concurrency** (Java 21 preview, JEP 453) is a concurrency paradigm where **concurrent tasks live in a well-defined scope** — when the scope ends, all tasks in it have either completed, been cancelled, or errored. The API is **`StructuredTaskScope`** (with subclasses `ShutdownOnFailure` and `ShutdownOnSuccess`), used as a try-with-resources block: you `fork()` subtasks, call `join()` to wait for them, and when the scope closes, no tasks leak. Compare this to `ExecutorService`: if you submit 5 tasks and one fails, the others keep running in the background — you might forget to cancel them, leaking threads. Structured concurrency **guarantees**: (1) **no leaked tasks** — the scope's try-with-resources ensures cleanup, (2) **propagated cancellation** — if one subtask fails with `ShutdownOnFailure`, all siblings are cancelled, (3) **thread dumps show the hierarchy** — the JVM knows which tasks belong to which scope, making debugging dramatically better, (4) **inheritance of `ScopedValue`s** — context like user/trace IDs flows naturally to subtasks. It's designed for virtual threads: `scope.fork(callable)` creates a new virtual thread per task. Use it for **fan-out with all-must-succeed** (`ShutdownOnFailure`) or **first-to-finish** (`ShutdownOnSuccess`) patterns. The major departure from `ExecutorService`: **you can't submit tasks across method boundaries**; tasks must be forked and joined within a single scope. This constraint is the feature — it matches how we naturally think about subroutines, just with parallelism.",
+      "layout_type": "default",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands why structured concurrency is an improvement over `ExecutorService` (no leaked tasks, propagated cancellation, thread-dump hierarchy) and when to use `ShutdownOnFailure` vs `ShutdownOnSuccess`",
+        "common_mistake": "Thinking `StructuredTaskScope` is just a prettier ExecutorService. Missing the scope-bounded lifetime constraint. Not understanding cancellation propagation",
+        "to_stand_out": "Reference Roman Elizarov's Kotlin structured concurrency paper, explain the `ScopedValue` inheritance through scopes, discuss error aggregation with custom scopes, and mention it's still in preview in Java 21 (GA in later releases)"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "oracle"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem with `ExecutorService`",
+            "content": "Consider a classic fan-out pattern:\n```java\nExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();\nFuture<User> userF  = exec.submit(() -> userService.fetch(id));\nFuture<Order> orderF = exec.submit(() -> orderService.fetch(id));\nFuture<Prefs> prefsF = exec.submit(() -> prefsService.fetch(id));\n\nUser u = userF.get();\nOrder o = orderF.get();\nPrefs p = prefsF.get();\nreturn new Profile(u, o, p);\n```\n\nProblems:\n1. **If `userService.fetch` throws**, the other two keep running in the background. We return the exception to the caller, but the background tasks waste resources until they complete or fail on their own.\n2. **If the caller's thread is interrupted**, the submitted tasks aren't cancelled automatically. They run to completion.\n3. **If any task hangs forever**, we either wait forever on `.get()` or write timeout logic manually.\n4. **Thread dumps** show a flat list of `VirtualThread[#123]`, `VirtualThread[#124]` with no relationship to the calling method.\n5. **ThreadLocals / `ScopedValue`s** don't propagate cleanly.\n\nThese aren't bugs — they're the `ExecutorService` contract. It's a generic task submission interface; it doesn't know the relationship between tasks.\n\n**Structured concurrency** says: concurrent tasks should have **bounded lifetime tied to the calling scope**, just like subroutines. Just as a function can't leak local variables, a scope shouldn't leak running tasks."
+          },
+          {
+            "type": "after_code",
+            "title": "`ShutdownOnFailure` — All Must Succeed",
+            "content": "The equivalent with structured concurrency:\n\n```java\nProfile loadProfile(long id) throws Exception {\n    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {\n        Supplier<User>  userTask  = scope.fork(() -> userService.fetch(id));\n        Supplier<Order> orderTask = scope.fork(() -> orderService.fetch(id));\n        Supplier<Prefs> prefsTask = scope.fork(() -> prefsService.fetch(id));\n\n        scope.join();              // wait for all\n        scope.throwIfFailed();     // propagate any failure\n\n        return new Profile(userTask.get(), orderTask.get(), prefsTask.get());\n    }\n}\n```\n\n**What happens**:\n- `fork` starts a new virtual thread for each task.\n- `join` blocks until **all subtasks complete OR any subtask fails** (first-failure semantics).\n- On failure, `scope` immediately **cancels all sibling tasks** (interrupts their virtual threads).\n- `throwIfFailed()` rethrows the exception on the current thread.\n- **Try-with-resources `close()`** ensures no tasks survive the scope — pending tasks are cancelled and waited for.\n\n**Timeout variant**:\n```java\ntry (var scope = new StructuredTaskScope.ShutdownOnFailure()) {\n    scope.fork(...);\n    scope.fork(...);\n    scope.joinUntil(Instant.now().plusSeconds(5));  // timeout\n    scope.throwIfFailed();\n    return ...;\n}\n```\n\n**Cancellation is cooperative** — subtasks must respect `Thread.interrupted()`. Most blocking JDK APIs do. Compute-heavy loops need to check manually."
+          },
+          {
+            "type": "after_code",
+            "title": "`ShutdownOnSuccess` — First to Finish Wins",
+            "content": "When you want the first successful result and can cancel the rest:\n```java\nString queryMultipleReplicas(String key) throws Exception {\n    try (var scope = new StructuredTaskScope.ShutdownOnSuccess<String>()) {\n        scope.fork(() -> replica1.get(key));\n        scope.fork(() -> replica2.get(key));\n        scope.fork(() -> replica3.get(key));\n\n        scope.join();              // wait for first success OR all failures\n        return scope.result();     // returns the first successful result\n    }\n}\n```\n\n**Semantics**:\n- First subtask to succeed → `scope.result()` returns its value; siblings cancelled.\n- All subtasks fail → `scope.result()` throws the last failure.\n- Classic use cases: redundant queries (hit 3 DNS servers, first response wins), hedged requests, replica reads.\n\n**Compare to CompletableFuture's `anyOf`** — same semantics, but with structured guarantees: the losing tasks are **actually cancelled**, not just ignored.\n\n**Custom scope for complex semantics**:\nIf you need something other than 'fail-fast' or 'first-success', extend `StructuredTaskScope` and override `handleComplete(Subtask)`:\n```java\nclass CollectResults<T> extends StructuredTaskScope<T> {\n    private final List<T> results = new CopyOnWriteArrayList<>();\n    private final List<Throwable> errors = new CopyOnWriteArrayList<>();\n\n    @Override\n    protected void handleComplete(Subtask<? extends T> task) {\n        switch (task.state()) {\n            case SUCCESS -> results.add(task.get());\n            case FAILED  -> errors.add(task.exception());\n        }\n    }\n\n    public List<T> successes() { return results; }\n    public List<Throwable> errors() { return errors; }\n}\n// Usage: collect all, report partial failures\n```\nThis pattern is useful when failures are partially acceptable (e.g., aggregating from many replicas)."
+          },
+          {
+            "type": "step",
+            "title": "Key Guarantees and How They Differ from `ExecutorService`",
+            "content": "**Guarantee 1: No leaked tasks**\n- Try-with-resources `close()` ensures any pending task is cancelled and joined.\n- `ExecutorService` has no such guarantee; tasks can outlive the method that submitted them.\n\n**Guarantee 2: Propagated cancellation**\n- `ShutdownOnFailure`: any failure cancels siblings.\n- `ShutdownOnSuccess`: any success cancels siblings.\n- Custom scopes can define their own shutdown semantics.\n- `ExecutorService` requires manual `Future.cancel(true)` on each sibling.\n\n**Guarantee 3: Hierarchical thread dumps**\n- `jcmd <pid> Thread.dump_to_file` produces output showing the scope tree:\n  ```\n  StructuredTaskScope@5cf54f\n  ├─ VirtualThread[#42]/fetchUser       (waiting on socket.read)\n  ├─ VirtualThread[#43]/fetchOrder      (waiting on socket.read)\n  └─ VirtualThread[#44]/fetchPrefs      (waiting on socket.read)\n  ```\n- Visualizing \"which subtasks belong to which scope\" transforms debugging.\n- `ExecutorService` gives a flat list of threads.\n\n**Guarantee 4: `ScopedValue` inheritance**\n- `ScopedValue` bindings automatically inherit into subtasks spawned within the scope.\n- No need to explicitly pass context.\n- Example:\n  ```java\n  ScopedValue.where(USER_ID, id).run(() -> {\n      try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {\n          scope.fork(() -> {\n              String userId = USER_ID.get();  // inherited!\n              return service.call(userId);\n          });\n          scope.join();\n      }\n  });\n  ```\n\n**Guarantee 5: Exceptions are always consumed**\n- Every `fork()` returns a `Subtask`. If it fails, the scope knows. `throwIfFailed()` or custom `handleComplete` ensures errors are handled.\n- With `ExecutorService`, it's easy to `submit(...)` and forget to call `Future.get()` — silently swallowing exceptions.\n\n**The constraint is the feature**\n- Can't pass a `StructuredTaskScope` across method boundaries like an `ExecutorService`.\n- Tasks must fork and join in the same method.\n- This prevents 'long-lived background work' patterns, which is precisely where `ExecutorService` bugs thrive."
+          },
+          {
+            "type": "step",
+            "title": "Designed for Virtual Threads",
+            "content": "Structured concurrency and virtual threads are **co-designed**. The entire model assumes that creating a thread per task is cheap — which it is with virtual threads.\n\n```java\nvar scope = new StructuredTaskScope.ShutdownOnFailure();\nfor (int i = 0; i < 10_000; i++) {\n    final int id = i;\n    scope.fork(() -> processItem(id));  // 10,000 virtual threads\n}\nscope.join();\n```\n\nWith platform threads, this would OOM. With virtual threads, it's fine.\n\n**Cancellation model**:\n- Virtual threads are cheap to cancel — `Thread.interrupt()` unparks them and their blocking I/O responds.\n- The JVM handles the cleanup.\n\n**What changes for the programmer**:\n- You can spawn thousands of subtasks without pre-tuning thread pools.\n- You write straight-line code: `fork`, `join`, extract results.\n- No `CompletableFuture` chains, no `thenCompose`, no `allOf` array gymnastics.\n\n**Comparison with reactive (Reactor/RxJava)**:\n- Reactive: streams with operators; backpressure-aware; steep learning curve.\n- Structured concurrency: simple try-with-resources blocks; sequential composition; easier debugging.\n- Reactive still wins for streaming with backpressure (Kafka consumers emitting 100k/s).\n- Structured concurrency wins for request-scoped fan-out (load 5 pieces of data, combine).\n\n**Still preview in Java 21** — requires `--enable-preview`. Expected to stabilize in Java 24 or later. API may shift slightly."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use Structured Concurrency",
+            "content": "**Use `StructuredTaskScope.ShutdownOnFailure`** when:\n- You need multiple pieces of data (fan-out), and any failure aborts the whole operation.\n- Loading a user profile from 5 services, all must succeed.\n- Running a batch of validations, all must pass.\n- Aggregating microservice responses for a request.\n\n**Use `ShutdownOnSuccess`** when:\n- Redundant requests, first success wins.\n- Hedged queries (query 2–3 replicas, take first response).\n- DNS-style resolution across multiple providers.\n- Fallback chains where any path works.\n\n**Use a custom `StructuredTaskScope`** when:\n- Partial failures are acceptable.\n- You need to collect all results, success or failure.\n- Complex shutdown semantics (shutdown after M successes, or N failures).\n\n**Don't use structured concurrency** when:\n- Tasks must outlive the method (background workers, schedulers).\n- Integrating with legacy APIs that take `ExecutorService`.\n- You need streaming / push semantics (use reactive streams).\n- You need a thread pool with a fixed concurrency limit (structured concurrency doesn't bound concurrency directly; pair with `Semaphore` if needed).\n\n**Migration strategy**:\n- Leaves of your code (method-local fan-out) are the easiest wins.\n- Top-level request handlers can wrap everything in a scope once Spring / frameworks support it natively.\n- Don't try to replace your whole `ExecutorService` strategy at once.\n\n**Preview API caveat**:\n- Java 21 ships `StructuredTaskScope` as preview (`--enable-preview`).\n- Later JEPs may rename `Supplier` return to `Subtask` (already happened in Java 21 preview refinement).\n- Not yet for production use cases where stability matters; stable release expected Java 24–25."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Structured concurrency** (Java 21 preview, JEP 453) binds concurrent tasks to a scope.\n- **`StructuredTaskScope`** subclasses: `ShutdownOnFailure`, `ShutdownOnSuccess`, or custom.\n- **Pattern**: try-with-resources, `fork()` subtasks, `join()`, `throwIfFailed()` or `result()`.\n- **No leaked tasks** — the scope's `close()` ensures cleanup.\n- **Propagated cancellation** — first failure/success cancels siblings.\n- **Hierarchical thread dumps** — JVM tracks scope relationships.\n- **`ScopedValue` inheritance** — context flows naturally to subtasks.\n- **Exceptions always consumed** — no silent swallowing like ExecutorService.\n- **Designed for virtual threads** — cheap fork, cheap cancel.\n- **Preview in Java 21** — requires `--enable-preview`; stable release later.\n- **Constraint**: tasks can't outlive the scope — no passing scope across methods.\n- **Custom scope** via `handleComplete` for partial failures or complex semantics.\n- **vs `ExecutorService`**: structured guarantees, not generic task submission.\n- **vs reactive**: simpler for request fan-out; reactive wins for streaming."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Structured concurrency (Java 21 preview, JEP 453) is a paradigm where **concurrent tasks have bounded lifetime tied to a lexical scope**. The API is `StructuredTaskScope`, used as a try-with-resources block. When the scope ends, all tasks in it have completed, been cancelled, or errored — no leaks.\n\n**The core API**\n- `StructuredTaskScope.ShutdownOnFailure` — all must succeed\n- `StructuredTaskScope.ShutdownOnSuccess` — first success wins\n- Custom subclass by overriding `handleComplete`\n\n**ShutdownOnFailure pattern**\n```java\ntry (var scope = new StructuredTaskScope.ShutdownOnFailure()) {\n    var userTask  = scope.fork(() -> userSvc.fetch(id));\n    var orderTask = scope.fork(() -> orderSvc.fetch(id));\n    scope.join();            // wait for all\n    scope.throwIfFailed();   // propagate failures\n    return new Profile(userTask.get(), orderTask.get());\n}\n```\n\nOn failure, scope **cancels all sibling tasks** by interrupting their virtual threads. On scope close, any pending tasks are joined and cancelled.\n\n**ShutdownOnSuccess pattern**\n- First successful fork → `scope.result()` returns its value\n- Siblings are cancelled\n- Great for hedged requests, replica queries, DNS lookups\n\n**Why this is better than ExecutorService**\n\n**1. No leaked tasks**\n- Try-with-resources guarantees cleanup\n- ExecutorService tasks outlive method scope if not cancelled explicitly\n\n**2. Propagated cancellation**\n- First failure cancels siblings automatically\n- ExecutorService requires manual `future.cancel(true)` on each\n\n**3. Hierarchical thread dumps**\n- `jcmd Thread.dump_to_file` shows scope tree:\n  - StructuredTaskScope\n    - VirtualThread: fetchUser\n    - VirtualThread: fetchOrder\n- ExecutorService gives flat thread list\n- Debugging is dramatically better\n\n**4. ScopedValue inheritance**\n- Request-scoped context (user ID, trace ID) flows to subtasks automatically\n- No need to pass explicitly\n\n**5. Exceptions always consumed**\n- `Subtask.state()` tracks every task\n- `throwIfFailed` or custom handler catches errors\n- ExecutorService easy to forget `future.get()` and swallow exceptions\n\n**6. Timeouts**\n- `scope.joinUntil(Instant)` — cancel the whole scope after a deadline\n\n**Designed for virtual threads**\n- Each `fork` creates a new virtual thread — cheap\n- Can spawn thousands of subtasks\n- Cancellation via `Thread.interrupt()` is cheap\n- No thread pool tuning\n\n**The constraint is the feature**\n- Can't pass scope across method boundaries\n- Tasks must fork and join in the same method\n- Matches how we think about subroutines, with parallelism\n- Prevents 'long-lived background work' patterns where leaks thrive\n\n**Custom scope for partial failures**\n- Extend `StructuredTaskScope`, override `handleComplete(Subtask)`\n- Collect all results/errors manually\n- Useful for aggregating from N replicas where partial failure is OK\n\n**When to use**\n- Request fan-out: load user + orders + prefs, combine\n- Hedged queries: first-success\n- Batch validations: all-must-pass\n- Aggregating microservice responses\n\n**When NOT to use**\n- Long-lived background workers — scope is bounded\n- Integration with legacy ExecutorService APIs\n- Streaming with backpressure — use reactive\n- You need bounded concurrency — structured concurrency doesn't limit parallelism; pair with Semaphore\n\n**vs reactive (Reactor/RxJava)**\n- Reactive: streams + operators + backpressure; steep curve\n- Structured: try-with-resources; sequential; easy to debug\n- Reactive wins for high-throughput streaming (100k/s events)\n- Structured wins for request-scoped fan-out\n\n**Status**\n- Preview in Java 21; `--enable-preview`\n- API may refine slightly before stable release (expected Java 24–25)\n- Not yet for production where stability is critical\n\n**Recommendation:** For **request-scoped fan-out** (load user profile from 5 services, hedge DNS queries across 3 resolvers, validate a batch in parallel), structured concurrency is a game-changer once stable — it combines virtual threads' cheap spawn with a **lexical scope** that guarantees no leaks, propagated cancellation, and readable debugging. Use **`ShutdownOnFailure`** for all-must-succeed patterns and **`ShutdownOnSuccess`** for first-result-wins. Rely on **`ScopedValue`** for request context (user ID, trace ID) — it inherits through scopes automatically. For **partial-failure** aggregation, extend `StructuredTaskScope` with a custom `handleComplete`. Don't pass scopes across methods — the bounded lifetime is the feature. It's still **preview in Java 21**, so for mission-critical code today, stick with `CompletableFuture` + virtual threads; but design with structured concurrency's mental model in mind so you're ready when it's GA (expected Java 24–25). Reactive libraries still win for **streaming** — but for one-shot concurrent composition, structured concurrency is the future."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does `StructuredTaskScope` guarantee no leaked tasks?",
+        "What's the difference between `ShutdownOnFailure` and `ShutdownOnSuccess`?",
+        "How does `ScopedValue` interact with structured concurrency?",
+        "Why can't you pass a `StructuredTaskScope` across method boundaries?",
+        "How would you aggregate partial failures with a custom scope?"
+      ],
+      "seo": {
+        "metaTitle": "Java 21 Structured Concurrency — `StructuredTaskScope` Guide",
+        "metaDescription": "Master Java 21 structured concurrency: StructuredTaskScope, ShutdownOnFailure vs ShutdownOnSuccess, propagated cancellation, ScopedValue inheritance, and vs ExecutorService."
+      },
+      "order": 2,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Structured concurrency (Java 21 preview, JEP 453) is a  where concurrent tasks have bounded lifetime tied to a lexical scope.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Consider a classic fan-out pattern: ``java ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor(); Future<User> userF = exec.submit(() -> userService.fetch(id)); Future<Order> orderF = exec.submit(() -> orderService.fetch(id)); Future<Prefs> prefsF = exec.submit(() -> prefsService.fetch(id)); User u = userF.get(); Order o = orderF.get(); Prefs p = prefsF.get(); return new Profile(u, o, p); ` Problems: 1. If userService.fetch throws, the other two keep running in the background. We return the exception to the caller, but the background tasks waste resources until they complete or fail on their own."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands why structured concurrency is an improvement over ExecutorService (no leaked tasks, propagated cancellation, thread-dump hierarchy) and when to use ShutdownOnFailure vs ShutdownOnSuccess"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Structured concurrency (Java 21 preview, JEP 453) binds concurrent tasks to a scope",
+              "StructuredTaskScope subclasses: ShutdownOnFailure, ShutdownOnSuccess, or custom",
+              "Pattern: try-with-resources, fork() subtasks, join(), throwIfFailed() or result()",
+              "No leaked tasks — the scope's close() ensures cleanup",
+              "Propagated cancellation — first failure/success cancels siblings"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Consider a classic fan-out pattern: ``java ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor(); Future<User> userF = exec.submit(() -> userService.fetch(id)); Future<Order> orderF = exec.submit(() -> orderService.fetch(id)); Future<Prefs> prefsF = exec.submit(() -> prefsService.fetch(id)); User u = userF.get(); Order o = orderF.get(); Prefs p = prefsF.get(); return new Profile(u, o, p); ` Problems: 1. If userService.fetch throws, the other two keep running in the background. We return the exception to the caller, but the background tasks waste resources until they complete or fail on their own. 2. If the caller's thread is interrupted, the submitted tasks aren't cancelled automatically. They run to completion. 3. If any task hangs forever, we either wait forever on .get() or write timeout logic manually. 4. Thread dumps show a flat."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking StructuredTaskScope is just a prettier ExecutorService",
+              "Missing the scope-bounded lifetime constraint",
+              "Not understanding cancellation propagation"
+            ]
+          }
+        ],
+        "cap": "Reactive libraries still win for streaming — but for one-shot concurrent composition, structured concurrency is the future.",
+        "familiarity_anchors": [
+          "Structured",
+          "StructuredTaskScope",
+          "ShutdownOnFailure"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does `StructuredTaskScope` guarantee no leaked tasks?",
+          "What's the difference between `ShutdownOnFailure` and `ShutdownOnSuccess`?",
+          "How does `ScopedValue` interact with structured concurrency?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    },
+    {
+      "id": "pattern-matching-for-switch-java-21",
+      "slug": "pattern-matching-for-switch-java-21",
+      "question": "What is pattern matching for switch in Java 21? How do type patterns, deconstruction patterns, and `when` guards work?",
+      "title": "Switch Pattern Matching (Java 21) — Type Patterns, Deconstruction, Guards",
+      "direct_answer": "**Switch pattern matching** (Java 21, JEP 441) upgrades `switch` from 'match a constant' to 'match a type and optionally bind a variable,' combined with **record deconstruction patterns** (JEP 440) and **guarded patterns** via the `when` keyword. The resulting construct looks like Scala or Kotlin's `when`: `switch (obj) { case Integer i -> ...; case String s -> ...; case Point(int x, int y) -> ...; case null -> ...; default -> ...; }`. Key features: **(1) Type patterns** — `case Integer i ->` binds `i` to the matched value with the correct type. **(2) Deconstruction patterns** — `case Point(int x, int y) ->` destructures records directly in the case label. **(3) Guards with `when`** — `case Integer i when i > 100 ->` adds a predicate to narrow matching. **(4) Null handling** — `case null ->` becomes a valid label (the switch no longer throws NPE by default). **(5) Exhaustiveness checking** — with sealed classes, the compiler verifies all subtypes are handled and rejects missing cases (no default needed). **(6) Nested patterns** — `case Line(Point(int x1, int y1), Point(int x2, int y2)) ->` destructures arbitrarily deep. This brings Java closer to algebraic data types: sealed interfaces + records + pattern switch = the Java equivalent of Haskell's `case ... of` or Scala's `match`. It's a major shift from imperative type-checking chains to declarative structural matching.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the full pattern switch surface: type patterns, deconstruction, `when` guards, null handling, and exhaustiveness with sealed classes",
+        "common_mistake": "Forgetting that switch pattern matching throws NPE unless there's an explicit `case null`. Not knowing that deconstruction patterns require records. Thinking exhaustiveness is automatic for non-sealed types",
+        "to_stand_out": "Demonstrate sealed + pattern switch for ADT-style code, explain the ordering rules (compiler rejects unreachable cases), mention pattern matching in instanceof as the predecessor, and discuss the Dominance analysis"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "spring",
+        "oracle"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "From Constant Switch to Pattern Switch",
+            "content": "Switch in pre-Java-14 was limited to `int`, `char`, `String`, and `enum`:\n```java\nswitch (day) {\n    case MONDAY: case FRIDAY: break;\n    case TUESDAY: ...;\n    default: ...;\n}\n```\n\nJava 14 added **switch expressions** (`->` arrow syntax, no fall-through):\n```java\nString name = switch (day) {\n    case MONDAY, FRIDAY -> \"busy\";\n    case TUESDAY -> \"quiet\";\n    default -> \"unknown\";\n};\n```\n\nJava 21 (JEP 441) adds **pattern matching to switch cases**:\n```java\nString describe(Object obj) {\n    return switch (obj) {\n        case Integer i  -> \"int: \" + i;\n        case Long l     -> \"long: \" + l;\n        case String s   -> \"string of length \" + s.length();\n        case int[] arr  -> \"array of \" + arr.length;\n        case null       -> \"null\";\n        default         -> \"other: \" + obj;\n    };\n}\n```\n\nEach case label is now a **pattern**; the matched object is bound to the pattern variable in the case body.\n\nThis eliminates long chains of `if (obj instanceof X) else if (obj instanceof Y)` and aligns Java with functional languages. The switch expression form returns a value; the statement form executes side effects."
+          },
+          {
+            "type": "after_code",
+            "title": "Type Patterns — the Basic Case",
+            "content": "A **type pattern** matches if the switch subject is an instance of the named type, then binds the pattern variable.\n\n```java\nObject obj = ...;\nString result = switch (obj) {\n    case Integer i -> \"int: \" + i;           // i is an Integer\n    case String s  -> \"string: \" + s;         // s is a String\n    case null      -> \"it's null\";\n    default        -> \"something else\";\n};\n```\n\n**Ordering rule**: cases are tried in order. The compiler rejects **unreachable** (dominated) cases:\n```java\nswitch (obj) {\n    case CharSequence cs -> ...;  // matches String, StringBuilder, ...\n    case String s -> ...;         // COMPILE ERROR: dominated by CharSequence\n}\n```\nFix: reorder (more specific first) or remove the unreachable case.\n\n**Null handling**:\n- Pre-Java 21, `switch(null)` always threw NPE.\n- Java 21: `case null -> ...` is valid. If no `case null` is provided, the switch **still throws NPE** (backward compatibility).\n- Combined: `case null, default -> ...` treats null as default.\n\n**Exhaustiveness for non-sealed types**:\n- Pattern switches on `Object` require a `default` or explicit coverage of every possible type (impossible — always need default).\n- Pattern switches on sealed types can omit `default` if all permitted subtypes are listed.\n\n```java\nsealed interface Shape permits Circle, Square, Triangle {}\nrecord Circle(double r) implements Shape {}\nrecord Square(double side) implements Shape {}\nrecord Triangle(double base, double height) implements Shape {}\n\ndouble area(Shape s) {\n    return switch (s) {                    // no default needed\n        case Circle c   -> Math.PI * c.r() * c.r();\n        case Square sq  -> sq.side() * sq.side();\n        case Triangle t -> 0.5 * t.base() * t.height();\n    };\n}\n// Adding a new Shape subtype causes a compile error here — forcing you to update\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "Deconstruction Patterns — Destructure Records in Cases",
+            "content": "**Record deconstruction** (JEP 440) lets you pull components out of records directly in the case label:\n\n```java\nrecord Point(int x, int y) {}\nrecord Line(Point start, Point end) {}\n\ndouble length(Object obj) {\n    return switch (obj) {\n        case Line(Point(int x1, int y1), Point(int x2, int y2)) ->\n            Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));\n        case Point(int x, int y) ->\n            Math.sqrt(x * x + y * y);\n        default -> 0;\n    };\n}\n```\n\n**Nested patterns** work as deeply as you want:\n```java\nrecord Pair<A, B>(A fst, B snd) {}\nrecord Triple<A, B, C>(A fst, B snd, C thd) {}\n\nswitch (obj) {\n    case Triple(Pair(String a, Integer b), String c, _) -> ...;\n    // _ means \"match anything, don't bind\"\n}\n```\n\n**Requires records** (or record-like types — deconstruction is planned for classes later via deconstruction method declarations, JEP 468+).\n\n**Type inference in deconstruction**:\n```java\nrecord Box<T>(T value) {}\nObject obj = new Box<>(42);\nswitch (obj) {\n    case Box(Integer i) -> ...;    // compiler infers Box<Integer>\n    case Box(String s)  -> ...;\n    default -> ...;\n}\n```\n\n**Use case — visitor pattern replacement**:\n```java\n// Old: double-dispatch visitor\nvisitor.visit(expression);\n\n// New: pattern switch\nsealed interface Expr permits Lit, Var, Plus, Times {}\nrecord Lit(int value) implements Expr {}\nrecord Var(String name) implements Expr {}\nrecord Plus(Expr left, Expr right) implements Expr {}\nrecord Times(Expr left, Expr right) implements Expr {}\n\nint eval(Expr e, Map<String, Integer> env) {\n    return switch (e) {\n        case Lit(int v)              -> v;\n        case Var(String n)           -> env.getOrDefault(n, 0);\n        case Plus(Expr l, Expr r)    -> eval(l, env) + eval(r, env);\n        case Times(Expr l, Expr r)   -> eval(l, env) * eval(r, env);\n    };\n}\n```\nThe visitor pattern — one of the longest-running workarounds for Java's lack of ADTs — is now replaced by 10 lines of switch."
+          },
+          {
+            "type": "after_code",
+            "title": "Guarded Patterns with `when`",
+            "content": "A **guard** adds a boolean predicate to narrow pattern matching:\n\n```java\nString classify(Shape s) {\n    return switch (s) {\n        case Circle c when c.r() > 100   -> \"large circle\";\n        case Circle c when c.r() > 10    -> \"medium circle\";\n        case Circle c                    -> \"small circle\";\n        case Square sq when sq.side() > 100 -> \"large square\";\n        case Square sq                   -> \"small square\";\n        case Triangle t                  -> \"triangle\";\n    };\n}\n```\n\n**Exhaustiveness and guards**:\n- A guarded case is not considered 'total' for exhaustiveness — a guard could fail.\n- You need an unguarded fallback for every type path.\n\n```java\nswitch (s) {\n    case Circle c when c.r() > 100 -> \"big\";   // guard can fail\n    case Circle c                  -> \"small\"; // unguarded fallback for Circle\n    case Square sq                 -> \"square\";\n    case Triangle t                -> \"triangle\";\n}  // OK — every type has an unguarded case\n```\n\n**Dominance and guards**:\n- Two cases with the same pattern but different guards are allowed (in order).\n- An unguarded case dominates any guarded case on the same pattern that comes after it (compiler rejects).\n\n**Combining with deconstruction**:\n```java\nswitch (obj) {\n    case Point(int x, int y) when x == 0 && y == 0 -> \"origin\";\n    case Point(int x, int y) when x == y -> \"diagonal\";\n    case Point(int x, int y) -> \"other point\";\n    default -> \"not a point\";\n}\n```\n\n**Useful for**:\n- State machines with value-based transitions.\n- Expression classification with property-based rules.\n- Any scenario where type + value predicate matters."
+          },
+          {
+            "type": "step",
+            "title": "Exhaustiveness with Sealed Classes — The ADT Story",
+            "content": "**Sealed classes** (Java 17) + **pattern switch** (Java 21) = Java finally has algebraic data types.\n\n```java\nsealed interface Result<T> permits Success, Failure {}\nrecord Success<T>(T value) implements Result<T> {}\nrecord Failure<T>(String error) implements Result<T> {}\n\n<T, R> Result<R> map(Result<T> r, Function<T, R> fn) {\n    return switch (r) {\n        case Success<T>(T v) -> new Success<>(fn.apply(v));\n        case Failure<T>(String e) -> new Failure<>(e);\n    };\n}\n```\n\n**The compiler verifies**:\n- Every `permits`-listed subtype is covered.\n- No missing cases.\n- Adding a new subtype to `Result` without updating this switch is a compile error.\n\n**Compare with Scala**:\n```scala\nsealed trait Result[T]\ncase class Success[T](value: T) extends Result[T]\ncase class Failure[T](error: String) extends Result[T]\n\ndef map[T, R](r: Result[T], fn: T => R): Result[R] = r match {\n    case Success(v) => Success(fn(v))\n    case Failure(e) => Failure(e)\n}\n```\nJava 21's syntax is slightly more verbose but semantically identical.\n\n**Error handling pattern** — Either/Result without exceptions:\n```java\nsealed interface ValidationResult {}\nrecord Valid(User user) implements ValidationResult {}\nrecord Invalid(List<String> errors) implements ValidationResult {}\n\nValidationResult validate(UserInput input) { ... }\n\nResponse handle(UserInput input) {\n    return switch (validate(input)) {\n        case Valid(User u) -> Response.ok(save(u));\n        case Invalid(List<String> errors) -> Response.badRequest(errors);\n    };\n}\n```\n\n**Visitor pattern retired**:\n- Classic OO visitor pattern: 200 lines with `accept(Visitor)` and `visitX` methods per type.\n- Pattern switch: 10 lines.\n- Adding new types: visitor requires updating every visitor subclass; pattern switch requires updating every switch (compiler catches this)."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Best Practices and Pitfalls",
+            "content": "**Use pattern switch when**:\n- Dispatching on a sealed hierarchy (replaces visitor pattern).\n- Handling heterogeneous data (replaces `instanceof` chains).\n- Implementing interpreters, protocol handlers, message processors.\n- You benefit from compile-time exhaustiveness checking.\n\n**Prefer polymorphism when**:\n- Behavior is naturally a method on the type.\n- Logic is reused across many call sites (put it in the class).\n- You're not dispatching; you're implementing.\n\n**Guideline: if you'd write a visitor, use pattern switch. If you'd override a method, use polymorphism.**\n\n**Pitfalls**:\n\n**1. Null handling**:\n- `switch(null)` still throws NPE unless you have `case null`.\n- Easy to forget; lurking bug.\n\n**2. Dominance errors**:\n- Compiler rejects unreachable cases. Reorder or remove.\n- Especially tricky with guarded patterns.\n\n**3. Deconstruction requires records** (as of Java 21):\n- Can't deconstruct arbitrary classes yet.\n- JEP 468 is working on deconstruction patterns for classes.\n\n**4. Exhaustiveness only for sealed types**:\n- `switch(obj)` on Object always needs default.\n- Only sealed hierarchies get compile-time exhaustiveness.\n\n**5. `yield` for multi-statement cases**:\n```java\nString describe(Object o) {\n    return switch (o) {\n        case String s -> {\n            System.out.println(\"got string\");\n            yield s.toUpperCase();  // explicit return from block\n        }\n        default -> \"other\";\n    };\n}\n```\n\n**6. Performance**:\n- Pattern switch compiles to `invokedynamic` via `SwitchBootstraps`.\n- Generally competitive with `instanceof` chains.\n- No runtime cost for pattern matching vs hand-coded equivalent.\n\n**7. Readability**:\n- Long chains of patterns can get dense. Break into helper methods for readability.\n- Don't force everything into one switch if polymorphism is clearer.\n\n**Style tips**:\n- Name pattern variables meaningfully (`user` not `u`).\n- Align arrows for visual consistency.\n- Keep each case body short; extract helpers for complex logic.\n- Use deconstruction for records; type patterns for other types."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Switch pattern matching** (Java 21, JEP 441) allows pattern cases in switch expressions/statements.\n- **Type patterns**: `case Integer i -> ...` binds `i` as `Integer`.\n- **Deconstruction patterns**: `case Point(int x, int y) -> ...` destructures records.\n- **Guards**: `case Integer i when i > 100 -> ...` adds boolean predicates.\n- **Null handling**: `case null ->` is now valid; missing null case still throws NPE.\n- **Dominance checking**: compiler rejects unreachable cases.\n- **Exhaustiveness**: sealed classes + pattern switch = no default needed; adding new subtype forces update.\n- **Nested patterns**: `case Line(Point(int x1, int y1), Point(int x2, int y2)) -> ...`.\n- **Builds on** pattern matching for `instanceof` (Java 16, JEP 394).\n- **Replaces visitor pattern** for sealed hierarchies.\n- **Performance**: `invokedynamic` via `SwitchBootstraps`, competitive with manual chains.\n- **Requires records** for deconstruction (as of Java 21).\n- **`yield`** for multi-statement case blocks.\n- **ADT-style code** via sealed + records + pattern switch.\n- **IDE support**: IntelliJ, Eclipse, VS Code all suggest conversions from `instanceof` chains."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Switch pattern matching (Java 21, JEP 441) upgrades switch from 'match a constant' to 'match a type and optionally bind a variable,' combined with **record deconstruction patterns** (JEP 440) and **guarded patterns** via `when`. It brings Java close to Scala/Kotlin's `match`/`when` and gives us real algebraic data types.\n\n**Core features**\n\n**1. Type patterns**\n- `case Integer i -> ...` — `i` is bound as an Integer\n- `case String s -> ...` — s is bound as a String\n- Replaces long `instanceof` chains\n\n**2. Deconstruction patterns** (for records)\n- `case Point(int x, int y) -> ...` — destructures the record directly\n- Nested: `case Line(Point(int x1, int y1), Point(int x2, int y2)) -> ...`\n- Arbitrary depth\n\n**3. Guards with `when`**\n- `case Integer i when i > 100 -> \"large\"` — adds a predicate\n- `case Point(int x, int y) when x == y -> \"diagonal\"`\n\n**4. Null handling**\n- `case null -> ...` is now a valid label\n- Without an explicit null case, switch still throws NPE (backward compat)\n- Combined: `case null, default -> ...`\n\n**5. Exhaustiveness checking**\n- With sealed classes, compiler verifies all subtypes are covered\n- No default needed for sealed hierarchies\n- Adding a new subtype to the sealed parent = compile error here, forcing update\n\n**6. Dominance checking**\n- `case CharSequence cs -> ...` followed by `case String s -> ...` = compile error (unreachable)\n- Reorder: more specific first\n- Two cases with same pattern but different guards = allowed in order\n\n**Sealed + records + pattern switch = ADTs**\n\n```java\nsealed interface Result<T> permits Success, Failure {}\nrecord Success<T>(T value) implements Result<T> {}\nrecord Failure<T>(String error) implements Result<T> {}\n\n<T, R> Result<R> map(Result<T> r, Function<T, R> fn) {\n    return switch (r) {\n        case Success<T>(T v) -> new Success<>(fn.apply(v));\n        case Failure<T>(String e) -> new Failure<>(e);\n    };\n}\n```\n\nSame as Scala `case Success(v) => ...`; slightly more verbose but semantically identical.\n\n**Killer use cases**\n\n**Visitor pattern replacement** — 200 lines of visitor classes become 10 lines of switch:\n```java\nsealed interface Expr permits Lit, Var, Plus, Times {}\nint eval(Expr e) {\n    return switch (e) {\n        case Lit(int v) -> v;\n        case Var(String n) -> lookup(n);\n        case Plus(Expr l, Expr r) -> eval(l) + eval(r);\n        case Times(Expr l, Expr r) -> eval(l) * eval(r);\n    };\n}\n```\n\n**Validation results / Either**:\n- `sealed interface Result` with `Valid(User)` / `Invalid(List<String>)`\n- Switch handles both branches exhaustively\n\n**State machines**:\n- Sealed interface for states; deconstruct state data in cases\n\n**Builds on Java 16's `instanceof` pattern matching**\n- Same pattern variable binding\n- Same flow scoping idea but applied to switch cases\n\n**`yield` for multi-statement case blocks**\n- `case String s -> { System.out.println(s); yield s.toUpperCase(); }`\n\n**Performance**\n- `invokedynamic` via `SwitchBootstraps`\n- Competitive with manual instanceof chains\n- No runtime cost for patterns\n\n**Pitfalls**\n\n**1. Null handling**: still NPE unless explicit `case null`\n\n**2. Dominance**: reorder specific cases before general ones\n\n**3. Deconstruction = records only** (as of Java 21)\n- JEP 468+ working on deconstruction for regular classes\n\n**4. Exhaustiveness only for sealed types**\n- `switch(obj)` on Object always needs default\n- Sealed types get compile-time exhaustiveness\n\n**5. Guards aren't 'total'**\n- A guard can fail; needs unguarded fallback for each type\n\n**When to use**\n- Sealed hierarchies (replaces visitor)\n- Heterogeneous data dispatch (replaces instanceof chains)\n- Interpreters, protocol handlers, message processors\n- Compile-time exhaustiveness matters\n\n**When NOT to use**\n- Behavior naturally belongs on the type — use polymorphism\n- Logic reused across call sites — put it in the class\n- Dispatching on constants only — classic switch is fine\n\n**Recommendation:** Use **switch pattern matching** as the default whenever you're dispatching on a **sealed hierarchy** — it replaces the visitor pattern with 10 lines of declarative code and gives you compile-time exhaustiveness so adding a new subtype forces you to update every switch. Combine with **records** and **deconstruction patterns** for parser/AST/DTO handling — `case Plus(Expr l, Expr r) -> eval(l) + eval(r)` is worth writing interpreters for just to use this feature. Reach for **`when` guards** when you need value-based predicates alongside types, but remember guards aren't 'total' — always have an unguarded fallback per type. Always include **`case null`** explicitly unless you want NPE. For heterogeneous data without a sealed hierarchy, prefer pattern switch over long `instanceof` chains — same bytecode, far more readable. Use **polymorphism** when behavior naturally belongs on the type; pattern switch when dispatching from outside. Between this, sealed classes, records, and virtual threads, Java 21 is the most functional-friendly Java release ever — lean into the style."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does pattern switch interact with sealed classes for exhaustiveness?",
+        "What's the difference between a type pattern and a deconstruction pattern?",
+        "Why does the compiler reject `case CharSequence cs` followed by `case String s`?",
+        "What happens if you switch on null without a `case null` clause?",
+        "When would you use `when` guards?"
+      ],
+      "seo": {
+        "metaTitle": "Java 21 Switch Pattern Matching — Type Patterns, Deconstruction, Guards",
+        "metaDescription": "Master Java 21 switch pattern matching: type patterns, record deconstruction, when guards, null handling, exhaustiveness with sealed classes, and visitor pattern replacement."
+      },
+      "order": 3,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Switch pattern matching (Java 21, JEP 441) upgrades switch from 'match a constant' to 'match a type and optionally bind a variable,' combined with record deconstruction patterns (JEP 440) and guarded patterns via when.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Switch in pre-Java-14 was limited to int, char, String, and enum: ``java switch (day) { case MONDAY: case FRIDAY: break; case TUESDAY: ...; default: ...; } ` Java 14 added switch expressions (-> arrow syntax, no fall-through): `java String name = switch (day) { case MONDAY, FRIDAY -> \"busy\"; case TUESDAY -> \"quiet\"; default -> \"unknown\"; }; ` Java 21 (JEP 441) adds pattern matching to switch cases: `java String describe(Object obj) { return switch (obj) { case Integer i."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows the full pattern switch surface: type patterns, deconstruction, when guards, null handling, and exhaustiveness with sealed classes"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Switch pattern matching (Java 21, JEP 441) allows pattern cases in switch expressions/statements",
+              "Type patterns: case Integer i ->",
+              "binds i as Integer",
+              "Deconstruction patterns: case Point(int x, int y) ->",
+              "destructures records"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Switch in pre-Java-14 was limited to int, char, String, and enum: ``java switch (day) { case MONDAY: case FRIDAY: break; case TUESDAY: ...; default: ...; } ` Java 14 added switch expressions (-> arrow syntax, no fall-through): `java String name = switch (day) { case MONDAY, FRIDAY -> \"busy\"; case TUESDAY -> \"quiet\"; default -> \"unknown\"; }; ` Java 21 (JEP 441) adds pattern matching to switch cases: `java String describe(Object obj) { return switch (obj) { case Integer i -> \"int: \" + i; case Long l -> \"long: \" + l; case String s -> \"string of length \" + s.length(); case int[] arr -> \"array of \" + arr.length; case null -> \"null\"; default -> \"other: \"."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting that switch pattern matching throws NPE unless there's an explicit case null",
+              "Not knowing that deconstruction patterns require records",
+              "Thinking exhaustiveness is automatic for non-sealed types"
+            ]
+          }
+        ],
+        "cap": "Between this, sealed classes, records, and virtual threads, Java 21 is the most functional-friendly Java release ever — lean into the style.",
+        "familiarity_anchors": [
+          "Switch",
+          "Scala",
+          "Kotlin"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does pattern switch interact with sealed classes for exhaustiveness?",
+          "What's the difference between a type pattern and a deconstruction pattern?",
+          "Why does the compiler reject `case CharSequence cs` followed by `case String s`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    },
+    {
+      "id": "sequenced-collections-java-21",
+      "slug": "sequenced-collections-java-21",
+      "question": "What are sequenced collections in Java 21? What do `SequencedCollection`, `SequencedSet`, and `SequencedMap` add?",
+      "title": "Sequenced Collections (Java 21) — `first`, `last`, `reversed` — Finally",
+      "direct_answer": "**Sequenced collections** (Java 21, JEP 431) add three new interfaces — **`SequencedCollection<E>`**, **`SequencedSet<E>`**, **`SequencedMap<K, V>`** — that formalize the concept of 'a collection with a well-defined encounter order.' They add a **uniform API** for accessing the first/last element and iterating in reverse: `getFirst()`, `getLast()`, `addFirst(e)`, `addLast(e)`, `removeFirst()`, `removeLast()`, and `reversed()` (returning a reversed view, not a copy). Before Java 21, this was a mess: `List` had `get(0)` and `get(list.size() - 1)`, `Deque` had `getFirst`/`getLast`, `LinkedHashSet` had no built-in first/last, and `SortedSet` had `first`/`last` but different semantics. The inheritance is retroactive: `List` now extends `SequencedCollection`, `Deque` extends `SequencedCollection`, `LinkedHashSet` implements `SequencedSet`, `SortedSet` implements `SequencedSet`, and `LinkedHashMap`/`SortedMap` implement `SequencedMap`. The `reversed()` method is a **view** (O(1) construction, lazy iteration), not a copy. `ArrayList.reversed()` iterates backward without allocating; same for the others. `SequencedMap` also adds `firstEntry()`, `lastEntry()`, `sequencedKeySet()`, `sequencedValues()`, and `sequencedEntrySet()` — the latter three return views over the map that preserve encounter order and support their own reverse iteration. Primary value: **consistency**. No more remembering which collection has `getFirst` vs `get(0)` vs `peekFirst`. For APIs that care about order (caches, LRU, insertion-ordered maps), this is a long-overdue cleanup.",
+      "layout_type": "default",
+      "difficulty": "easy",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the new interfaces, the retrofit onto existing classes, the view semantics of reversed(), and the specific new methods on SequencedMap",
+        "common_mistake": "Thinking `reversed()` returns a copy (it returns a view). Not knowing `SequencedSet` vs `SequencedCollection`. Missing that `SortedSet` is now a `SequencedSet`",
+        "to_stand_out": "Discuss the retrofit challenge (how they added interfaces to existing final APIs), mention the `SequencedMap.firstEntry()` returning unmodifiable entries, and explain why sets without order (HashSet) don't implement SequencedSet"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "spring"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Inconsistency That Sequenced Collections Fixes",
+            "content": "Before Java 21, asking 'what's the first element?' had a different answer for every collection:\n\n```java\nList<String> list = ...;\nString first = list.get(0);                    // risk IOOBE if empty\nString last  = list.get(list.size() - 1);\n\nDeque<String> deque = new ArrayDeque<>(...);\nString first2 = deque.getFirst();              // throws if empty\nString peek   = deque.peekFirst();             // returns null if empty\n\nLinkedHashSet<String> lhs = new LinkedHashSet<>(...);\nString first3 = lhs.iterator().next();         // awkward\n// no built-in 'last' — iterate to find it\n\nSortedSet<String> ss = new TreeSet<>(...);\nString first4 = ss.first();                    // throws if empty\nString last4  = ss.last();\n\nLinkedHashMap<String, Integer> lhm = ...;\n// no first/last at all — iterate entrySet, track manually\n```\n\nReverse iteration was similarly chaotic:\n- `List.listIterator(list.size())` with `hasPrevious`/`previous`.\n- `Deque.descendingIterator()`.\n- For `LinkedHashSet`/`LinkedHashMap`, no built-in reverse iteration — copy to a List, reverse manually.\n\n**Sequenced collections** (JEP 431) unifies all this under three interfaces."
+          },
+          {
+            "type": "after_code",
+            "title": "The New Interfaces and Methods",
+            "content": "**`SequencedCollection<E>`** — superinterface of `List` and `Deque`:\n```java\npublic interface SequencedCollection<E> extends Collection<E> {\n    E getFirst();\n    E getLast();\n    void addFirst(E e);\n    void addLast(E e);\n    E removeFirst();\n    E removeLast();\n    SequencedCollection<E> reversed();\n}\n```\n\n**`SequencedSet<E> extends SequencedCollection<E>, Set<E>`** — superinterface of `LinkedHashSet` and `SortedSet`:\n```java\npublic interface SequencedSet<E> extends SequencedCollection<E>, Set<E> {\n    SequencedSet<E> reversed();  // covariant return\n}\n```\n\n**`SequencedMap<K, V> extends Map<K, V>`**:\n```java\npublic interface SequencedMap<K, V> extends Map<K, V> {\n    Entry<K, V> firstEntry();\n    Entry<K, V> lastEntry();\n    Entry<K, V> pollFirstEntry();\n    Entry<K, V> pollLastEntry();\n    V putFirst(K k, V v);\n    V putLast(K k, V v);\n    SequencedMap<K, V> reversed();\n    SequencedSet<K> sequencedKeySet();\n    SequencedCollection<V> sequencedValues();\n    SequencedSet<Entry<K, V>> sequencedEntrySet();\n}\n```\n\n**Usage**:\n```java\nList<String> list = new ArrayList<>(List.of(\"a\", \"b\", \"c\"));\nString first = list.getFirst();    // \"a\"\nString last  = list.getLast();     // \"c\"\nlist.addFirst(\"z\");                 // [z, a, b, c]\nlist.addLast(\"d\");                  // [z, a, b, c, d]\n\nList<String> reversed = list.reversed();  // view: [d, c, b, a, z]\n// modifications to list are reflected in reversed, and vice versa\n\nLinkedHashSet<String> lhs = new LinkedHashSet<>(List.of(\"a\", \"b\", \"c\"));\nString f = lhs.getFirst();  // \"a\"\nSet<String> rev = lhs.reversed();\n// rev iterates [c, b, a]\n\nLinkedHashMap<String, Integer> lhm = new LinkedHashMap<>();\nlhm.put(\"a\", 1);\nlhm.put(\"b\", 2);\nlhm.put(\"c\", 3);\nMap.Entry<String, Integer> first2 = lhm.firstEntry();   // (a, 1)\nMap.Entry<String, Integer> last2  = lhm.lastEntry();    // (c, 3)\nlhm.putFirst(\"z\", 0);                                    // z first now\nMap<String, Integer> rev2 = lhm.reversed();             // view\n```"
+          },
+          {
+            "type": "step",
+            "title": "Retrofitted Collections — What Now Implements What",
+            "content": "The JDK team retrofitted existing collections to implement the new interfaces:\n\n**`SequencedCollection`**:\n- `List` (interface) — all `List` implementations are now `SequencedCollection`.\n- `Deque` (interface) — all `Deque` implementations.\n- `ArrayList`, `LinkedList`, `ArrayDeque`, `PriorityQueue`... wait, `PriorityQueue` is NOT a `SequencedCollection` because its iteration order doesn't match element order (it's heap-backed).\n\n**`SequencedSet`**:\n- `LinkedHashSet` — insertion order.\n- `SortedSet` (`TreeSet`) — natural/comparator order.\n- **NOT** `HashSet` — it has no defined encounter order.\n\n**`SequencedMap`**:\n- `LinkedHashMap` — insertion order.\n- `SortedMap` (`TreeMap`) — natural/comparator order.\n- **NOT** `HashMap`, `ConcurrentHashMap` — undefined order.\n\n**Why retroactive typing works**:\n- Java's type system allows adding interfaces to classes via **default methods**.\n- All new methods on `SequencedCollection`/`SequencedSet`/`SequencedMap` have default implementations in existing interfaces (using `iterator()`, `listIterator()`, etc.).\n- Specific collections override for efficiency (O(1) `getFirst` on `ArrayDeque` instead of iterator walk).\n\n**`List`'s new behavior**:\n- `List.addFirst(e)` → `add(0, e)`.\n- `List.getFirst()` → `get(0)`, but throws `NoSuchElementException` (not `IndexOutOfBoundsException`) on empty.\n- `List.reversed()` returns a **view**, not a new list.\n\n**Immutable collections (`List.of`, `Set.of`, ...)**:\n- Still immutable; `addFirst`/`addLast` throws `UnsupportedOperationException`.\n- `getFirst`/`getLast`/`reversed` work fine."
+          },
+          {
+            "type": "step",
+            "title": "`reversed()` Is a View, Not a Copy",
+            "content": "A crucial property: `reversed()` returns a **view** over the original, not a reversed copy.\n\n```java\nList<String> original = new ArrayList<>(List.of(\"a\", \"b\", \"c\"));\nList<String> rev = original.reversed();\n// rev is backed by original; iteration is O(1) to construct\n\n// Modifications propagate\noriginal.add(\"d\");       // original = [a, b, c, d]\nSystem.out.println(rev); // [d, c, b, a]\n\nrev.add(\"e\");            // adds to END of reversed, which is START of original\nSystem.out.println(original);  // [e, a, b, c, d]\n```\n\n**Implications**:\n- **O(1) construction**; no allocation of a new list.\n- **Both directions are live**: modify either, see the change in the other.\n- **Indexing is efficient**: `rev.get(i)` → `original.get(original.size() - 1 - i)`.\n- **Iteration order** is reversed but efficiency matches the underlying.\n\n**Compare with `Collections.reverse(list)`** (old API):\n- `Collections.reverse` mutates the original in place.\n- `reversed()` returns a view — original is untouched.\n\n**Compare with `stream().reversed()`** (also new in Java 21):\n- `stream().reversed()` on an ordered stream reverses the stream pipeline.\n- Different use case: stream operation vs collection view.\n\n**Performance note**: `ArrayList.reversed()` is efficient (O(1) construction, O(1) random access). `LinkedList.reversed()` is also efficient because LinkedList already has doubly-linked nodes. `LinkedHashSet.reversed()` and `LinkedHashMap.reversed()` similarly leverage doubly-linked structure."
+          },
+          {
+            "type": "after_code",
+            "title": "Common Patterns with Sequenced Collections",
+            "content": "**LRU cache pattern** — `LinkedHashMap` with ordered updates:\n```java\npublic class LruCache<K, V> {\n    private final int maxSize;\n    private final LinkedHashMap<K, V> map = new LinkedHashMap<>();\n\n    public LruCache(int maxSize) { this.maxSize = maxSize; }\n\n    public V get(K key) {\n        V value = map.remove(key);\n        if (value != null) {\n            map.putLast(key, value);  // move to most-recent end\n        }\n        return value;\n    }\n\n    public void put(K key, V value) {\n        map.remove(key);\n        map.putLast(key, value);\n        while (map.size() > maxSize) {\n            map.pollFirstEntry();  // evict oldest\n        }\n    }\n}\n```\n\n**Queue processing**:\n```java\nDeque<Task> queue = new ArrayDeque<>();\nqueue.addLast(task1);\nqueue.addLast(task2);\n\nwhile (!queue.isEmpty()) {\n    Task t = queue.removeFirst();  // FIFO\n    process(t);\n}\n```\n\n**Reversed iteration for timeline display**:\n```java\nList<Event> events = eventService.findAll();\nfor (Event e : events.reversed()) {\n    System.out.println(e);  // newest first\n}\n```\n\n**Getting first/last from sorted data**:\n```java\nSortedSet<Score> scores = new TreeSet<>();\nScore lowest = scores.getFirst();\nScore highest = scores.getLast();\nSortedSet<Score> reversed = scores.reversed();\nfor (Score s : reversed) { /* highest first */ }\n```\n\n**Before/after comparison**:\n```java\n// Before Java 21\nString first = list.get(0);\nString last = list.get(list.size() - 1);\nSet<String> keys = new LinkedHashSet<>(map.keySet());\nList<Entry<String, Integer>> entries = new ArrayList<>(map.entrySet());\nCollections.reverse(entries);\n\n// Java 21\nString first = list.getFirst();\nString last = list.getLast();\nSequencedSet<String> keys = map.sequencedKeySet();\nSequencedMap<String, Integer> reversed = map.reversed();\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Practical Notes and Caveats",
+            "content": "**Benefits**:\n- **Consistency**: same method names everywhere. No more `get(0)` vs `getFirst()` vs `peek()`.\n- **Reverse iteration**: previously missing for `LinkedHashSet` and `LinkedHashMap`, now free.\n- **Cleaner APIs**: libraries can accept `SequencedMap<K, V>` when they care about order.\n- **Zero-cost retrofit**: no breaking changes; defaults work for all existing collections.\n\n**Caveats**:\n\n**1. Not all collections qualify**:\n- `HashSet`, `HashMap`, `ConcurrentHashMap` don't implement Sequenced* — no encounter order.\n- `PriorityQueue` doesn't implement `SequencedCollection` — iteration order doesn't match priority order.\n\n**2. `getFirst`/`getLast` throw `NoSuchElementException` on empty**\n- Different from `peekFirst`/`peekLast` on Deque (which return null).\n- Be prepared to handle empty with `isEmpty()` check first.\n\n**3. `reversed()` returns a view, not a copy**\n- Mutations propagate both ways.\n- If you want a true reversed copy: `new ArrayList<>(list.reversed())`.\n\n**4. `putFirst`/`putLast` on `LinkedHashMap`**\n- Moves the key to the requested end.\n- Classic use: LRU caches, MRU caches.\n- Note: `LinkedHashMap`'s built-in `accessOrder` constructor argument was harder to use; `putLast` is cleaner.\n\n**5. `SequencedMap.sequencedEntrySet()` is NOT the same as `entrySet()`**\n- `sequencedEntrySet()` returns a `SequencedSet` with first/last/reversed support.\n- `entrySet()` returns a plain `Set`.\n- Both iterate in the map's encounter order.\n\n**6. Immutable view**:\n- `Collections.unmodifiableList(list)` preserves `SequencedCollection` methods but they throw `UnsupportedOperationException` on mutation.\n- `List.of(...)` lists are also SequencedCollections but immutable.\n\n**7. Stream interop**:\n- `list.reversed().stream()` processes in reverse order.\n- `stream().toList().reversed()` also works.\n- Java 21 also added `Stream.gather` (preview) for richer stream ops.\n\n**Backwards compatibility**:\n- Old code works unchanged.\n- Adding `SequencedCollection` methods via default methods — no recompilation needed for existing consumers.\n- Adopt incrementally; no migration effort required."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Sequenced collections** (Java 21, JEP 431) unify the concept of ordered collections with three new interfaces.\n- **`SequencedCollection<E>`**: `getFirst/getLast`, `addFirst/addLast`, `removeFirst/removeLast`, `reversed()`.\n- **`SequencedSet<E>`** = `SequencedCollection` + `Set`.\n- **`SequencedMap<K,V>`**: `firstEntry/lastEntry`, `putFirst/putLast`, `pollFirstEntry/pollLastEntry`, `reversed()`, `sequencedKeySet/Values/EntrySet`.\n- **Retrofitted**: `List`, `Deque`, `LinkedHashSet`, `SortedSet`, `LinkedHashMap`, `SortedMap`.\n- **NOT retrofitted**: `HashSet`, `HashMap`, `ConcurrentHashMap`, `PriorityQueue` (no defined order).\n- **`reversed()` is a view**, not a copy — O(1) construction, mutations propagate both ways.\n- **Empty collection**: `getFirst/getLast` throw `NoSuchElementException`.\n- **LRU cache** — `LinkedHashMap.putLast` + `pollFirstEntry` pattern is now idiomatic.\n- **Library APIs** can now accept `SequencedMap<K, V>` to require ordering.\n- **No breaking changes** — retrofit via default methods; existing code works.\n- **IDE-friendly**: `list.getFirst()` is clearer than `list.get(0)` in intent.\n- **Immutables** (`List.of`) also implement these interfaces; mutating methods throw UOE."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Sequenced collections (Java 21, JEP 431) add **three new interfaces** that formalize 'a collection with a well-defined encounter order' and give Java a **uniform API** for first/last access and reverse iteration.\n\n**The three interfaces**\n\n**`SequencedCollection<E>`** — superinterface of List and Deque:\n- `getFirst()`, `getLast()`\n- `addFirst(e)`, `addLast(e)`\n- `removeFirst()`, `removeLast()`\n- `reversed()` — returns a view\n\n**`SequencedSet<E>`** = `SequencedCollection` + `Set`\n- Adopted by `LinkedHashSet` and `SortedSet`\n\n**`SequencedMap<K, V>`**\n- `firstEntry()`, `lastEntry()`\n- `putFirst(k, v)`, `putLast(k, v)`\n- `pollFirstEntry()`, `pollLastEntry()`\n- `reversed()`\n- `sequencedKeySet()`, `sequencedValues()`, `sequencedEntrySet()`\n\n**Motivation**\n\nPre-Java 21, there was a mess:\n- `List.get(0)` vs `Deque.getFirst()` vs `LinkedHashSet.iterator().next()` vs `SortedSet.first()`\n- No built-in `last()` for `LinkedHashSet` or `LinkedHashMap`\n- Reverse iteration was a different API per collection\n\nSequenced collections unify all this.\n\n**Retrofit via default methods**\n\n**Now implement Sequenced\\***\n- `List` (ArrayList, LinkedList) — `SequencedCollection`\n- `Deque` (ArrayDeque) — `SequencedCollection`\n- `LinkedHashSet`, `SortedSet`/`TreeSet` — `SequencedSet`\n- `LinkedHashMap`, `SortedMap`/`TreeMap` — `SequencedMap`\n\n**Do NOT implement**\n- `HashSet`, `HashMap`, `ConcurrentHashMap` — no defined order\n- `PriorityQueue` — iteration order doesn't match priority order\n\nPossible because default method implementations in the interfaces mean no class needs modification; subclasses override for efficiency.\n\n**`reversed()` is a view, not a copy**\n- O(1) construction, no allocation\n- Lazy iteration in reverse order\n- Mutations to original reflect in view and vice versa\n- If you want a true reversed copy: `new ArrayList<>(list.reversed())`\n- Compare with `Collections.reverse(list)` which **mutates** the original\n\n**LRU cache pattern is now idiomatic**\n- `LinkedHashMap` + `putLast(key, value)` + `pollFirstEntry()` for eviction\n- Before Java 21, you had to use the `accessOrder` constructor argument — clunky\n\n**Empty behavior**\n- `getFirst`/`getLast` throw `NoSuchElementException` on empty\n- Different from `Deque.peekFirst`/`peekLast` (return null)\n- Check `isEmpty()` first or use try/catch\n\n**Immutable collections work too**\n- `List.of(a, b, c).getFirst()` returns `a`\n- `list.addFirst(...)` throws `UnsupportedOperationException` on immutable\n- `List.of(a, b, c).reversed()` returns an immutable reversed view\n\n**Practical improvements**\n\n**Cleaner code everywhere**:\n- `list.getFirst()` beats `list.get(0)` — intent is clear\n- `list.getLast()` beats `list.get(list.size() - 1)` — less risk of bug\n- `lhm.firstEntry()` on LinkedHashMap was previously impossible without iteration\n\n**Reverse iteration for free**:\n- `LinkedHashSet.reversed()` — iterate newest-to-oldest\n- `LinkedHashMap.reversed()` — same for maps\n- Previously required copying to a list and reversing\n\n**APIs can require ordering**:\n- Methods can accept `SequencedMap<K, V>` instead of `Map<K, V>`\n- Forces the caller to use an ordered map\n- Better than runtime assertions about encounter order\n\n**Caveats**\n\n**1. Not all collections qualify** — HashMap, HashSet, ConcurrentHashMap, PriorityQueue don't\n\n**2. `reversed()` is a view** — mutations propagate\n\n**3. Empty collection throws NoSuchElementException** — always check size\n\n**4. Immutable collections** — mutating methods throw UOE\n\n**5. sequencedEntrySet()** — different from entrySet(); returns a SequencedSet with reverse support\n\n**No breaking changes**\n- Old code works unchanged\n- New methods added via default methods\n- Adopt incrementally\n\n**Recommendation:** Start using **`getFirst()`, `getLast()`, `addFirst()`, `addLast()`** as your default for `List`, `Deque`, `LinkedHashSet`, and `LinkedHashMap` — the intent is clearer than `get(0)` or `iterator().next()`. For **LRU caches** on `LinkedHashMap`, the `putLast` + `pollFirstEntry` pattern replaces the old `accessOrder` constructor trick — cleaner and more explicit. Remember **`reversed()` is a view**, not a copy: O(1) construction, mutations propagate both ways; copy with `new ArrayList<>(list.reversed())` if you need independence. Watch the **empty collection trap** — `getFirst`/`getLast` throw `NoSuchElementException`, unlike `Deque.peekFirst` which returns null. When designing APIs, accept **`SequencedMap<K, V>`** or **`SequencedCollection<E>`** instead of `Map` or `Collection` when you care about encounter order — you get compile-time enforcement. And note which collections **don't** implement these: `HashMap`, `HashSet`, `ConcurrentHashMap`, `PriorityQueue` — because they genuinely lack a defined order. This is a small, well-scoped API addition but one of the most universally useful — you'll use it every day."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Is `list.reversed()` a view or a copy?",
+        "Why doesn't `HashMap` implement `SequencedMap`?",
+        "How does `LinkedHashMap.putLast` enable LRU caches?",
+        "What's the difference between `entrySet()` and `sequencedEntrySet()`?",
+        "What exception does `getFirst()` throw on an empty list?"
+      ],
+      "seo": {
+        "metaTitle": "Java 21 Sequenced Collections — `getFirst`, `getLast`, `reversed`",
+        "metaDescription": "Complete guide to Java 21 sequenced collections: SequencedCollection, SequencedSet, SequencedMap, reversed() views, LRU cache patterns, and retrofit onto existing classes."
+      },
+      "order": 4,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Sequenced collections (Java 21, JEP 431) add three new interfaces that formalize 'a collection with a well-defined encounter order' and give Java a uniform API for first/last access and reverse iteration.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before Java 21, asking 'what's the first element?' had a different answer for every collection: ``java List<String> list = ...; String first = list.get(0); // risk IOOBE if empty String last = list.get(list.size() - 1); Deque<String> deque = new ArrayDeque<>(...); String first2 = deque.getFirst(); // throws if empty String peek = deque.peekFirst(); // returns null if empty LinkedHashSet<String> lhs = new LinkedHashSet<>(...); String first3 = lhs.iterator().next(); // awkward // no built-in 'last' — iterate to find it SortedSet<String> ss =."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows the new interfaces, the retrofit onto existing classes, the view semantics of reversed(), and the specific new methods on SequencedMap"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Sequenced collections (Java 21, JEP 431) unify the concept of ordered collections with three new interfaces",
+              "SequencedCollection<E>: getFirst/getLast, addFirst/addLast, removeFirst/removeLast, reversed()",
+              "SequencedSet<E> = SequencedCollection + Set",
+              "SequencedMap<K,V>: firstEntry/lastEntry, putFirst/putLast, pollFirstEntry/pollLastEntry, reversed(), sequencedKeySet/Values/EntrySet",
+              "Retrofitted: List, Deque, LinkedHashSet, SortedSet, LinkedHashMap, SortedMap"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before Java 21, asking 'what's the first element?' had a different answer for every collection: ``java List<String> list = ...; String first = list.get(0); // risk IOOBE if empty String last = list.get(list.size() - 1); Deque<String> deque = new ArrayDeque<>(...); String first2 = deque.getFirst(); // throws if empty String peek = deque.peekFirst(); // returns null if empty LinkedHashSet<String> lhs = new LinkedHashSet<>(...); String first3 = lhs.iterator().next(); // awkward // no built-in 'last' — iterate to find it SortedSet<String> ss = new TreeSet<>(...); String first4 = ss.first(); // throws if empty String last4 = ss.last(); LinkedHashMap<String, Integer> lhm = ...; // no first/last at all — iterate entrySet, track manually ` Reverse iteration was similarly chaotic: List.listIterator(list.size()) with hasPrevious/previous. Deque.descendingIterator(). For."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking reversed() returns a copy (it returns a view)",
+              "Not knowing SequencedSet vs SequencedCollection",
+              "Missing that SortedSet is now a SequencedSet"
+            ]
+          }
+        ],
+        "cap": "This is a small, well-scoped API addition but one of the most universally useful — you'll use it every day.",
+        "familiarity_anchors": [
+          "Sequenced",
+          "SequencedCollection",
+          "SequencedSet"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Is `list.reversed()` a view or a copy?",
+          "Why doesn't `HashMap` implement `SequencedMap`?",
+          "How does `LinkedHashMap.putLast` enable LRU caches?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 stream pipeline over a list of products"
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "topic": "Query Optimization",
+  "topicSlug": "query-optimization",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "database",
+  "questions": [
+    {
+      "id": "explain-analyze-query-tuning",
+      "title": "Query Optimization with EXPLAIN ANALYZE",
+      "slug": "explain-analyze-query-tuning",
+      "question": "How do you identify and fix slow database queries?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **`EXPLAIN ANALYZE`: actual execution plan with row counts and timing**\n- **Seq Scan on large table = missing index or bad query structure**\n- **SELECT *: fetch unnecessary columns \u2192 avoid, especially with JOINS**\n- **Pagination: use cursor/keyset instead of OFFSET on large datasets**\n- **N+1 queries: load 100 orders, then 100 user queries = 101 queries**\n- **Slow query log: identify queries taking > 100ms automatically**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Query optimization starts with identifying slow queries \u2014 either via application monitoring (Micrometer recording query times), the database's slow query log, or `EXPLAIN ANALYZE` directly. `EXPLAIN ANALYZE` runs the actual query and shows the execution plan with real row counts and timing at each step.\n\nThe most common culprits are: missing indexes causing sequential scans on large tables, SELECT * fetching unnecessary data, N+1 queries from lazy-loading ORM relationships, and OFFSET-based pagination that requires the database to scan and discard thousands of rows.\n\nFix strategies: add appropriate indexes for WHERE and JOIN columns, select only the columns you need, use JOIN FETCH or EntityGraph to avoid N+1, and switch to cursor/keyset pagination for large datasets."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## EXPLAIN ANALYZE \u2014 Reading the Output\n\n```sql\nEXPLAIN ANALYZE\nSELECT o.id, o.total, u.email\nFROM orders o\nJOIN users u ON o.user_id = u.id\nWHERE o.status = 'PENDING'\n  AND o.created_at > '2024-01-01'\nORDER BY o.created_at DESC\nLIMIT 20;\n\n-- OUTPUT (PostgreSQL):\n-- Limit  (cost=1234.56..1234.89 rows=20 width=48) (actual time=245.3..245.6 rows=20 loops=1)\n--   -> Sort  (cost=1234.56..1289.45 rows=21955 width=48) (actual time=245.2..245.3 rows=20)\n--         Sort Key: o.created_at DESC\n--         Sort Method: top-N heapsort  Memory: 27kB\n--       -> Hash Join  (cost=892.30..1155.12 rows=21955) (actual time=8.3..240.1 rows=21955)\n--             Hash Cond: (o.user_id = u.id)\n--             -> Seq Scan on orders o  (cost=0.00..245.00 rows=21955) \u2190 PROBLEM!\n--                   Filter: ((status='PENDING') AND (created_at > '2024-01-01'))\n--                   Rows Removed by Filter: 28045\n--             -> Hash  (cost=512.00..512.00 rows=12000)\n--                   -> Seq Scan on users u\n\n-- DIAGNOSIS:\n-- Seq Scan on orders \u2192 full table scan (10M rows)\n-- actual time: 245ms \u2192 needs optimization\n-- Both orders and users doing Seq Scan\n\n-- FIX:\nCREATE INDEX idx_orders_status_created ON orders(status, created_at DESC);\nCREATE INDEX idx_users_id ON users(id);  -- PK should already have this\n\n-- AFTER INDEX:\n-- Index Scan on orders  (actual time=0.05..1.2 rows=21955 loops=1)\n-- actual time: 1.4ms  \u2190 175\u00d7 improvement\n```\n\n## Common Query Anti-patterns\n\n```sql\n-- ANTI-PATTERN 1: SELECT * (fetches unneeded columns)\nSELECT * FROM orders WHERE user_id = 42;\n-- If orders has 30 columns including blob columns (attachments, descriptions)\n-- Even if you only use 3 fields \u2014 you fetch all 30\n\n-- FIX: Select only needed columns\nSELECT id, status, total, created_at FROM orders WHERE user_id = 42;\n\n-- ANTI-PATTERN 2: OFFSET pagination (must scan and skip rows)\nSELECT * FROM orders ORDER BY created_at DESC OFFSET 50000 LIMIT 20;\n-- DB must read 50,020 rows and discard first 50,000 \u2192 gets SLOWER as page increases\n\n-- FIX: Keyset/cursor pagination\nSELECT * FROM orders\nWHERE created_at < :lastSeenCreatedAt  -- 'cursor' from previous page\n   OR (created_at = :lastSeenCreatedAt AND id < :lastSeenId)\nORDER BY created_at DESC, id DESC\nLIMIT 20;\n-- Always reads exactly 20 rows, regardless of 'page number'\n\n-- ANTI-PATTERN 3: Functions on indexed columns destroy index usage\nSELECT * FROM orders WHERE YEAR(created_at) = 2024;  -- MySQL\nSELECT * FROM orders WHERE DATE_TRUNC('year', created_at) = '2024-01-01'; -- PostgreSQL\n-- Even with index on created_at, function prevents index use\n\n-- FIX: Use range condition instead\nSELECT * FROM orders\nWHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';\n-- Index on created_at CAN be used now\n\n-- ANTI-PATTERN 4: OR across different columns prevents single index use\nSELECT * FROM orders WHERE user_id = 42 OR email = 'x@y.com';\n\n-- FIX: UNION ALL with separate indexes\nSELECT * FROM orders WHERE user_id = 42\nUNION ALL\nSELECT * FROM orders WHERE email = 'x@y.com' AND user_id != 42;\n```\n\n## N+1 Query Problem and Fix\n\n```java\n// N+1 PROBLEM:\nList<Order> orders = orderRepository.findByStatus(PENDING);  // 1 query\nfor (Order order : orders) {\n    String email = order.getUser().getEmail();  // N queries (1 per order)\n    // If user is LAZY-loaded, this fires a separate SELECT per order\n}\n// 100 orders = 101 SQL queries total\n\n// FIX 1: JOIN FETCH in JPQL\n@Query(\"SELECT o FROM Order o JOIN FETCH o.user WHERE o.status = :status\")\nList<Order> findByStatusWithUser(@Param(\"status\") OrderStatus status);\n// 1 query with JOIN: SELECT o.*, u.* FROM orders o JOIN users u ON o.user_id = u.id\n\n// FIX 2: @EntityGraph\n@EntityGraph(attributePaths = {\"user\", \"items\", \"items.product\"})\nList<Order> findByStatus(OrderStatus status);\n// Spring Data builds the JOIN FETCH automatically\n\n// FIX 3: DTO projection (best for performance \u2014 fetch only needed fields)\n@Query(\"SELECT new com.example.dto.OrderSummary(o.id, o.total, u.email) \"\n     + \"FROM Order o JOIN o.user u WHERE o.status = :status\")\nList<OrderSummary> findSummariesByStatus(@Param(\"status\") OrderStatus status);\n// Selects only 3 columns, 1 query, no entity hydration overhead\n```\n\n## Slow Query Detection\n\n```sql\n-- PostgreSQL: Enable slow query logging\n-- postgresql.conf:\n-- log_min_duration_statement = 100  -- Log all queries > 100ms\n-- log_statement = 'all'  -- Log ALL statements (development only)\n\n-- Find slowest queries via pg_stat_statements:\nSELECT query, calls, mean_exec_time, total_exec_time, rows\nFROM pg_stat_statements\nORDER BY mean_exec_time DESC\nLIMIT 20;\n\n-- MySQL: Slow query log\nSET GLOBAL slow_query_log = 'ON';\nSET GLOBAL long_query_time = 0.1;  -- Log queries > 100ms\nSET GLOBAL slow_query_log_file = '/var/log/mysql/slow.log';\n\n-- Spring Boot: Log Hibernate SQL with timing\nlogging:\n  level:\n    org.hibernate.SQL: DEBUG\n    org.hibernate.orm.jdbc.bind: TRACE\n    org.hibernate.stat: DEBUG\n\nspring:\n  jpa:\n    properties:\n      hibernate:\n        generate_statistics: true  # Log stats per query\n```\n\n## Production Reality\n\nSet up the slow query log from day one \u2014 it's invaluable for catching regressions before users complain. In Spring Boot, enable Hibernate statistics in staging to see query counts per request; an endpoint that fires 200 queries is a N+1 problem waiting to hurt you in production. Use `EXPLAIN (ANALYZE, BUFFERS)` in PostgreSQL for full analysis including buffer cache hits \u2014 this tells you if the problem is I/O or CPU."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Query optimization starts with identifying slow queries \u2014 either via application monitoring (Micrometer recording query times), the database's slow query log, or EXPLAIN ANALYZE directly.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Fix strategies: add appropriate indexes for WHERE and JOIN columns, select only the columns you need, use JOIN FETCH or EntityGraph to avoid N+1, and switch to cursor/keyset pagination for large datas",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

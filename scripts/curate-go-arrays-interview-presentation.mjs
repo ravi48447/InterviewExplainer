@@ -1,0 +1,378 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const questionFile = path.join(
+  repoRoot,
+  "content/go-fresher/go-syntax-basics/arrays-basics/complete-qa.json",
+);
+
+const presentations = [
+  {
+    slug: "go-syntax-basics-arrays-basics-interview-basics",
+    question: "What are arrays in Go, and how do they work?",
+    beats: [
+      {
+        cue: "Define the fixed collection and its complete type",
+        stage: "Length belongs to the type",
+        spokenText: "An array in Go is a fixed-length sequence whose elements all have the same type. Its length is part of the type, so `[3]int` and `[4]int` are different types and cannot be assigned to each other. A declaration such as `var scores [3]int` creates exactly three slots, while `[3]int{10, 20, 30}` creates the same type with explicit values.",
+        support: {
+          type: "trace",
+          title: "Read one array from type to element",
+          items: [
+            {
+              label: "Type",
+              value: "[3]int",
+              detail: "The length and element type together form the complete array type.",
+              tone: "blue",
+            },
+            {
+              label: "Storage",
+              value: "three integer slots",
+              detail: "The number of slots cannot grow after declaration.",
+              tone: "neutral",
+            },
+            {
+              label: "Index",
+              value: "0, 1, 2",
+              detail: "Valid indexes start at zero and stop before len(scores).",
+              tone: "green",
+            },
+            {
+              label: "Element",
+              value: "scores[1]",
+              detail: "Indexing reads or replaces one value of the declared element type.",
+              tone: "orange",
+            },
+          ],
+        },
+      },
+      {
+        cue: "Explain zero values literals indexing and iteration",
+        stage: "Zero values fill every slot",
+        spokenText: "A newly declared array is immediately usable because every slot starts with the element type's zero value: zero for numbers, `false` for booleans, and an empty string for strings. Indexing uses `array[i]`, `len(array)` returns the fixed length, and `range` provides each index and a copy of its element value. Reading an index outside `0` through `len(array)-1` panics at runtime.",
+      },
+      {
+        cue: "Demonstrate array value semantics at assignment and calls",
+        stage: "Array assignment copies values",
+        spokenText: "An array is a value, not a small header that automatically shares its elements. Assignment copies the complete array, and passing an array to a function by value gives the function another copy. Changing either copy does not change the original. A pointer such as `*[3]int` can allow intentional mutation, but the fixed length remains part of that pointer's element type.",
+        support: {
+          type: "code",
+          title: "See both assignment and parameter copies",
+          language: "go",
+          code: "package main\n\nimport \"fmt\"\n\nfunc change(values [3]int) {\n\tvalues[0] = 99\n\tfmt.Println(\"inside\", values)\n}\n\nfunc main() {\n\toriginal := [3]int{10, 20, 30}\n\tcopyOfOriginal := original\n\tcopyOfOriginal[1] = 80\n\n\tchange(original)\n\tfmt.Println(\"original\", original)\n\tfmt.Println(\"copy\", copyOfOriginal)\n}",
+          caption: "The function and assignment each change their own copy; the original remains [10 20 30].",
+        },
+      },
+      {
+        cue: "Place arrays beside the usual variable-length choice",
+        stage: "Use fixed size deliberately",
+        spokenText: "Arrays fit values whose exact size has meaning, such as an RGB triple or a 16-byte identifier. Most application collections use slices because their runtime length can vary and `append` can extend them. Converting an array to a view with `array[:]` creates a slice that can access the array's backing storage; it does not turn the array itself into a growable value.",
+        recallRule: "An array is a fixed-length value whose length belongs to its type; choose a slice when collection length is meant to vary.",
+      },
+    ],
+  },
+  {
+    slug: "go-syntax-basics-arrays-basics-when-to-use",
+    question: "When should you use arrays in Go?",
+    beats: [
+      {
+        cue: "Start with whether the exact count is part of the value",
+        stage: "Fixed size must carry meaning",
+        spokenText: "Use an array when the exact number of elements is part of the data model or function contract. `[3]uint8` can describe one RGB value, `[16]byte` can describe a fixed identifier, and `[32]byte` can require one exact digest size. The compiler then rejects a different length instead of asking every caller and function body to check it at runtime.",
+        support: {
+          type: "comparison",
+          title: "Choose from the data contract",
+          items: [
+            {
+              label: "Exact shape",
+              value: "array",
+              detail: "The count is stable and carries meaning in the value or API.",
+              tone: "blue",
+            },
+            {
+              label: "Changing collection",
+              value: "slice",
+              detail: "Length varies at runtime or the caller needs append and subslicing.",
+              tone: "green",
+            },
+            {
+              label: "Shared fixed value",
+              value: "pointer when justified",
+              detail: "Several operations intentionally mutate the same fixed-size array.",
+              tone: "orange",
+            },
+          ],
+        },
+      },
+      {
+        cue: "Connect array assignment to useful value semantics",
+        stage: "Value semantics can help",
+        spokenText: "Array assignment and parameter passing copy every element according to Go's value semantics. That can be useful for a small fixed value when a function should work on its own copy and leave the caller unchanged. The example treats `RGB` as one three-channel value: `brighter` returns a new color while the original remains intact.",
+        support: {
+          type: "code",
+          title: "Model RGB as one fixed-size value",
+          language: "go",
+          code: "package main\n\nimport \"fmt\"\n\ntype RGB [3]uint8\n\nfunc brighter(color RGB) RGB {\n\tcolor[0] += 10\n\tcolor[1] += 10\n\tcolor[2] += 10\n\treturn color\n}\n\nfunc main() {\n\tbase := RGB{20, 30, 40}\n\tfmt.Println(brighter(base))\n\tfmt.Println(base)\n}",
+          caption: "Output is [30 40 50] followed by [20 30 40]; the returned color is an independent array value.",
+        },
+      },
+      {
+        cue: "Use slices for collections whose size belongs to runtime",
+        stage: "Slices fit changing lists",
+        spokenText: "Choose a slice for database rows, decoded request items, buffers with a changing used length, or any collection that grows with `append`. A slice has a runtime length and capacity and refers to backing storage, which makes it the normal parameter and return type for variable-size application data. Using an array there would force one length into the type and make otherwise valid callers incompatible.",
+      },
+      {
+        cue: "Avoid treating an array as an automatic optimization",
+        stage: "Do not choose by habit",
+        spokenText: "Do not choose an array only because it sounds faster or because the initial sample has three items. Array copies can become costly when values are large, while slices have their own sharing and allocation behavior. Choose the type that states the required shape and ownership clearly, then measure performance if it actually matters.",
+        recallRule: "Choose an array when exact length and value-copy behavior belong to the contract; otherwise prefer a slice for variable-size data.",
+      },
+    ],
+  },
+  {
+    slug: "go-syntax-basics-arrays-basics-common-mistake",
+    question: "What common mistakes should you avoid with arrays in Go?",
+    beats: [
+      {
+        cue: "Separate fixed arrays from growable slice operations",
+        stage: "Arrays do not grow",
+        spokenText: "The first mistake is treating an array as a dynamically sized list. Its length cannot change, and `append` requires a slice as its first argument. If growth is part of the requirement, declare `values := []int{10, 20}`. Slicing an existing array with `values[:]` can create a slice view, but the original array still keeps its fixed type and length.",
+      },
+      {
+        cue: "Make the exclusive upper bound explicit",
+        stage: "Stop before len",
+        spokenText: "Valid indexes start at zero and stop before the length. A loop written as `for i := 0; i <= len(values); i++` performs one extra iteration, and `values[len(values)]` panics. Use `i < len(values)` for an indexed loop or use `range` when the algorithm does not need manual index arithmetic. Validate indexes derived from input before reading the array.",
+        support: {
+          type: "comparison",
+          title: "Turn each array mistake into a clear rule",
+          items: [
+            {
+              label: "Bounds",
+              value: "i < len(values)",
+              detail: "The length is one beyond the last valid index.",
+              tone: "orange",
+            },
+            {
+              label: "Growth",
+              value: "append a slice",
+              detail: "An array itself never gains another slot.",
+              tone: "blue",
+            },
+            {
+              label: "Assignment",
+              value: "expect a copy",
+              detail: "Changing the assigned array does not update the source array.",
+              tone: "green",
+            },
+            {
+              label: "Type",
+              value: "length must match",
+              detail: "Arrays with different lengths are different types.",
+              tone: "neutral",
+            },
+          ],
+        },
+      },
+      {
+        cue: "Show why value calls do not mutate the caller",
+        stage: "Assignment does not alias",
+        spokenText: "Another common mistake is expecting shared mutation after assignment or a function call. Passing `[3]int` by value copies all three elements, so changing the parameter has no effect on the caller. Use `*[3]int` only when a function should intentionally mutate that fixed array, or use a slice when shared access to a variable-length collection better matches the API.",
+        support: {
+          type: "code",
+          title: "Value and pointer calls change different owners",
+          language: "go",
+          code: "package main\n\nimport \"fmt\"\n\nfunc changeCopy(values [3]int) {\n\tvalues[0] = 50\n}\n\nfunc changeOriginal(values *[3]int) {\n\tvalues[0] = 99\n}\n\nfunc main() {\n\tvalues := [3]int{10, 20, 30}\n\tchangeCopy(values)\n\tfmt.Println(values)\n\n\tchangeOriginal(&values)\n\tfmt.Println(values)\n}",
+          caption: "Output is [10 20 30] and then [99 20 30]; only the pointer call intentionally changes the caller's array.",
+        },
+      },
+      {
+        cue: "Include zero values inferred lengths and large copies",
+        stage: "Let intent choose the type",
+        spokenText: "Do not confuse an array's zero-filled slots with an empty collection: `var values [3]int` already has length three. `[...]int{10, 20}` lets the compiler count a literal, but the resulting type still has a fixed length. Finally, remember that copying a large array copies its complete value semantically; use a clearer ownership design rather than adding pointers everywhere only to avoid an assumed cost.",
+        recallRule: "Arrays have fixed typed length, exclusive index bounds, and value-copy semantics; use a slice when growth or shared collection access is the real need.",
+      },
+    ],
+  },
+  {
+    slug: "go-syntax-basics-arrays-basics-compare",
+    question: "How do arrays compare with a slice in Go?",
+    beats: [
+      {
+        cue: "Compare compile-time shape with runtime view length",
+        stage: "Length changes the type",
+        spokenText: "An array such as `[3]int` is a complete value type whose length is fixed and checked as part of the type. A slice such as `[]int` has no length in its type; it is a small descriptor for a view of backing storage, with a runtime pointer, length, and capacity. That is why functions accepting slices can receive collections of many different lengths.",
+        support: {
+          type: "comparison",
+          title: "Arrays and slices carry different promises",
+          items: [
+            {
+              label: "Length",
+              value: "type / runtime",
+              detail: "Array length is in the type; slice length is stored in the value.",
+              tone: "blue",
+            },
+            {
+              label: "Assignment",
+              value: "elements / descriptor",
+              detail: "An array copies elements; a slice copy still views backing storage.",
+              tone: "green",
+            },
+            {
+              label: "Growth",
+              value: "fixed / append",
+              detail: "Only a slice can be passed to append, which may allocate new storage.",
+              tone: "orange",
+            },
+            {
+              label: "Comparison",
+              value: "sometimes / only nil",
+              detail: "Comparable arrays can use ==; slices cannot be compared to another slice.",
+              tone: "neutral",
+            },
+          ],
+        },
+      },
+      {
+        cue: "Demonstrate independent array copies and shared slice elements",
+        stage: "Assignment behaves differently",
+        spokenText: "Assigning one array to another copies every element, so later changes are independent. Assigning a slice copies its descriptor, not its backing elements, so both slice values initially see the same storage. In the example, changing the array copy leaves the source at `1`, while changing the slice copy also changes the source slice to `9`.",
+        support: {
+          type: "code",
+          title: "Compare assignment with the same values",
+          language: "go",
+          code: "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tarrayA := [3]int{1, 2, 3}\n\tarrayB := arrayA\n\tarrayB[0] = 9\n\n\tsliceA := []int{1, 2, 3}\n\tsliceB := sliceA\n\tsliceB[0] = 9\n\n\tfmt.Println(\"array\", arrayA[0], arrayB[0])\n\tfmt.Println(\"slice\", sliceA[0], sliceB[0])\n}",
+          caption: "Output is array 1 9 and slice 9 9, exposing value copying versus shared backing elements.",
+        },
+      },
+      {
+        cue: "Explain why append changes a slice sharing relationship",
+        stage: "Append may change sharing",
+        spokenText: "A slice can grow with `append`, but growth is not an in-place guarantee. If capacity is available, append may reuse the existing backing array; otherwise it allocates a new one and returns a descriptor for that storage. Always keep the returned slice. Code should not depend on two slices continuing to share after an append unless that storage relationship is deliberately controlled.",
+      },
+      {
+        cue: "Close with the contract each type communicates",
+        stage: "Choose by the contract",
+        spokenText: "Use an array when the exact count and independent value semantics belong to the model. Use a slice for most application lists, function parameters with variable input size, and collections that grow or are viewed in parts. An array can be sliced with `array[:]`, but that new slice then shares the array's storage and follows slice rules.",
+        recallRule: "Arrays are fixed-size values; slices are variable-length views whose descriptor copies can share backing elements.",
+      },
+    ],
+  },
+  {
+    slug: "go-syntax-basics-arrays-basics-scenario",
+    question: "What causes array index and copy bugs in Go, and how do you diagnose them?",
+    beats: [
+      {
+        cue: "Decide whether the symptom is a bounds panic or stale mutation",
+        stage: "Classify the symptom",
+        spokenText: "Array bugs usually fall into two different groups. An index bug panics because code tries to read outside the fixed slots. A copy bug stays valid but produces an unexpected old value because assignment or a function call changed a copy rather than the array the caller later reads. Classify the symptom first so a copy investigation is not mixed with bounds arithmetic.",
+      },
+      {
+        cue: "Compare every calculated index with the array length",
+        stage: "Trace index against length",
+        spokenText: "For a panic, record the failing index and `len(values)` immediately before the access. The valid condition is `0 <= i && i < len(values)`. Check for `i <= len(values)`, indexes derived from unvalidated input, and calculations that can become negative. Reproduce with the first index, last valid index, and first invalid index to expose the exact boundary.",
+        support: {
+          type: "checklist",
+          title: "Evidence to collect at the failing access",
+          items: [
+            {
+              label: "Actual index",
+              detail: "Record the value after all input and arithmetic changes.",
+              tone: "blue",
+            },
+            {
+              label: "Array length",
+              detail: "The last valid index is always one less than this number.",
+              tone: "green",
+            },
+            {
+              label: "Index source",
+              detail: "Trace the loop, user input, or calculation that produced it.",
+              tone: "orange",
+            },
+          ],
+        },
+      },
+      {
+        cue: "Locate the assignment or call that created an independent value",
+        stage: "Trace every array copy",
+        spokenText: "For a value that did not change, inspect the type at each assignment and function boundary. A parameter of type `[3]int` receives a copy; a parameter of type `*[3]int` can mutate the caller's fixed array, and a slice can share backing elements. Compare the array before and after the call and stop at the first boundary where the expected owner differs from the actual one.",
+      },
+      {
+        cue: "Turn the precise boundary and ownership rules into tests",
+        stage: "Keep the smallest regression",
+        spokenText: "After fixing the loop or ownership contract, keep a small regression test. Test the last valid element without stepping past it, and test whether a by-value helper is expected to preserve the caller. If shared mutation is required, make that contract visible in the parameter type and add a separate test for the intentional change.",
+        support: {
+          type: "code",
+          title: "Lock the boundary and copy behavior",
+          language: "go",
+          code: "package arrays\n\nimport \"testing\"\n\nfunc changeCopy(values [3]int) {\n\tvalues[0] = 99\n}\n\nfunc TestArrayBoundaryAndCopy(t *testing.T) {\n\tvalues := [3]int{10, 20, 30}\n\n\tlast := len(values) - 1\n\tif got := values[last]; got != 30 {\n\t\tt.Fatalf(\"last value = %d, want 30\", got)\n\t}\n\n\tchangeCopy(values)\n\tif values[0] != 10 {\n\t\tt.Fatalf(\"caller changed to %d\", values[0])\n\t}\n}",
+          caption: "The test records both rules: len minus one is valid, and a by-value array parameter cannot mutate the caller.",
+        },
+        recallRule: "For a panic, trace index against length; for stale data, trace array copies until ownership first differs from the expectation.",
+      },
+    ],
+  },
+];
+
+const deepCorrections = {
+  "go-syntax-basics-arrays-basics-when-to-use": {
+    title: "Fixed-size arrays and data contracts",
+    content: "Arrays are strongest when the count itself describes the value. `[3]uint8` can represent exactly one RGB color, `[16]byte` can represent a fixed identifier, and a function accepting `[32]byte` states that every caller must supply that exact shape. The compiler rejects another length instead of leaving a runtime length check to the function.\n\nArray assignment and parameter passing use value semantics, so a small fixed value can be copied and changed independently. That behavior is useful when the value should not share later mutation. It is not automatically a performance advantage; choose it for meaning and measure performance separately.\n\nA slice is the normal choice for rows from a database, request results, buffers whose used length varies, and collections that grow with `append`. A slice carries a runtime length and capacity and refers to backing storage. Use an array only when fixed length and copy semantics are part of the contract; use a slice when callers need a flexible collection.",
+  },
+  "go-syntax-basics-arrays-basics-compare": {
+    title: "Arrays and slices carry different contracts",
+    content: "`[3]int` is a complete array type that owns three elements. The length participates in assignment and parameter checking, and assigning one array to another copies the elements. Passing an array by value follows the same copy rule.\n\nA slice `[]int` is a descriptor containing a pointer to backing storage, a runtime length, and a capacity. Assigning a slice copies that descriptor, so both slice values can see changes to shared backing elements. `append` may reuse that storage when capacity is available or allocate different storage when it is not, so code must keep the returned slice.\n\nArrays can be compared with `==` when their element type is comparable and can then be used as map keys. Slices cannot be compared with another slice; they can only be compared with `nil`. Choose an array for an exact fixed-size value and a slice for variable-size collection APIs and views.",
+  },
+  "go-syntax-basics-arrays-basics-scenario": {
+    title: "Array index and copy bugs",
+    content: "An index panic means the access violates `0 <= i && i < len(values)`. Record both `i` and the length at the failing line, then trace where the index came from. `i <= len(values)` is a common off-by-one error because the length is one beyond the last valid index. Input-derived and calculated indexes need the same check.\n\nA copy bug has a different symptom: the program keeps running, but a change is missing. Arrays are values, so `other := original` and a parameter such as `func update(values [3]int)` each create an independent array value. Inspect assignments and call signatures until the expected shared owner becomes a copy. Use a pointer only for deliberate mutation of that fixed array, or a slice when shared variable-length data is the real model.\n\nKeep a regression test for the last valid index and for the intended copy or mutation behavior. The test should document the ownership contract, not merely avoid the original panic.",
+  },
+};
+
+const document = JSON.parse(fs.readFileSync(questionFile, "utf8"));
+const questions = Array.isArray(document) ? document : document.questions;
+if (!Array.isArray(questions)) throw new Error("Expected a question array");
+if (questions.length !== presentations.length) {
+  throw new Error(`Expected ${presentations.length} questions, found ${questions.length}`);
+}
+
+for (const presentation of presentations) {
+  const matches = questions.filter((question) => question.slug === presentation.slug);
+  if (matches.length !== 1) {
+    throw new Error(`Expected one ${presentation.slug} question, found ${matches.length}`);
+  }
+
+  const question = matches[0];
+  if (question.question !== presentation.question) {
+    throw new Error(`Question text changed for ${presentation.slug}`);
+  }
+
+  const sections = question.answer?.sections;
+  if (!Array.isArray(sections)) throw new Error(`${presentation.slug} is missing answer sections`);
+  const speakableMatches = sections.filter((section) => section.type === "speakable_answer");
+  if (speakableMatches.length !== 1) {
+    throw new Error(`Expected one speakable answer, found ${speakableMatches.length}`);
+  }
+
+  const speakable = speakableMatches[0];
+  speakable.answerSize = "standard";
+  speakable.beats = presentation.beats;
+  speakable.content = presentation.beats.map((beat) => beat.spokenText).join("\n\n");
+
+  const correction = deepCorrections[presentation.slug];
+  if (correction) {
+    const deepMatches = sections.filter((section) => section.type === "deep_explanation");
+    if (deepMatches.length !== 1) {
+      throw new Error(`Expected one deep explanation, found ${deepMatches.length}`);
+    }
+    deepMatches[0].title = correction.title;
+    deepMatches[0].content = correction.content;
+  }
+}
+
+fs.writeFileSync(questionFile, `${JSON.stringify(document, null, 2)}\n`);
+console.log(`Curated ${presentations.length} Go arrays Interview Answer presentations`);

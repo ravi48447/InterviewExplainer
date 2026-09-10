@@ -1,0 +1,267 @@
+{
+  "topic": "Chunk Processing",
+  "topicSlug": "chunk-processing",
+  "questions": [
+    {
+      "id": "sbt-chunk-001",
+      "slug": "spring-batch-chunk-processing-vs-tasklet",
+      "question": "Explain Spring Batch chunk-oriented processing — how it works, commit intervals, skip/retry, and when to prefer tasklet.",
+      "title": "Spring Batch: Chunk-Oriented Processing End-to-End",
+      "direct_answer": "Spring Batch **chunk-oriented processing** reads items one at a time (`ItemReader`), transforms them (`ItemProcessor`), then writes them in a **batch of N** (`ItemWriter`) inside a single transaction. The cycle is: read → process → accumulate until chunk-size → write + commit. If any step fails, the **whole chunk rolls back**; `skip` and `retry` policies let you tolerate bad records or transient failures without killing the job. Typical chunk sizes are 50-1000 for JDBC; tune based on row size and DB round-trip cost. Use **tasklets** for one-shot operations (file cleanup, stored-proc calls) where there's no natural stream of items.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Chunk lifecycle, commit semantics, skip/retry vs rollback, tasklet vs chunk, performance tuning",
+        "common_mistake": "Confusing skip (bad record) with retry (transient failure); over-small chunk sizes; using chunk for non-streaming work",
+        "to_stand_out": "Discuss skip buffer rewind, retry inside chunk, fault tolerance with listeners, restart semantics, stateful readers via ExecutionContext"
+      },
+      "company_tags": [
+        "Spring",
+        "Goldman Sachs",
+        "JP Morgan",
+        "Citi",
+        "Capital One"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What Chunk-Oriented Processing Means and Why the Transaction Boundary Matters",
+            "content": "A Spring Batch **step** can be one of two types: **chunk-oriented** for streaming read-process-write work, or **tasklet-based** for an arbitrary unit of work like deleting temp files or calling a stored procedure.\n\n**Chunk flow at a glance:**\n- Loop until reader returns null\n- Begin transaction\n- Read up to `chunk_size` items, processing each as it arrives\n- Pass the buffered list to `ItemWriter.write(items)`\n- Commit transaction\n\n**Key properties of the chunk model:**\n- One transaction per chunk, not per item — bulk commits keep throughput high\n- Failure in any sub-step rolls back the entire chunk and reprocesses it\n- Restart resumes from the last committed chunk; readers track position in `ExecutionContext`\n- Skip and retry policies let you tolerate bad records or transient failures\n\n**Basic Spring Batch 5 configuration:**\n\n```java\n@Bean\npublic Step processOrdersStep(JobRepository jobRepository,\n                              PlatformTransactionManager txManager,\n                              ItemReader<Order> reader,\n                              ItemProcessor<Order, Invoice> processor,\n                              ItemWriter<Invoice> writer) {\n    return new StepBuilder(\"processOrders\", jobRepository)\n        .<Order, Invoice>chunk(500, txManager)\n        .reader(reader)\n        .processor(processor)\n        .writer(writer)\n        .faultTolerant()\n            .skip(FlatFileParseException.class).skipLimit(100)\n            .retry(TransientDataAccessException.class).retryLimit(3)\n        .build();\n}\n```"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Chunk Lifecycle — Read, Process, Write, Commit",
+            "content": "```mermaid\nflowchart TB\n    start[\"Step start\"]\n    start --> tx[\"Begin transaction for chunk\"]\n    tx --> read[\"ItemReader.read\"]\n    read --> nullCheck{\"Item is null?\"}\n    nullCheck -->|yes| finish[\"Commit last partial chunk and finish step\"]\n    nullCheck -->|no| process[\"ItemProcessor.process\"]\n    process --> filter{\"Processed is null?\"}\n    filter -->|yes| skipItem[\"Filter item out (silent skip)\"]\n    filter -->|no| buffer[\"Buffer item\"]\n    skipItem --> sizeCheck{\"Chunk full?\"}\n    buffer --> sizeCheck\n    sizeCheck -->|no| read\n    sizeCheck -->|yes| write[\"ItemWriter.write (buffered chunk)\"]\n    write --> commit[\"Commit transaction\"]\n    commit --> metrics[\"Update StepExecution counts\"]\n    metrics --> tx\n```"
+          },
+          {
+            "type": "step",
+            "title": "Skip, Retry, and the Single-Item Recovery Mechanism",
+            "content": "Skip and retry are configured on a `faultTolerant()` step and they interact with the transaction boundary in non-obvious ways.\n\n**Skip — discard bad records and continue**\n- For known parse, validation, or constraint errors that should not fail the entire job\n- `faultTolerant().skip(FlatFileParseException.class).skipLimit(500)` allows up to 500 skips\n- A `SkipListener` captures every skipped item with `onSkipInRead`, `onSkipInProcess`, `onSkipInWrite`\n- Use the listener to write skipped items to a dead-letter file or Kafka topic for audit\n\n**Retry — try again on transient failures**\n- For DB deadlocks, network blips, upstream 503s\n- `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3)`\n- Combine with `ExponentialBackOffPolicy` to avoid retry storms\n- Retry re-invokes the failing operation up to the limit; after that, exception propagates\n\n**The single-item recovery cycle (the part candidates miss)**\n- Chunk of 100 items, write fails because of one bad row\n- Spring Batch rolls back the entire chunk transaction\n- Then re-reads each item one at a time, processing and writing individually\n- The 99 good items succeed; the one bad item is skipped (if configured) or fails the step\n- This is why processors must be idempotent — they may run twice for the same input\n\n**Skip + retry together**\n- Try the chunk; retry on transient errors first\n- If all retries are exhausted and the exception is skippable, skip the individual item\n- If the exception is not skippable, the step fails\n\n```java\n.faultTolerant()\n    .skip(FlatFileParseException.class)\n    .skip(ValidationException.class)\n    .skipLimit(500)\n    .listener(new SkipListener<Order, Invoice>() {\n        @Override\n        public void onSkipInRead(Throwable t) {\n            log.warn(\"Skipped at read\", t);\n            errorQueue.send(new SkipEvent(\"READ\", t));\n        }\n        @Override\n        public void onSkipInProcess(Order item, Throwable t) { dlq.send(item, t); }\n        @Override\n        public void onSkipInWrite(Invoice item, Throwable t) { dlq.send(item, t); }\n    })\n    .retry(DeadlockLoserDataAccessException.class)\n    .retryLimit(3)\n    .backOffPolicy(new ExponentialBackOffPolicy())\n```\n\n**Correctness pitfalls to know**\n- **Non-idempotent processors break under retry/skip** — the same item may process twice\n- **Readers that don't implement `ItemStream` can't resume after skip** — extend `AbstractItemStreamItemReader`\n- **Skip limit set too low** — step fails on transient data issues\n- **Retry on non-transient errors** — futile retries delay real failures and waste resources"
+          },
+          {
+            "type": "step",
+            "title": "Chunk Size Tuning, Writer Choice, and Parallelism Strategies",
+            "content": "Chunk size is the single most-tuned knob in Spring Batch, but **writer choice often matters more** than chunk size itself.\n\n**Chunk size guidelines**\n- **10-50** — low memory, small rollback cost, but transaction overhead dominates\n- **100-500** — typical sweet spot for JDBC loads\n- **1000-5000** — higher throughput for simple writes; bigger memory footprint and rollback cost\n- **>10K** — rare; usually driven by DB layer batching constraints\n\n**How to decide empirically**\n- Measure throughput at chunk sizes 100, 500, 1000, 2000\n- Watch DB-side metrics: longer transactions can cause lock contention\n- Memory: `chunk_size × avg_item_size` must fit comfortably in heap\n- Failure cost: larger chunk means more work redone on rollback\n\n**Writer choice — often more impactful than chunk size**\n- **`JdbcBatchItemWriter`** — uses `PreparedStatement.addBatch()` / `executeBatch()`; fastest for pure JDBC\n- **`JpaItemWriter`** — flushes EntityManager; set `hibernate.jdbc.batch_size=50` and `hibernate.order_inserts=true` to actually batch\n- **`FlatFileItemWriter`** — buffered writer; cheap\n- **`StaxEventItemWriter`** — for XML output\n- **Composite writers** — split output to multiple sinks (DB + Kafka)\n\n**Parallel processing options**\n\n*Multi-threaded step* — same reader/writer, multiple worker threads:\n\n```java\n.taskExecutor(new SimpleAsyncTaskExecutor(\"batch-\"))\n.throttleLimit(4)\n```\n\nRequires a thread-safe reader (`SynchronizedItemStreamReader`) and disables strict restartability.\n\n*Async processor/writer* — `AsyncItemProcessor` wraps the processor in a `Future`; `AsyncItemWriter` unwraps. Use when the processor is slow I/O (external API calls).\n\n*Partitioning* — split input into ranges; each partition runs as its own step (locally or remotely). Best for very large jobs.\n\n**When to use tasklet instead of chunk**\n- One-shot work that's not a stream of items: delete files older than 7 days, call a stored procedure, truncate a staging table\n- Compensating actions between steps\n- Custom orchestration logic\n\n```java\n@Bean\npublic Step cleanupStep(JobRepository jobRepository, PlatformTransactionManager tx) {\n    return new StepBuilder(\"cleanup\", jobRepository)\n        .tasklet((contribution, chunkContext) -> {\n            Files.walk(Paths.get(\"/tmp/staging\"))\n                 .filter(Files::isRegularFile)\n                 .forEach(p -> p.toFile().delete());\n            return RepeatStatus.FINISHED;\n        }, tx)\n        .build();\n}\n```\n\n**Rule of thumb** — if the work is 'process every row in X and produce Y', use chunk; if it's 'do this specific thing', use tasklet."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Restart Semantics, Idempotency, and Production Anti-Patterns",
+            "content": "**When chunk processing helps:**\n- Streaming pipelines with restart from last commit boundary\n- Jobs that need skip/retry tolerance for dirty data or transient failures\n- Workloads where `JdbcBatchItemWriter` can collapse N inserts into one round-trip\n- Audit and observability requirements via `StepExecution` counts\n\n**When chunk processing hurts:**\n- One-shot operations with no natural item — wrap in tasklet instead\n- Workloads where the processor or writer has non-idempotent side effects (sending emails, charging cards)\n- Very small datasets where JobRepository overhead exceeds the work\n- Ultra-high-throughput pure SQL where the framework's per-chunk overhead is the bottleneck\n\n**Watch for:**\n- **Non-idempotent processors** — retry and skip both replay items; external side effects fire twice\n- **Multi-threaded step + non-thread-safe reader** — data corruption; wrap in `SynchronizedItemStreamReader`\n- **Huge chunk + skip enabled** — single bad item causes massive rollback and re-processing cost\n- **Retry on non-transient errors** — masks real bugs and inflates run time\n- **Business logic in tasklet that should be chunk** — loses skip/retry/restart/observability\n- **Chunk with non-idempotent writer** — duplicates on retry; introduce idempotency keys or outbox pattern\n\n**Restart semantics**\n- Jobs are restartable by default; `ExecutionContext` tracks reader progress\n- `JdbcCursorItemReader` and `JdbcPagingItemReader` save the last offset\n- `FlatFileItemReader` saves the line count\n- After failure, restarting the same `JobInstance` resumes from the last committed chunk\n- To force a new run of the same logical job, change `JobParameters` (use a timestamp param)\n\n**Idempotency strategies**\n- Idempotency keys in business records — UPSERT semantics in writers\n- Outbox pattern — write side effects to a table inside the chunk transaction; a separate job dispatches them\n- Defer side effects to a final tasklet that runs only after the chunk step completes successfully"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Chunk step** — read → process → batch-write → commit; one transaction per chunk.\n- **Skip = bad record** (log and continue); **retry = transient failure** (try again).\n- **Single-item recovery** after write failure — re-reads the chunk one item at a time to isolate the bad row.\n- **Processors must be idempotent** — retry and skip both replay items.\n- **Chunk size 100-500** typical for JDBC; tune empirically with throughput measurements.\n- **`JdbcBatchItemWriter`** for fast JDBC; set `hibernate.jdbc.batch_size` for JPA writers.\n- **Tasklet** for one-shot work; **chunk** for streaming pipelines.\n- **Parallelism** — multi-threaded step, async processor/writer, local or remote partitioning.\n- **Restartability** — reader saves state in `ExecutionContext`; restart resumes at the last committed chunk.\n- **Anti-patterns** — chunk=1, non-idempotent side effects, retrying non-transient errors."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch chunk-oriented processing reads items one at a time via `ItemReader`, transforms them with `ItemProcessor`, then writes them in a batch of N via `ItemWriter` inside a single transaction. If any step fails, the whole chunk rolls back; skip and retry policies let you tolerate bad records or transient failures without killing the job.\n\n**The chunk lifecycle:**\n- Begin transaction\n- Read up to `chunk_size` items, processing each as it arrives\n- Pass the buffered list to `ItemWriter.write(items)` in one call\n- Commit transaction\n\n**Skip vs retry:**\n- **Skip** — for bad records that should be logged and ignored\n- **Retry** — for transient failures like DB deadlocks or network blips\n- Both require `.faultTolerant()`\n\n**The single-item recovery cycle is the subtle part:**\n- When a write fails, Spring Batch rolls back the chunk and re-reads each item individually\n- The good items are written one at a time; the bad item is skipped or fails the step\n- This is why processors must be idempotent — they may run twice for the same input\n\n**Tuning advice:**\n- Chunk size 100-500 for JDBC; measure to find the sweet spot\n- `JdbcBatchItemWriter` usually matters more than chunk size for throughput\n- For JPA writers, set `hibernate.jdbc.batch_size=50` and `hibernate.order_inserts=true`\n\n**Tasklet vs chunk:**\n- Chunk for streaming work (process every row in X)\n- Tasklet for one-shot work (delete old files, call a stored procedure)\n\nIn an interview, I'd emphasize the single-item recovery mechanism and the idempotency requirement — those are what catch candidates."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens internally when Spring Batch skips an item in the write phase?",
+        "How do you parallelize a chunk step safely and what breaks?",
+        "How would you make a chunk step idempotent when the writer sends emails?",
+        "When would you prefer a tasklet over a chunk step?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Chunk Processing — Skip, Retry, and Tasklet Guide",
+        "metaDescription": "Spring Batch chunk-oriented processing end-to-end: commit intervals, skip and retry policies, single-item recovery, idempotency, tasklet vs chunk, and tuning."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Batch chunk-oriented processing reads items one at a time via ItemReader, transforms them with ItemProcessor, then writes them in a batch of N via ItemWriter inside a single transaction.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A Spring Batch step can be one of two types: chunk-oriented for streaming read-process-write work, or tasklet-based for an arbitrary unit of work like deleting temp files or calling a stored procedure. Chunk flow at a glance: Loop until reader returns null Begin transaction Read up to chunk_size items, processing each as it arrives Pass the buffered list to ItemWriter.write(items) Commit transaction Key properties of the chunk model: One transaction per chunk, not per item — bulk commits keep throughput."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Chunk lifecycle, commit semantics, skip/retry vs rollback, tasklet vs chunk, performance tuning"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Chunk step — read → process → batch-write → commit; one transaction per chunk",
+              "Skip = bad record (log and continue); retry = transient failure (try again)",
+              "Single-item recovery after write failure — re-reads the chunk one item at a time to isolate the bad row",
+              "Processors must be idempotent — retry and skip both replay items",
+              "Chunk size 100-500 typical for JDBC; tune empirically with throughput measurements"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A Spring Batch step can be one of two types: chunk-oriented for streaming read-process-write work, or tasklet-based for an arbitrary unit of work like deleting temp files or calling a stored procedure. Chunk flow at a glance: Loop until reader returns null Begin transaction Read up to chunk_size items, processing each as it arrives Pass the buffered list to ItemWriter.write(items) Commit transaction Key properties of the chunk model: One transaction per chunk, not per item — bulk commits keep throughput high Failure in any sub-step rolls back the entire chunk and reprocesses it Restart resumes from the last committed chunk; readers track position in ExecutionContext Skip and retry policies let you tolerate bad records or transient failures Basic Spring Batch."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing skip (bad record) with retry (transient failure)",
+              "over-small chunk sizes",
+              "using chunk for non-streaming work"
+            ]
+          }
+        ],
+        "cap": "The chunk lifecycle: Begin transaction Read up to chunk_size items, processing each as it arrives Pass the buffered list to ItemWriter.write(items) in one call Commit transaction Skip vs retry: Skip —",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "ItemReader"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens internally when Spring Batch skips an item in the write phase?",
+          "How do you parallelize a chunk step safely and what breaks?",
+          "How would you make a chunk step idempotent when the writer sends emails?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sbt-chunk-002",
+      "slug": "chunk-size-tuning-and-skip-policy",
+      "question": "How do you tune chunk size and design a skip policy in production? What signals tell you a chunk size is wrong, and how do you implement a custom SkipPolicy?",
+      "title": "Chunk Size Tuning and Custom SkipPolicy Design",
+      "direct_answer": "Chunk size tuning is **empirical, not theoretical** — start at 100, measure throughput at 250/500/1000/2000, and pick the largest size where memory and DB lock duration stay acceptable. Signals that the chunk size is wrong: rising **`rollback_count`** (chunks too large, hitting transient errors that force full re-read), high **transaction commit overhead** in DB metrics (chunks too small), heap pressure or OOM (chunks too large with heavy items). For skip policy, **`SimpleLimitSkipPolicy`** counts skips against a global limit; for nuanced control, implement **`SkipPolicy.shouldSkip(Throwable t, long skipCount)`** to skip on specific exception classes, allow more skips for parse errors than for DB errors, and integrate with circuit-breaker logic that fails fast when error rate exceeds a threshold.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical tuning intuition and the ability to write a non-trivial SkipPolicy that handles different exception classes differently",
+        "common_mistake": "Picking a chunk size from theory ('larger is faster') without measuring; using `skipLimit(Integer.MAX_VALUE)` and discovering the job has been silently corrupting data for weeks",
+        "to_stand_out": "Discuss percentage-based skip tolerance, exception-specific limits, and a circuit-breaker SkipPolicy that fails fast when error rate spikes mid-job"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Morgan Stanley",
+        "Fidelity",
+        "Stripe",
+        "Square"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Chunk Size Is an Empirical Tuning Problem — Skip Policy Is a Risk-Tolerance Decision",
+            "content": "Two of the most-asked production questions in Spring Batch are 'what chunk size should I use?' and 'how should my skip policy work?' Both have answers that depend on workload shape, not framework defaults.\n\n**Chunk size** trades off three concerns: **transaction commit overhead** (smaller chunks pay it more often), **rollback cost** (larger chunks waste more work on failure), and **memory footprint** (larger chunks keep more items in heap).\n- The right size is the largest value where these three constraints stay within budget — which means measuring, not guessing.\n- The framework default of 10 is almost never optimal for production JDBC workloads; 100-500 is the typical sweet spot, but only measurement on your data can confirm.\n\n**Skip policy** is fundamentally a question: **how much bad data are you willing to discard before declaring the job a failure?** For a financial reconciliation job, the answer is zero — one bad row means halt and investigate.\n- For a clickstream import where 0.1% of rows have malformed timestamps, skipping a few hundred is fine.\n- For a user-uploaded CSV import, a percentage-based tolerance (skip up to 5% of rows) is more honest than an absolute limit.\n- A custom **`SkipPolicy`** lets you encode this risk tolerance precisely — allowing different limits for different exception classes, integrating with circuit-breaker logic, and recording skipped items to a dead-letter destination for human review."
+          },
+          {
+            "type": "step",
+            "title": "How to Empirically Tune Chunk Size — A Disciplined Procedure",
+            "content": "Chunk size tuning follows a strict measurement-first procedure. Skip the procedure and you'll either overprovision memory or under-utilize the DB.\n\n**Step 1 — Measure baseline at chunk size 100**\n- Run the job on a representative dataset (or a realistic sample)\n- Record: total duration, items per second, peak heap, average DB transaction duration, `rollback_count`\n- This is your control\n\n**Step 2 — Sweep chunk sizes 250, 500, 1000, 2000**\n- Run the same job at each size; record the same metrics\n- Plot items per second vs chunk size\n- Most workloads show a knee in the curve — throughput rises until memory or DB lock duration becomes the constraint\n\n**Step 3 — Watch the warning signals**\n- **Rising `rollback_count`** at large chunk sizes — transient errors now force re-read of huge chunks; you've gone past the sweet spot\n- **Heap pressure or full GC** — `chunk_size × avg_item_size` exceeded what the JVM can hold comfortably\n- **DB lock wait time climbing** — long-running chunk transactions are blocking other workload\n- **Diminishing returns** — going from 500 to 1000 gives 5% throughput but doubles memory; not worth it\n\n**Step 4 — Pick the largest size where all signals stay green**\n- For most JDBC workloads this lands at 250-1000\n- For JPA writers, smaller (100-500) because EntityManager flush cost grows with chunk size\n- For flat-file writers with simple records, larger (1000-5000)\n\n**Diagnostic queries during tuning**\n\n```sql\n-- Look at chunk-level stats from the metadata\nSELECT step_name, commit_count, rollback_count, read_count, write_count,\n       EXTRACT(EPOCH FROM (end_time - start_time)) AS duration_sec,\n       read_count::float / EXTRACT(EPOCH FROM (end_time - start_time)) AS rows_per_sec\nFROM batch_step_execution\nWHERE job_execution_id = :id\nORDER BY start_time;\n```\n\n**Common chunk-size mistakes**\n- **Theoretical tuning** — picking 5000 because 'larger is faster' without measuring memory or rollback cost\n- **Default of 10** — leaving the framework default in production; transaction overhead dominates\n- **Mismatched JDBC batch size** — chunk size 500 with `hibernate.jdbc.batch_size=50` means 10 separate JDBC batches per chunk; align them\n- **Same chunk size for every step** — read-heavy steps and write-heavy steps have different optimal sizes; tune per step"
+          },
+          {
+            "type": "step",
+            "title": "Implementing a Production-Grade Custom SkipPolicy",
+            "content": "`SimpleLimitSkipPolicy` (built into Spring Batch) counts every skip against one global limit. Real production usually wants more nuance: different limits per exception class, percentage-based tolerance, or a circuit-breaker that fails fast when error rate spikes.\n\n**The `SkipPolicy` interface**\n\n```java\npublic interface SkipPolicy {\n    boolean shouldSkip(Throwable t, long skipCount) throws SkipLimitExceededException;\n}\n```\n\nReturning `true` skips the item; returning `false` causes the exception to propagate (failing the step).\n\n**Example 1 — Per-exception-class limits**\n\n```java\npublic class TieredSkipPolicy implements SkipPolicy {\n    private final long parseSkipLimit;\n    private final long validationSkipLimit;\n    private final AtomicLong parseSkips = new AtomicLong();\n    private final AtomicLong validationSkips = new AtomicLong();\n\n    public TieredSkipPolicy(long parseSkipLimit, long validationSkipLimit) {\n        this.parseSkipLimit = parseSkipLimit;\n        this.validationSkipLimit = validationSkipLimit;\n    }\n\n    @Override\n    public boolean shouldSkip(Throwable t, long skipCount) {\n        if (t instanceof FlatFileParseException) {\n            return parseSkips.incrementAndGet() <= parseSkipLimit;\n        }\n        if (t instanceof ValidationException) {\n            return validationSkips.incrementAndGet() <= validationSkipLimit;\n        }\n        if (t instanceof DataIntegrityViolationException) {\n            return false;\n        }\n        return false;\n    }\n}\n```\n\nWire it into the step:\n\n```java\n.faultTolerant()\n    .skipPolicy(new TieredSkipPolicy(1000, 100))\n    .listener(skipListener)\n```\n\n**Example 2 — Percentage-based tolerance with circuit breaker**\n\nIf the job has read 100,000 items and 5,000 are failing, the data is so bad that the rest is probably suspect too. Fail fast.\n\n```java\npublic class PercentageSkipPolicy implements SkipPolicy {\n    private final StepExecution stepExecution;\n    private final double maxSkipFraction;\n    private final long minItemsBeforeChecking;\n\n    public PercentageSkipPolicy(StepExecution stepExecution,\n                                double maxSkipFraction,\n                                long minItemsBeforeChecking) {\n        this.stepExecution = stepExecution;\n        this.maxSkipFraction = maxSkipFraction;\n        this.minItemsBeforeChecking = minItemsBeforeChecking;\n    }\n\n    @Override\n    public boolean shouldSkip(Throwable t, long skipCount) {\n        long readCount = stepExecution.getReadCount();\n        if (readCount < minItemsBeforeChecking) return true;\n        double skipFraction = (double) skipCount / readCount;\n        return skipFraction <= maxSkipFraction;\n    }\n}\n```\n\nUse `@StepScope` to inject the live `StepExecution` and `JobParameters`-derived thresholds.\n\n**Pair every skip with a SkipListener that writes to a dead-letter destination**\n\n```java\npublic class DeadLetterSkipListener implements SkipListener<Order, Invoice> {\n    private final KafkaTemplate<String, byte[]> kafka;\n\n    @Override\n    public void onSkipInRead(Throwable t) {\n        kafka.send(\"batch-skips\", \"READ\", serialize(Map.of(\n            \"phase\", \"READ\", \"error\", t.getMessage(), \"timestamp\", Instant.now())));\n    }\n\n    @Override\n    public void onSkipInProcess(Order item, Throwable t) {\n        kafka.send(\"batch-skips\", item.getId().toString(), serialize(item, t));\n    }\n\n    @Override\n    public void onSkipInWrite(Invoice item, Throwable t) {\n        kafka.send(\"batch-skips\", item.getOrderId().toString(), serialize(item, t));\n    }\n}\n```\n\n**Skip policy anti-patterns**\n- **`skipLimit(Integer.MAX_VALUE)`** — silently corrupts data; you have no idea anything is wrong until weeks later\n- **No `SkipListener`** — you skip but lose the data; can't reprocess or audit\n- **Skipping all exceptions** — `skip(Exception.class)` masks real bugs like NullPointerException\n- **Using skip when retry is correct** — a deadlock should retry, not skip"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Skip Policy Choices — Which One Fits Your Job",
+            "content": "Pick the simplest policy that captures the actual risk tolerance.\n\n| Policy | Best For | Limitation |\n|---|---|---|\n| `AlwaysSkipItemSkipPolicy` | Test fixtures, dev sandboxes | Skips everything — never use in production |\n| `NeverSkipItemSkipPolicy` | Financial reconciliation, zero-tolerance jobs | One bad row halts the entire job |\n| `SimpleLimitSkipPolicy` | Standard 'allow N skips' jobs | One global counter — can't differentiate exception types |\n| `LimitCheckingItemSkipPolicy` | Different skip limits per exception class | Verbose configuration via map |\n| Custom `SkipPolicy` | Percentage tolerance, circuit-breaker, business rules | Requires careful testing |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Tune, When to Leave Defaults Alone",
+            "content": "**When chunk-size tuning helps:**\n- Long-running jobs where a 2x throughput improvement saves real wall-clock time\n- DB-bound writes where larger batches reduce round-trip cost\n- Jobs where memory is plentiful and rollback cost is low\n\n**When chunk-size tuning hurts:**\n- Short jobs (< 5 minutes) — the time spent tuning exceeds the time saved\n- Heap-constrained environments — large chunks cause GC pressure that erases throughput gains\n- Jobs with high transient error rates — large chunks amplify rollback cost\n\n**When custom SkipPolicy helps:**\n- Different exception classes require different tolerance (parse errors common, DB errors rare)\n- Percentage-based tolerance better captures business intent than absolute counts\n- You need a circuit-breaker behavior to fail fast when error rate spikes\n\n**When custom SkipPolicy hurts:**\n- Simple jobs where `SimpleLimitSkipPolicy` already captures the requirement\n- Code that becomes harder to reason about than the simple policy it replaces\n- Stateful policy logic that breaks under multi-threaded steps (use atomic counters)\n\n**Watch for:**\n- **Tuning chunk size when writer choice is the real bottleneck** — switching to `JdbcBatchItemWriter` often beats any chunk-size change\n- **Skip-everything policies in production** — `skip(Exception.class).skipLimit(Integer.MAX_VALUE)` masks real bugs\n- **Custom SkipPolicy without integration tests** — the boundary cases (exact-limit, off-by-one) are easy to get wrong\n- **No dead-letter destination** — skipped items vanish; you can't audit or reprocess"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Chunk size tuning is empirical** — measure throughput at 100, 250, 500, 1000, 2000 and pick the knee in the curve.\n- **Three constraints to balance** — transaction commit overhead, rollback cost on failure, memory footprint.\n- **Rising `rollback_count` at large chunks** — you've passed the sweet spot.\n- **Align chunk size with JDBC/JPA batch size** — `hibernate.jdbc.batch_size=50` with chunk 500 means 10 sub-batches per chunk.\n- **`SimpleLimitSkipPolicy` is one global counter** — fine for simple jobs, inadequate for tiered exception tolerance.\n- **Custom `SkipPolicy.shouldSkip(t, count)`** — encode per-exception limits, percentage tolerance, circuit-breaker behavior.\n- **Always pair skip with a `SkipListener`** — write skipped items to a dead-letter Kafka topic, file, or table.\n- **Anti-patterns** — `skipLimit(Integer.MAX_VALUE)`, `skip(Exception.class)`, no dead-letter destination."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Chunk size tuning and skip policy design are two of the most-asked production Spring Batch questions, and both have answers that depend on the workload shape — not on framework defaults.\n\n**Chunk size tuning is empirical:**\n- Measure throughput at 100, 250, 500, 1000, 2000 on representative data\n- Pick the largest size where memory, DB lock duration, and rollback cost stay acceptable\n- Watch for rising `rollback_count` at large chunks — that's the signal you've gone past the sweet spot\n- For JDBC, 250-1000 is typical; for JPA writers, 100-500\n- Align chunk size with `hibernate.jdbc.batch_size` so each chunk maps to one DB batch\n\n**Skip policy is a risk-tolerance decision:**\n- `SimpleLimitSkipPolicy` counts every skip against one global limit — fine for simple jobs\n- For nuance, implement `SkipPolicy.shouldSkip(throwable, skipCount)`\n- Per-exception limits — allow 1000 parse errors but only 10 DB integrity errors\n- Percentage-based tolerance — fail fast if more than 5% of items are skipping; the data is too dirty to trust\n- Circuit-breaker — read `StepExecution.getReadCount()` and compare against the skip count\n\n**Always pair skip with a SkipListener:**\n- Write skipped items to a dead-letter Kafka topic, file, or table\n- Otherwise you've silently corrupted data and can't reprocess or audit\n\n**Anti-patterns to call out:**\n- `skipLimit(Integer.MAX_VALUE)` masks bugs\n- `skip(Exception.class)` swallows real errors like NullPointerException\n- No dead-letter destination — skipped items vanish forever\n\nIn an interview, I'd emphasize that chunk tuning rewards measurement over theory, and that skip policy is fundamentally a question about how much bad data you're willing to silently discard."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you tune chunk size when you cannot run the job in production-like data volumes?",
+        "What happens to the skip counter when a step is restarted from a checkpoint?",
+        "How would you implement a SkipPolicy that fails fast when error rate exceeds 5% of items read?",
+        "Why might `LimitCheckingItemSkipPolicy` be preferable to a custom SkipPolicy?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Chunk Size Tuning and Custom SkipPolicy",
+        "metaDescription": "How to tune Spring Batch chunk size empirically and implement a production-grade SkipPolicy with per-exception limits, percentage tolerance, and dead-letter handling."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Chunk size tuning and skip policy design are two of the most-asked production Spring Batch questions, and both have answers that depend on the workload shape — not on framework defaults.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Two of the most-asked production questions in Spring Batch are 'what chunk size should I use?' and 'how should my skip policy work?' Both have answers that depend on workload shape, not framework defaults. Chunk size trades off three concerns: transaction commit overhead (smaller chunks pay it more often), rollback cost (larger chunks waste more work on failure), and memory footprint (larger chunks keep more items in heap). The right size is the largest value where these three constraints stay."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical tuning intuition and the ability to write a non-trivial SkipPolicy that handles different exception classes differently"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Chunk size tuning is empirical — measure throughput at 100, 250, 500, 1000, 2000 and pick the knee in the curve",
+              "Three constraints to balance — transaction commit overhead, rollback cost on failure, memory footprint",
+              "Rising rollback_count at large chunks — you've passed the sweet spot",
+              "Align chunk size with JDBC/JPA batch size — hibernate",
+              "batch_size=50 with chunk 500 means 10 sub-batches per chunk"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Two of the most-asked production questions in Spring Batch are 'what chunk size should I use?' and 'how should my skip policy work?' Both have answers that depend on workload shape, not framework defaults. Chunk size trades off three concerns: transaction commit overhead (smaller chunks pay it more often), rollback cost (larger chunks waste more work on failure), and memory footprint (larger chunks keep more items in heap). The right size is the largest value where these three constraints stay within budget — which means measuring, not guessing. The framework default of 10 is almost never optimal for production JDBC workloads; 100-500 is the typical sweet spot, but only measurement on your data can confirm. Skip policy is fundamentally a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Picking a chunk size from theory ('larger is faster') without measuring; using skipLimit(Integer",
+              "MAX_VALUE) and discovering the job has been silently corrupting data for weeks"
+            ]
+          }
+        ],
+        "cap": "Chunk size tuning is empirical: Measure throughput at 100, 250, 500, 1000, 2000 on representative data Pick the largest size where memory, DB lock duration, and rollback cost stay acceptable Watch for",
+        "familiarity_anchors": [
+          "Chunk",
+          "Signals",
+          "SimpleLimitSkipPolicy"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you tune chunk size when you cannot run the job in production-like data volumes?",
+          "What happens to the skip counter when a step is restarted from a checkpoint?",
+          "How would you implement a SkipPolicy that fails fast when error rate exceeds 5% of items read?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

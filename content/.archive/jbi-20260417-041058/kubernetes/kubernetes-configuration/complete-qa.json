@@ -1,0 +1,231 @@
+{
+  "topic": "Kubernetes Configuration",
+  "topicSlug": "kubernetes-configuration",
+  "questions": [
+    {
+      "id": "k8s-005",
+      "slug": "kubernetes-configmaps-secrets-spring-boot",
+      "question": "How do you manage configuration with ConfigMaps and Secrets for a Spring Boot application in Kubernetes?",
+      "title": "ConfigMaps and Secrets: Spring Boot Config Management in Kubernetes",
+      "direct_answer": "ConfigMaps store non-sensitive config injected as env vars or mounted as property files. Secrets store sensitive data (passwords, keys) with base64 encoding and RBAC access control. Spring Boot reads both via environment variables that override application.properties, or via volume mounts as property files. Never hardcode credentials \u2014 always use Secrets.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Practical config management knowledge for production Spring Boot deployments",
+        "common_mistake": "Storing credentials in ConfigMaps instead of Secrets, or using `latest` config that changes without pod restart (ConfigMap updates don't auto-reload without Spring Cloud Config or a pod restart)",
+        "to_stand_out": "Discuss Spring's property binding precedence (env vars override application.properties), explain immutable ConfigMaps for performance, mention Spring Cloud Kubernetes for dynamic config reload, and Vault integration"
+      },
+      "company_tags": [
+        "kubernetes",
+        "hashicorp",
+        "pivotal",
+        "amazon"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Gap Between 'Works Locally' and 'Works in Kubernetes': Configuration Injection",
+            "content": "Every Spring Boot application carries configuration \u2014 database URLs, log levels, API keys, feature flags. Locally, these live in `application.properties` or `application.yml` files inside the JAR. In Kubernetes, the same application must run in dev, staging, and production from the same Docker image. **The image never changes; only the configuration changes.**\n\nKubernetes provides two primitives for external configuration: **ConfigMaps** for non-sensitive data and **Secrets** for credentials. Spring Boot's externalized configuration model makes this integration seamless \u2014 environment variables injected from ConfigMaps and Secrets override the values baked into `application.properties`, following Spring's property source precedence rules. No code changes, no conditional logic, no environment-specific builds.\n\nThe common trap is treating ConfigMaps and Secrets interchangeably. ConfigMaps are stored in plain text in etcd and are readable by anyone with namespace access. Secrets have separate RBAC policies and can be encrypted at rest when configured. Putting a database password in a ConfigMap means every developer with `kubectl get configmap` access can see it. The second trap is assuming that updating a ConfigMap automatically updates running pods \u2014 it does not, and this misunderstanding causes confused debugging sessions when config changes seem to have no effect."
+          },
+          {
+            "type": "step",
+            "title": "How Spring Boot's Relaxed Binding Eliminates Configuration Code Changes",
+            "content": "Spring Boot's **relaxed binding** translates environment variable names to property paths automatically. The naming convention is mechanical: dots become underscores, everything is uppercase. `SPRING_DATASOURCE_URL` maps to `spring.datasource.url`. `MY_APP_MAX_CONNECTIONS` maps to `my.app.max-connections`. This means ConfigMap keys follow standard Kubernetes `SCREAMING_CASE` conventions without any adaptation code.\n\nThe injection mechanism in the Pod spec uses `envFrom` to load all keys from a ConfigMap or Secret as environment variables in one declaration.\n\n```yaml\ncontainers:\n  - name: app\n    envFrom:\n      - configMapRef:\n          name: spring-app-config\n      - secretRef:\n          name: spring-app-secrets\n```\n\nEvery key in `spring-app-config` becomes an environment variable, and Spring Boot's property resolver picks them up at startup. The precedence order matters: environment variables override values in the packaged `application.properties`. This means the JAR carries sensible defaults for local development (`spring.datasource.url=jdbc:postgresql://localhost:5432/myapp`), and the ConfigMap overrides them in Kubernetes (`SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-svc:5432/myapp`). Same image, different behavior, no rebuild required.\n\nFor complex configuration that does not fit flat key-value pairs, mount the ConfigMap as a file at `/config/application.yml`. Spring Boot automatically loads property files from this directory, making the full YAML structure available."
+          },
+          {
+            "type": "step",
+            "title": "Why Updating a ConfigMap Does Not Update Your Running Pods",
+            "content": "This catches every team at least once: you update a ConfigMap with `kubectl apply`, verify the change with `kubectl get configmap`, and the running pods still use the old values. **Environment variables are set at container start and never re-read.** The ConfigMap update changed the source, but the environment was already injected into the running process.\n\nThere are three ways to handle this gap. The most common approach is triggering a **rolling restart** when the ConfigMap changes. Helm automates this with a checksum annotation in the Deployment's pod template \u2014 when the ConfigMap content changes, the checksum changes, the pod template hash changes, and Kubernetes rolls out new pods that pick up the updated values.\n\nThe second approach is **Spring Cloud Kubernetes Config**, which watches ConfigMap changes through the Kubernetes API and triggers a `@RefreshScope` reload on affected beans \u2014 no restart required. This works for Spring beans annotated with `@ConfigurationProperties` but does not work for values consumed during startup like database connection pool sizes.\n\nThe third approach is **volume-mounted ConfigMaps**, which the kubelet syncs approximately every 60 seconds. Applications that read configuration from disk files (not environment variables) can detect file changes and reload. Spring Boot's `spring.config.import=configtree:/config/` supports this pattern natively."
+          },
+          {
+            "type": "step",
+            "title": "Why Secrets Need More Than Base64 and What to Do About It",
+            "content": "Kubernetes Secrets are base64-encoded, not encrypted. Run `kubectl get secret db-secret -o jsonpath='{.data.password}' | base64 -d` and the password prints in plain text. Base64 is an encoding, not a security mechanism. The actual security layers are **RBAC** (controlling who can read Secrets in a namespace), **etcd encryption at rest** (encrypting Secret data in the cluster store), and **external secret managers**.\n\nFor production credentials, the strongest pattern is never storing the actual secret in Kubernetes at all. **External Secrets Operator** syncs secrets from AWS Secrets Manager, HashiCorp Vault, or GCP Secret Manager into Kubernetes Secrets automatically. Rotation happens in the external manager, and the operator propagates the new value. This gives you centralized audit logging, automatic rotation, and access policies that exist outside the Kubernetes RBAC boundary.\n\nFor teams not yet using an external secret manager, the minimum security baseline is encrypting etcd at rest (configured in the API server's `EncryptionConfiguration`) and restricting Secret access via RBAC Roles that explicitly deny `get` on Secrets to developers who do not need them. The `stringData` field in Secret manifests accepts plain text and auto-encodes to base64, which prevents manual encoding errors \u2014 but never commit Secret manifests with `stringData` values to version control."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring Boot relaxed binding maps `SPRING_DATASOURCE_URL` to `spring.datasource.url`** \u2014 no code changes needed; ConfigMap keys in SCREAMING_CASE automatically override packaged `application.properties` values at startup\n- **`envFrom` injects all ConfigMap keys as env vars at once** \u2014 eliminates per-key `env` entries in the pod spec, but values are frozen at container creation and never re-read during the container's lifetime\n- **ConfigMap updates do not restart pods** \u2014 environment variables are set once at container start; use Helm checksum annotations, Spring Cloud Kubernetes, or volume-mounted configs for live updates\n- **Secrets are base64-encoded, not encrypted** \u2014 `kubectl get secret -o jsonpath | base64 -d` reveals credentials in plain text; enable etcd encryption at rest and restrict namespace-level RBAC access\n- **External Secrets Operator pulls credentials from Vault or AWS Secrets Manager** \u2014 keeps actual secrets out of Kubernetes entirely, providing centralized rotation and audit logging outside the cluster boundary"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "ConfigMaps and Secrets both inject configuration into Pods, but they exist for different reasons: ConfigMaps are for non-sensitive configuration, Secrets are for credentials. The distinction matters because Kubernetes handles their access control and audit logging differently.\n\n**ConfigMap \u2014 non-sensitive configuration**\n- A ConfigMap stores key-value pairs or entire files; Spring Boot reads them as environment variables (`env.valueFrom.configMapKeyRef`) or as mounted property files (`spring.config.import=optional:configtree:/config/`)\n- The configtree import mounts the ConfigMap as a directory where each key becomes a file; Spring Boot reads nested properties from file paths \u2014 `database.url` in the ConfigMap becomes `database.url` in the Spring environment\n- Critical behavior: updating a ConfigMap does not restart running Pods \u2014 environment variables are frozen at container start; mounted files update eventually (within the kubelet sync period, ~60 seconds), but the application must watch for changes to pick them up; the safest approach is a rolling restart triggered by a Helm checksum annotation\n\n**Secrets \u2014 credential injection**\n- Kubernetes Secrets are base64-encoded by default, not encrypted \u2014 any user with `get secret` permission can read them; base64 is encoding, not security; enable etcd encryption-at-rest and RBAC restriction to make Secrets meaningful\n- Spring Boot reads Secrets exactly like ConfigMaps \u2014 as environment variables or mounted files; prefer mounted files because environment variables appear in `kubectl describe pod` output and process listings\n- In production, Kubernetes-native Secrets are often insufficient \u2014 use the External Secrets Operator to sync from AWS Secrets Manager, HashiCorp Vault, or GCP Secret Manager; the ESO fetches and rotates secrets without touching Kubernetes RBAC\n\n**The environment variable reload problem**\n- Neither ConfigMap nor Secret updates propagate to running containers as environment variables \u2014 the container must restart to see new values\n- The Reloader controller (stakater/Reloader) watches for ConfigMap and Secret changes and triggers rolling restarts automatically \u2014 the standard solution for teams that need configuration updates without manual intervention\n- Annotate the Deployment with `reloader.stakater.com/auto: \"true\"` and Reloader handles the rest; this pattern is safer than forcing teams to remember to trigger restarts after every config change"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Boot's relaxed binding map environment variable names to property keys?",
+        "What is Spring Cloud Kubernetes Config and how does it enable dynamic config reload?",
+        "How do you encrypt Kubernetes Secrets at rest in etcd?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes ConfigMap Secret Spring Boot Config Management | InterviewExplainer",
+        "metaDescription": "Manage Spring Boot configuration in Kubernetes with ConfigMaps and Secrets. envFrom injection, property binding, and dynamic config reload patterns."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "ConfigMaps and Secrets both inject configuration into Pods, but they exist for different reasons: ConfigMaps are for non-sensitive configuration, Secrets are for credentials.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Every Spring Boot application carries configuration \u2014 database URLs, log levels, API keys, feature flags. Locally, these live in application.properties or application.yml files inside the JAR. In Kubernetes, the same application must run in dev, staging, and production from the same Docker image. The image never changes; only the configuration changes. Kubernetes provides two primitives for external configuration: ConfigMaps for non-sensitive data and Secrets for credentials. Spring Boot's externalized configuration model makes this integration seamless \u2014 environment variables injected from ConfigMaps and Secrets override the values baked into application.properties, following."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Spring Boot's relaxed binding translates environment variable names to property paths automatically.",
+              "The naming convention is mechanical: dots become underscores, everything is uppercase.",
+              "SPRING_DATASOURCE_URL maps to spring.datasource.url.",
+              "MY_APP_MAX_CONNECTIONS maps to my.app.max-connections.",
+              "This means ConfigMap keys follow standard Kubernetes SCREAMING_CASE conventions without any adaptation code.",
+              "The injection mechanism in the Pod spec uses envFrom to load all keys from a ConfigMap or Secret as environment variables in one declaration."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Spring Boot relaxed binding maps SPRING_DATASOURCE_URL to spring",
+              "url \u2014 no code changes needed; ConfigMap keys in SCREAMING_CASE automatically override packaged application",
+              "properties values at startup envFrom injects all ConfigMap keys as env vars at once \u2014 eliminates per-key env entries in the pod spec, but values are frozen at container creation and never re-read during the container's lifetime ConfigMap updates do not restart pods \u2014 environment variables are set once at container start; use Helm checksum annotations, Spring Cloud Kubernetes, or volume-mounted configs for live updates Secrets are base64-encoded, not encrypted \u2014 kubectl get secret -o jsonpath | base64 -d reveals credentials in plain text; enable etcd encryption at rest and restrict namespace-level RBAC access External Secrets Operator pulls credentials from Vault or AWS Secrets Manager \u2014 keeps actual secrets out of Kubernetes entirely, providing centralized rotation and audit logging outside the cluster boundary"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Storing credentials in ConfigMaps instead of Secrets, or using latest config that changes without pod restart (ConfigMap updates don't auto-reload without Spring Cloud Config or a pod restart)"
+          }
+        ],
+        "cap": "ConfigMap \u2014 non-sensitive configuration A ConfigMap stores key-value pairs or entire files; Spring Boot reads them as environment variables (env.valueFrom.configMapKeyRef) or as mounted property files",
+        "familiarity_anchors": [
+          "ConfigMaps",
+          "Secrets",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Boot's relaxed binding map environment variable names to property keys?",
+          "What is Spring Cloud Kubernetes Config and how does it enable dynamic config reload?",
+          "How do you encrypt Kubernetes Secrets at rest in etcd?"
+        ]
+      }
+    },
+    {
+      "id": "k8s-009",
+      "slug": "kubernetes-namespaces-rbac-multi-team",
+      "question": "How do Kubernetes namespaces and RBAC support multi-team environments?",
+      "title": "Kubernetes Namespaces and RBAC for Multi-Team Environments",
+      "direct_answer": "Namespaces provide logical isolation within a cluster \u2014 separate environments (dev/staging/prod) or teams. RBAC (Role-Based Access Control) controls which users and service accounts can perform which actions in which namespaces. Combine namespaces + RBAC + NetworkPolicies + ResourceQuotas for secure multi-tenant cluster management.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of Kubernetes multi-tenancy patterns used in enterprise environments",
+        "common_mistake": "Giving all developers cluster-admin or not scoping permissions to specific namespaces \u2014 violates least privilege and creates security risk",
+        "to_stand_out": "Explain the difference between Role (namespace-scoped) and ClusterRole (cluster-wide), show a practical RBAC setup for a dev team, and discuss ResourceQuotas to prevent one team from exhausting cluster resources"
+      },
+      "company_tags": [
+        "google",
+        "amazon",
+        "microsoft",
+        "github"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Blast Radius Problem: What Happens When Someone Runs kubectl delete in the Wrong Namespace",
+            "content": "A developer runs `kubectl delete deployment spring-app` intending to clean up their dev environment. But their kubeconfig context was still pointed at the production namespace. The production deployment \u2014 along with all its running pods \u2014 is gone. Every user of the application gets connection errors. Recovery depends on how fast someone can recreate the deployment with the correct configuration.\n\nThis disaster is entirely preventable with **namespaces and RBAC** \u2014 the two mechanisms Kubernetes provides for isolating access within a shared cluster. Namespaces create logical boundaries: resources in `team-payments-dev` are completely separate from `team-payments-prod`. RBAC restricts what each user or service account can do within each namespace: developers get read-write access to their team's dev namespace and read-only access to production.\n\nThe combination of namespaces + RBAC is what makes **multi-tenant clusters** viable. Without them, every team shares the same resource pool with unrestricted access \u2014 one team's misconfiguration can take down another team's services. Without resource quotas (the third piece), one team can deploy 50 replicas each requesting 4GB of memory and starve the cluster scheduler, making every other team's pods unschedulable. Enterprise Kubernetes platforms enforce all three layers: namespace isolation, RBAC access control, and resource quotas."
+          },
+          {
+            "type": "step",
+            "title": "Role vs ClusterRole: Why Namespace Boundaries Are Your First Line of Defense",
+            "content": "Kubernetes RBAC has two scopes: **Role** (applies within a single namespace) and **ClusterRole** (applies across the entire cluster). A Role in `team-payments-dev` that grants `create` and `delete` on Deployments only works in that namespace \u2014 the same user gets `Forbidden` in any other namespace unless explicitly granted access there.\n\nThe principle of least privilege means starting with namespace-scoped Roles and only creating ClusterRoles for genuine cross-namespace needs. Platform administrators need ClusterRoles to manage namespaces and nodes. Application developers rarely do.\n\nA practical developer Role grants access to deploy and debug, but not to manage secrets or modify RBAC policies.\n\n```yaml\napiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  namespace: team-payments-dev\n  name: developer\nrules:\n  - apiGroups: [\"\", \"apps\"]\n    resources: [\"pods\", \"deployments\", \"services\", \"configmaps\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"update\", \"patch\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"pods/log\", \"pods/exec\"]\n    verbs: [\"get\", \"create\"]\n```\n\nThis Role allows developers to manage workloads and debug with exec and logs. Notice what is missing: no access to `secrets`, no access to `roles` or `rolebindings`. A **RoleBinding** then assigns this Role to individual users or an SSO group, so new team members get the right permissions automatically when added to the identity provider group."
+          },
+          {
+            "type": "step",
+            "title": "ResourceQuotas Prevent One Team From Starving the Entire Cluster",
+            "content": "RBAC controls what you can do. **ResourceQuotas** control how much you can consume. Without quotas, a single team deploying a memory-intensive workload can exhaust the cluster's capacity, making every other team's pods unschedulable with `Pending` status.\n\nA ResourceQuota sets hard ceilings on aggregate resource consumption within a namespace \u2014 total CPU requests, memory limits, number of pods, number of services. When a team's namespace hits its quota, further deployments are rejected until existing resources are freed.\n\n```yaml\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  namespace: team-payments\nspec:\n  hard:\n    requests.cpu: \"10\"\n    requests.memory: 20Gi\n    limits.cpu: \"20\"\n    limits.memory: 40Gi\n    count/pods: \"50\"\n```\n\nThis caps the payments team at 10 CPU cores of requests, 20Gi of memory requests, and 50 pods total. If they try to create a deployment that would exceed these limits, Kubernetes rejects the pod creation with a clear error message explaining which quota was violated.\n\n**LimitRange** complements ResourceQuota by setting per-pod defaults and maximums. Without LimitRange, a pod without resource specs gets unlimited access \u2014 a single misconfigured deployment bypasses the entire quota system. LimitRange injects default requests and limits into pods that do not specify them, ensuring every workload has boundaries. Pair quotas with monitoring alerts when a namespace reaches 80% of its allocation so teams can plan capacity increases before they hit rejections during a critical deployment."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Namespaces isolate teams and environments logically** \u2014 resources in `team-payments-dev` are invisible to `team-orders-prod`; most Kubernetes objects including Pods, Services, and ConfigMaps are namespace-scoped\n- **Role is namespace-scoped, ClusterRole is cluster-wide** \u2014 start with Roles and only create ClusterRoles for platform administrators who genuinely need to manage nodes, namespaces, and CRDs\n- **ServiceAccount RBAC controls what pods can do** \u2014 a pod's ServiceAccount should have exactly the API permissions it needs; the default ServiceAccount often has excessive access that violates least privilege\n- **ResourceQuota caps aggregate consumption per namespace** \u2014 prevents one team from starving the cluster by exhausting CPU, memory, or pod count allocations intended for other namespaces\n- **LimitRange injects default resource specs into pods** \u2014 pods without explicit requests or limits bypass ResourceQuota enforcement entirely; LimitRange ensures every pod gets boundaries applied automatically"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Namespaces and RBAC together enforce multi-team isolation in Kubernetes \u2014 namespaces provide the boundary, RBAC controls what each team can do within and across those boundaries. The critical insight is that namespaces are not security boundaries; they are organizational boundaries reinforced by RBAC.\n\n**Namespaces \u2014 organizational isolation**\n- Every resource in Kubernetes lives in a namespace; `kube-system` holds cluster components, `default` is where workloads land if you don't specify \u2014 always deploy to an explicitly created namespace, never `default`\n- Namespaces scope resource names \u2014 two teams can each have a Service named `payment-api` in different namespaces without conflict; DNS resolves them as `payment-api.team-a.svc.cluster.local` and `payment-api.team-b.svc.cluster.local`\n- Namespace-scoped resource quotas (`ResourceQuota`) limit total CPU, memory, and object counts per namespace \u2014 the infrastructure team controls how much of the cluster each team can consume without coordination overhead\n\n**RBAC \u2014 who can do what**\n- RBAC has four objects: `Role` (namespace-scoped permissions), `ClusterRole` (cluster-wide permissions), `RoleBinding` (assigns a Role to a subject in a namespace), and `ClusterRoleBinding` (assigns a ClusterRole cluster-wide)\n- The principle of least privilege: a developer should have `get`, `list`, and `watch` on Pods and Deployments in their team's namespace \u2014 enough to inspect running workloads; `create` and `delete` for Deployments only in non-production namespaces\n- `kubectl auth can-i create deployments --namespace team-a --as developer@example.com` verifies effective permissions for a specific user before incidents, not after\n\n**Production team separation**\n- Separate namespaces per team and per environment: `payments-prod`, `payments-staging`, `payments-dev`; the RBAC for `payments-prod` is far more restricted than `payments-dev`\n- Network policies enforce namespace communication boundaries \u2014 without them, any Pod in any namespace can reach any Service cluster-wide; a Network Policy that allows ingress only from the expected namespace prevents lateral movement after a container compromise\n- Service accounts should be namespace-scoped and assigned minimum permissions \u2014 pods that do not need Kubernetes API access should use `automountServiceAccountToken: false` to prevent the default token from being available inside the container"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a Role and a ClusterRole in Kubernetes RBAC?",
+        "How do NetworkPolicies complement RBAC for namespace isolation?",
+        "How would you audit which permissions a specific user has in a namespace?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes Namespaces RBAC Multi-Team Cluster Management | InterviewExplainer",
+        "metaDescription": "Kubernetes namespaces and RBAC for multi-team environments. Role vs ClusterRole, RoleBinding, ResourceQuota, LimitRange, and NetworkPolicy for secure isolation."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "Namespaces and RBAC together enforce multi-team isolation in Kubernetes \u2014 namespaces provide the boundary, RBAC controls what each team can do within and across those boundaries.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A developer runs kubectl delete deployment spring-app intending to clean up their dev environment. But their kubeconfig context was still pointed at the production namespace. The production deployment \u2014 along with all its running pods \u2014 is gone. Every user of the application gets connection errors. Recovery depends on how fast someone can recreate the deployment with the correct configuration. This disaster is entirely preventable with namespaces and RBAC \u2014 the two mechanisms Kubernetes provides for isolating access within a shared cluster. Namespaces create logical boundaries: resources in team-payments-dev are."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Kubernetes RBAC has two scopes: Role (applies within a single namespace) and ClusterRole (applies across the entire cluster).",
+              "A Role in team-payments-dev that grants create and delete on Deployments only works in that namespace \u2014 the same user gets Forbidden in any other namespace unless explicitly granted access there.",
+              "The principle of least privilege means starting with namespace-scoped Roles and only creating ClusterRoles for genuine cross-namespace needs.",
+              "Platform administrators need ClusterRoles to manage namespaces and nodes.",
+              "Application developers rarely do.",
+              "A practical developer Role grants access to deploy and debug, but not to manage secrets or modify RBAC policies."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Namespaces isolate teams and environments logically \u2014 resources in team-payments-dev are invisible to team-orders-prod; most Kubernetes objects including Pods, Services, and ConfigMaps are namespace-scoped Role is namespace-scoped, ClusterRole is cluster-wide \u2014 start with Roles and only create ClusterRoles for platform administrators who genuinely need to manage nodes, namespaces, and CRDs ServiceAccount RBAC controls what pods can do \u2014 a pod's ServiceAccount should have exactly the API permissions it needs; the default ServiceAccount often has excessive access that violates least privilege ResourceQuota caps aggregate consumption per namespace \u2014 prevents one team from starving the cluster by exhausting CPU, memory, or pod count allocations intended for other namespaces LimitRange injects default resource specs into pods \u2014 pods without explicit requests or limits bypass ResourceQuota enforcement entirely; LimitRange ensures every pod gets boundaries applied automatically"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Giving all developers cluster-admin or not scoping permissions to specific namespaces \u2014 violates least privilege and creates security risk"
+          }
+        ],
+        "cap": "Namespaces \u2014 organizational isolation Every resource in Kubernetes lives in a namespace; kube-system holds cluster components, default is where workloads land if you don't specify \u2014 always deploy to a",
+        "familiarity_anchors": [
+          "Namespaces",
+          "Based",
+          "Access"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a Role and a ClusterRole in Kubernetes RBAC?",
+          "How do NetworkPolicies complement RBAC for namespace isolation?",
+          "How would you audit which permissions a specific user has in a namespace?"
+        ]
+      }
+    }
+  ]
+}

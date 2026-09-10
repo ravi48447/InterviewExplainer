@@ -1,0 +1,187 @@
+{
+  "topic": "Rate Limiter",
+  "topicSlug": "rate-limiter",
+  "questions": [
+    {
+      "id": "design-rate-limiter",
+      "slug": "design-rate-limiter",
+      "question": "Design a rate limiter for an API gateway handling 10 million requests per day.",
+      "title": "Design a Distributed Rate Limiter",
+      "direct_answer": "**Token Bucket** algorithm backed by **Redis** for distributed state, with a **Lua script** for atomic check-and-decrement. Each API key gets its own bucket; on deny, return **`429 Too Many Requests`** with a `Retry-After` header. Deploy at the **API gateway** layer, fail open on Redis outage, and expose `X-RateLimit-*` headers so well-built clients can self-throttle.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 12,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "End-to-end system design thinking: requirements clarification, capacity estimation, algorithm trade-offs, distributed coordination, failure handling, and operational concerns.",
+        "common_mistake": "Jumping straight into the algorithm without clarifying requirements, or using a database for state when Redis is the obvious choice for sub-millisecond latency at this throughput.",
+        "to_stand_out": "Ask clarifying questions before designing, do back-of-envelope capacity math, justify token-bucket vs sliding-window with concrete trade-offs, walk through fail-open semantics with a circuit breaker, and call out what you would change at 10× scale."
+      },
+      "company_tags": [
+        "Stripe",
+        "Cloudflare",
+        "Amazon",
+        "Twilio",
+        "GitHub"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Framing the Problem and What Makes This Hard",
+            "content": "A rate limiter is the bouncer at the door of your API — it decides who gets in, how often, and when to send them away with a polite \"try again in five seconds.\" The hard part isn't the algorithm; it's making the algorithm work correctly across many gateway instances, fast enough to sit in the hot path of every single request, and gracefully when the limiter itself fails.\n\nThree challenges every interviewer is checking for:\n\n- **Shared state across instances** — multiple gateway instances behind a load balancer must see the same counter, otherwise a client multiplies their quota by the number of instances.\n- **Atomicity at high throughput** — read-current, decide, decrement must happen as a single atomic operation or two concurrent requests both pass when only one should.\n- **Graceful failure of the limiter itself** — when the limiter's storage layer is down, do you reject everything (and turn a Redis blip into a total outage) or allow everything (and risk overload)?\n\nGet all three right and you have a production rate limiter. Get any one wrong and it either fails open under abuse or fails closed under your own outage."
+          },
+          {
+            "type": "step",
+            "title": "Clarifying Questions I'd Ask First",
+            "content": "Before drawing anything, I'd confirm with the interviewer:\n\n**Functional**\n- **Dimension** — per user, per API key, per IP, or some combination?\n- **Single global limit or tiered** (free / pro / enterprise)?\n- **What happens on rejection** — hard 429, queue and retry, or shed at a lower-priority lane?\n- **Per-endpoint weighting** — should an expensive `/search` count more than a cheap `/health`?\n\n**Non-functional**\n- **Throughput** — peak QPS we need to handle, not just the daily average?\n- **Latency budget** — how much can the limiter add to every request? Usually ≤ 5 ms is the asked-for ceiling.\n- **Precision** — is approximate fine (sliding-window counter) or do we need strict per-second accounting (sliding-window log)?\n- **Fail mode** — fail-open or fail-closed when the backing store is unreachable?\n\nAsking these first earns half the points. Designing without asking is the most common mistake."
+          },
+          {
+            "type": "step",
+            "title": "Assumptions I'm Locking In",
+            "content": "For the rest of this design I'll assume:\n\n- **10 million requests/day** at the gateway, growing 2× yearly.\n- **Per-API-key limiting** with three tiers (free / pro / enterprise), enforced at the gateway before any service is hit.\n- **4–10 stateless gateway instances** behind an L7 load balancer; state must be shared.\n- **Sub-5 ms latency budget** for the limiter check itself.\n- **Approximate accuracy is acceptable** — we tolerate up to ~5% over-allowance in exchange for low memory.\n- **Fail-open** on storage outage — a brief loss of rate limiting is much less harmful than a full API outage."
+          },
+          {
+            "type": "step",
+            "title": "Back-of-Envelope Capacity Estimate",
+            "content": "Quick math before picking anything:\n\n- **Average QPS** — 10M/day ÷ 86,400 ≈ **115 req/sec**.\n- **Peak QPS** — traffic isn't uniform; peaks run 5–10× average → plan for **~1,500 sustained, 5,000 short-burst**.\n- **Storage per key** — ~50 bytes (token count + last-refill timestamp + TTL). For 1M active API keys → **~50 MB Redis memory**, fits a single node trivially.\n- **Network round-trips** — 1 Redis EVAL per request. With co-located Redis, p99 latency budget for the call: **< 2 ms**, leaving headroom in the 5 ms total budget.\n- **Lua script execution** — O(1) per request. No scaling concerns until ~50,000 QPS, the single-Redis ceiling.\n\n**Conclusion:** a single Redis node handles this load with ~10× headroom. Sharding only becomes interesting at 100M+ requests/day."
+          },
+          {
+            "type": "step",
+            "title": "API Contract — The Outward Response Shape",
+            "content": "The limiter sits inside the gateway as a filter, not a separate service — there's no public API to call. But the **outward contract to the client** is the response shape, and it's not optional:\n\n```http\nHTTP/1.1 200 OK\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 87\nX-RateLimit-Reset: 1714660000\n```\n\nOn rejection:\n\n```http\nHTTP/1.1 429 Too Many Requests\nRetry-After: 3\nX-RateLimit-Limit: 100\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 1714660003\nContent-Type: application/json\n\n{\"error\": \"rate_limited\", \"retry_after_seconds\": 3}\n```\n\nThe headers let well-built client SDKs (Stripe, GitHub, Twilio all do this) self-throttle before they hit 429. Skipping these turns every legitimate burst into a sea of 429s."
+          },
+          {
+            "type": "step",
+            "title": "Data Model — What Lives in Redis",
+            "content": "Keep the data model deliberately tiny. Each API key gets one Redis hash:\n\n```\nKey:    rl:{api_key}\nType:   HASH\nFields:\n  tokens       - current token count (float)\n  last_refill  - epoch millis of last refill calculation\nTTL:    3600s (auto-cleanup of inactive keys)\n```\n\nWhy these choices:\n\n- **Hash over two strings** — atomic HMGET/HMSET in one round-trip; cleaner than separate keys.\n- **TTL on every write** — bounded memory; inactive clients evaporate without a janitor process.\n- **Float tokens, not int** — supports fractional refill (e.g., `0.1 token/sec` for very long windows) without rounding errors.\n- **One key per dimension** — multi-tier limits (per-second + per-minute + per-hour) become independent keys, each with its own bucket."
+          },
+          {
+            "type": "step",
+            "title": "High-Level Architecture",
+            "content": "The gateway is stateless; Redis is the single source of truth.\n\n```mermaid\nflowchart TB\n    Client([Client])\n    LB[Load Balancer<br/><i>round-robin / least-conn</i>]\n    GW1[Gateway 1<br/><i>stateless</i>]\n    GW2[Gateway 2<br/><i>stateless</i>]\n    GW3[Gateway 3<br/><i>stateless</i>]\n    Redis[(Redis Primary<br/>token buckets)]\n    Replica[(Redis Replica<br/>standby)]\n    Service[Downstream Services]\n\n    Client -->|HTTPS| LB\n    LB --> GW1\n    LB --> GW2\n    LB --> GW3\n    GW1 -->|EVAL Lua| Redis\n    GW2 -->|EVAL Lua| Redis\n    GW3 -->|EVAL Lua| Redis\n    Redis -.async replication.-> Replica\n    GW1 -->|allow| Service\n    GW2 -->|allow| Service\n    GW3 -->|allow| Service\n\n    classDef gateway fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a\n    classDef store fill:#fee2e2,stroke:#ef4444,color:#7f1d1d\n    classDef edge fill:#f1f5f9,stroke:#64748b,color:#0f172a\n    class GW1,GW2,GW3 gateway\n    class Redis,Replica store\n    class LB,Service edge\n```\n\n**Request path:**\n\n1. Client → LB → any gateway instance.\n2. Gateway extracts the API key (header or JWT claim).\n3. Gateway calls Redis EVAL with the token-bucket Lua script.\n4. **Allow** → forward to downstream service + set `X-RateLimit-*` headers.\n5. **Deny** → return 429 with `Retry-After`.\n6. **Redis error** → log, increment circuit-breaker, allow request through (fail-open)."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Algorithm Choice and Trade-offs",
+            "content": "Four algorithms come up in interviews. The decision tree is mostly: **do we need to allow bursts**, and **how much memory per client can we afford**.\n\n| Algorithm | How It Works | Burst Handling | Memory | Weakness |\n|---|---|---|---|---|\n| **Fixed Window** | Counter per client, reset each minute | Allows 2× burst at window boundary | O(1) per client | Client sends 100 at :59, 100 at :00 → 200 in 2 sec |\n| **Sliding Window Log** | Stores every request timestamp, counts within sliding window | Precise, no boundary burst | O(N) per client — expensive | 100K clients × 100 timestamps = 10M entries |\n| **Sliding Window Counter** | Weighted average across current + previous window | Good approximation, low memory | O(1) per client | Approximation — not exact |\n| **Token Bucket** | Bucket with capacity C (burst), refill rate R (sustained) | Two independent knobs | O(1) per client | Slightly more complex to implement |\n\n**Token bucket wins for almost every API.** The two-knob design (capacity = burst size, refill rate = sustained throughput) maps cleanly to how products price tiers, and constant memory makes it cheap at scale. Stripe, AWS API Gateway, and Cloudflare all use token bucket internally.\n\n**Fixed window is tempting because it's simple**, but the boundary-burst exploit (200 requests in 2 seconds with a 100/min limit) is disqualifying for paid tiers."
+          },
+          {
+            "type": "phase",
+            "title": "The Atomicity Problem and the Lua Script",
+            "content": "The token-bucket algorithm needs three operations per request: read current tokens, calculate refill from elapsed time, decrement if available. **If those execute as separate Redis commands, two concurrent requests can both read `tokens=1` and both pass** — the same double-spending problem that plagues banking systems.\n\nWhy MULTI/EXEC isn't enough:\n\n- MULTI batches commands but can't branch on intermediate results.\n- We need to **decide whether to decrement** based on the read result, then act atomically.\n\n**Solution: a Lua script via EVAL**, executed server-side on Redis with no interleaving possible.\n\n```lua\nlocal key = KEYS[1]\nlocal capacity = tonumber(ARGV[1])\nlocal refill_rate = tonumber(ARGV[2])\nlocal now = tonumber(ARGV[3])\n\nlocal bucket = redis.call('HMGET', key, 'tokens', 'last_refill')\nlocal tokens = tonumber(bucket[1]) or capacity\nlocal last = tonumber(bucket[2]) or now\n\nlocal elapsed = (now - last) / 1000\ntokens = math.min(capacity, tokens + elapsed * refill_rate)\n\nif tokens >= 1 then\n    tokens = tokens - 1\n    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)\n    redis.call('EXPIRE', key, 3600)\n    return {1, math.floor(tokens)}     -- allowed, remaining\nelse\n    return {0, 0}                       -- denied\nend\n```\n\nCritical details:\n\n- **Lazy refill** — instead of a background tick adding tokens, we calculate earned tokens from elapsed time on each request. Inactive keys cost zero CPU.\n- **`EXPIRE` inside the script** — every call refreshes the TTL, so unused keys evaporate after an hour without a janitor process.\n- **Returns `[allowed, remaining]`** — the client gets enough info to populate response headers in one round-trip."
+          },
+          {
+            "type": "step",
+            "title": "LLD — Class Design of the Limiter Component",
+            "content": "At the class level, keep the Redis-talking and the algorithm separable so we can swap implementations (in-memory for tests, sliding-window variant for strict tiers).\n\n```java\npublic interface RateLimiter {\n    RateLimitResult tryAcquire(String key);\n}\n\npublic record RateLimitResult(boolean allowed, long remaining, long retryAfterSec) {}\n\npublic class RedisTokenBucketLimiter implements RateLimiter {\n    private final RedisScript<List<Long>> script;   // pre-loaded Lua\n    private final RedisTemplate<String, String> redis;\n    private final TierResolver tierResolver;        // api key -> (capacity, refillRate)\n\n    @Override\n    public RateLimitResult tryAcquire(String key) {\n        Tier tier = tierResolver.resolve(key);\n        List<Long> r = redis.execute(script,\n            List.of(\"rl:\" + key),\n            String.valueOf(tier.capacity()),\n            String.valueOf(tier.refillRate()),\n            String.valueOf(System.currentTimeMillis()));\n        return new RateLimitResult(r.get(0) == 1L, r.get(1), 1L);\n    }\n}\n```\n\nWhy this shape:\n\n- **Interface-first** — the gateway depends on `RateLimiter`, not on Redis. Tests use an in-memory implementation; we can A/B-test algorithms behind the same contract.\n- **`TierResolver` is its own thing** — tier lookup is cached locally (TTL ~30s), not queried from a database per request.\n- **`RedisScript` pre-loaded once at startup** — the SHA1 is sent to Redis instead of the full script body on every call (`EVALSHA`)."
+          },
+          {
+            "type": "step",
+            "title": "Storage Choice and Scaling Past One Redis Node",
+            "content": "**Why Redis** — sub-millisecond latency, atomic Lua scripting, native TTL, mature client libraries. Memcached is faster on raw GET/SET but lacks Lua and the right TTL semantics. A relational DB is 100–1000× too slow for the hot path.\n\n**Single node first.** At our scale (1,500 sustained QPS, 50 MB working set), one Redis primary + one replica handles everything with margin.\n\n**When to shard:**\n\n- **> 50,000 QPS sustained** — single-Redis CPU becomes the bottleneck.\n- **> 10 GB working set** — memory pressure on one node.\n\n**Sharding strategy when we get there:**\n\n- **Hash by API key** — `crc32(api_key) % N` chooses the shard.\n- **Each shard is independent** — a key always lives on one shard, so the limiter check is still one EVAL call.\n- **Use Redis Cluster** rather than client-side sharding — easier to add/remove nodes without rebalancing pain.\n\n**Replication for failover:**\n\n- One primary + one replica per shard, async replication.\n- Sentinel (or Cluster mode) handles primary failover in 5–15 seconds.\n- During failover, the limiter fails open (next section)."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Graceful Degradation",
+            "content": "Three failure scenarios to plan for:\n\n- **Redis unreachable** — network partition, primary failover in progress.\n- **Redis slow** — slow query, GC pause, throttled disk.\n- **Lua script error** — bad inputs, script eviction from cache.\n\nThe default response to all three is **fail open**: log loudly, increment a circuit-breaker counter, allow the request. Reasoning:\n\n- Fail-closed turns a Redis blip into a total API outage — the protection layer becomes the failure layer.\n- Fail-open accepts a bounded risk — unthrottled traffic for the duration of the outage, usually seconds.\n- Pair with a **circuit breaker** so we stop hammering a dead Redis and back off.\n\nThe filter wrapper:\n\n```java\ntry {\n    RateLimitResult r = limiter.tryAcquire(apiKey);\n    response.setHeader(\"X-RateLimit-Remaining\", String.valueOf(r.remaining()));\n    if (!r.allowed()) {\n        response.setHeader(\"Retry-After\", String.valueOf(r.retryAfterSec()));\n        response.sendError(429, \"Rate limit exceeded\");\n        return;\n    }\n} catch (Exception e) {\n    log.error(\"Rate limiter unavailable — failing open\", e);\n    rateLimiterFailureCounter.increment();\n}\nchain.doFilter(request, response);\n```\n\n**Local fallback for longer outages** — wrap the Redis call in a Resilience4j circuit breaker; on open-circuit, fall back to a per-instance in-memory counter that gives rough rate limiting without shared state. Imperfect, but better than no limiting at all."
+          },
+          {
+            "type": "step",
+            "title": "Observability and Security",
+            "content": "**Metrics to emit (Micrometer / Prometheus):**\n\n- `ratelimit.requests.total{outcome=\"allowed|denied\"}` — counter.\n- `ratelimit.latency` — histogram of EVAL call duration; alert if p99 > 5 ms for 1 minute.\n- `ratelimit.redis.errors` — counter; alert if rate > 1/sec sustained.\n- `ratelimit.fallback.invocations` — counter; alert on any non-zero value.\n\n**Dashboards:**\n\n- **Top 10 denied keys** — usually identifies abuse or a misbehaving client integration.\n- **Per-tier denial rate** — if free-tier denial is 80%, we're either under-pricing the tier or attracting abuse.\n- **Limiter latency p99** — must stay under budget; if it creeps, Redis is the next problem.\n\n**Security extras:**\n\n- **Rate-limit by IP as a second axis** — defends against per-key abuse where one key is shared across many clients.\n- **Stricter limits on `/auth/*` endpoints** — prevents credential-stuffing.\n- **Don't leak quota info to unauthenticated requests** — only return `X-RateLimit-*` to authenticated calls."
+          },
+          {
+            "type": "step",
+            "title": "Trade-offs and What I'd Change at 10× Scale",
+            "content": "**What I'd change if traffic grows to 100M req/day:**\n\n- **Move from single Redis to Redis Cluster** — 3–6 shards, hash by API key.\n- **Add a local in-process cache for hot keys** — top 1% of traffic typically comes from < 100 keys; a 1-second-TTL local counter cuts Redis load dramatically (the price is slight inaccuracy).\n- **Switch to sliding-window-counter for paid tiers** — token bucket allows short bursts that paid customers occasionally complain about.\n\n**What I'd reconsider:**\n\n- **Token bucket vs leaky bucket** — leaky bucket smooths output (fixed drain rate), useful when downstream services can't handle bursts even within quota. We chose token bucket because most APIs *want* to allow bursts; for downstream protection, prefer leaky bucket.\n- **Per-endpoint cost weighting** — a `/search` request might be 10× the cost of a `/health` check. At scale, weight tokens by endpoint cost rather than counting requests uniformly.\n\n**What I rejected and why:**\n\n- **Database-backed limiter** — too slow, row locks under concurrency.\n- **In-process-only limiter** — can't share state across gateway instances.\n- **Fixed window** — the boundary exploit is unacceptable for paid tiers."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Token bucket = capacity (burst) + refill rate (sustained)** — two-knob design that maps cleanly to how APIs are priced.\n- **Atomicity via Lua script + EVAL** — read + decide + write happen server-side on Redis with no interleaving; MULTI/EXEC can't branch on intermediate results.\n- **Fail-open on Redis outage** — never let the limiter become the outage; pair with a circuit breaker and a local fallback counter.\n- **Always return `X-RateLimit-Limit`, `Remaining`, `Reset`** — well-built client SDKs use these to self-throttle and never hit 429.\n- **TTL inside the Lua script bounds memory** — inactive keys evaporate; no janitor process needed.\n- **Single Redis handles up to ~50,000 QPS** — shard with Redis Cluster only when you cross that threshold."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Clarifying questions I'd ask first**\n\nBefore drawing anything, I'd want to confirm a few things with the interviewer:\n\n- What are we rate-limiting — per user, per API key, per IP, or some combination?\n- Where does it live — at the API gateway in front of all services, or inside one specific service?\n- Strict per-second enforcement, or is occasional bursting fine?\n- What's the latency budget on the limiter itself — usually under five milliseconds?\n- Fail-open or fail-closed when our backing store is unreachable?\n\n**Assumptions for this design**\n\nI'll assume per-API-key limiting at the gateway, ten million requests per day spread across multiple gateway instances behind a load balancer, a sub-five-millisecond latency budget, and fail-open semantics so a Redis blip doesn't take down the API.\n\n**Quick capacity check**\n\nTen million per day averages around one hundred fifteen requests per second. Traffic isn't uniform though — peaks usually run five to ten times average — so I'd plan for one to two thousand sustained, with short bursts higher. That throughput rules out anything that sits in a relational database; we need an in-memory store with atomic operations, which is why Redis.\n\n**High-level shape**\n\n- Every request hits the gateway\n- Gateway calls a rate-limit check against Redis\n- On allow, forward to the downstream service and set `X-RateLimit-*` headers\n- On deny, return 429 with a `Retry-After` header\n- On Redis error, log, increment circuit-breaker, allow through (fail-open)\n\nState lives in Redis because all gateway instances need to share the same counter — if each kept local state, a client could multiply their quota by the number of instances.\n\n**Algorithm choice — token bucket**\n\nMy default is token bucket. The two-knob design maps cleanly to how APIs are actually priced:\n\n- **Capacity** controls burst size\n- **Refill rate** controls sustained throughput\n- A client with capacity 10 and refill 1/sec can burst 10 requests instantly, then settles to 1/sec\n\nWhy not the others:\n\n- **Sliding-window-log** is more precise but stores every request timestamp, so memory scales with traffic\n- **Fixed window** lets clients double their effective rate by timing requests at the window boundary — usually disqualifying for paid tiers\n- **Sliding-window-counter** is a reasonable approximation if strict accounting matters more than burst tolerance\n\n**The critical detail — atomicity via Lua script**\n\nReading the bucket, computing refill, and decrementing has to happen as a single atomic operation, or two concurrent requests can both pass when only one should.\n\n- I do this with a Lua script via Redis `EVAL` — it runs server-side with no interleaving possible\n- The script also sets the TTL on the key, so inactive clients evaporate automatically and Redis memory stays bounded\n- Pre-load the script with `SCRIPT LOAD` at startup and call it via `EVALSHA` to avoid sending the script body on every request\n\n**Class design — keep it swappable**\n\n- A `RateLimiter` interface with one method: `tryAcquire(key)` returning a result record (allowed flag, remaining count, retry-after seconds)\n- Redis token-bucket implementation lives behind that interface\n- Separate `TierResolver` maps API key to capacity and refill rate, cached locally with a 30-second TTL so we don't hit the database per request\n- Tests use an in-memory implementation; we can A/B-test sliding-window behind the same contract\n\n**Failure handling — fail open with a circuit breaker**\n\nWhen Redis is unreachable I fail open:\n\n- A brief loss of rate limiting is much less harmful than a complete API outage\n- Circuit breaker (Resilience4j) on the Redis call so we stop hammering a dead Redis\n- Local fallback to a per-instance in-memory counter — rough but better than nothing\n- Alert on any non-zero fallback invocations so the team knows\n\n**Production extras worth mentioning**\n\n- **Multi-tier limits** — free, pro, enterprise each get independent buckets\n- **Response headers** — `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After` so well-built client SDKs self-throttle before hitting 429\n- **Observability** — top denied keys (identifies abuse), denial rate per tier (signals pricing issues), p99 limiter latency (must stay under budget)\n- **Per-endpoint cost weighting** — a `/search` request might count as 10 tokens vs 1 for `/health`\n\n**At 10× scale**\n\n- Shard Redis with Redis Cluster, hash by API key\n- Add a local in-process cache for the hot 1% of keys (top traffic usually comes from < 100 keys)\n- Switch paid tiers to sliding-window-counter for stricter accounting\n\n**Recommendation**\n\n**Token bucket in Redis with Lua-script atomicity, fail-open with a circuit breaker, multi-tier limits, and rate-limit headers on every response** — essentially the design Stripe, Cloudflare, and GitHub run in production."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement a sliding window counter rate limiter and when would you choose it over token bucket?",
+        "What happens during a Redis primary failover — walk through the failure mode and the user-facing impact.",
+        "How do you handle multi-tier limits (per-second AND per-minute AND per-hour) without serializing the checks?",
+        "Design the same rate limiter without Redis — what would you use and what trade-offs are you accepting?"
+      ],
+      "seo": {
+        "metaTitle": "Design a Distributed Rate Limiter — System Design Interview",
+        "metaDescription": "Complete system design walkthrough: requirements clarification, capacity estimation, token-bucket algorithm, Redis Lua atomicity, fail-open handling, scaling and trade-offs."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "Clarifying questions I'd ask first Before drawing anything, I'd want to confirm a few things with the interviewer: What are we rate-limiting — per user, per API key, per IP, or some combination? Where does.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "A rate limiter is the bouncer at the door of your API — it decides who gets in, how often, and when to send them away with a polite \"try again in five seconds.\" The hard part isn't the algorithm; it's making the algorithm work correctly across many gateway instances, fast enough to sit in the hot path of every single request, and gracefully when the limiter itself fails. Three challenges every interviewer is checking for: Shared state across instances — multiple gateway instances behind a load balancer must see the same counter, otherwise a client multiplies their quota by the number of instances. Atomicity at high throughput — read-current, decide, decrement must happen as a single atomic operation or."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "A rate limiter is the bouncer at the door of your API — it decides who gets in, how often, and when to send them away with a polite \"try again in five seconds.\" The hard part isn't the algorithm; it's making the algorithm work correctly across many gateway instances, fast enough to sit in the hot path of every single request, and gracefully when the limiter itself fails. Three challenges every interviewer is checking for: Shared state across instances — multiple gateway instances behind a load balancer must see the same counter, otherwise a client multiplies their quota by the number of instances. Atomicity at high throughput — read-current."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Before drawing anything, I'd confirm with the interviewer: Functional Dimension — per user, per API key, per IP, or some combination? Single global limit or tiered (free / pro / enterprise)? What happens on rejection — hard 429, queue and retry, or shed at a lower-priority lane? Per-endpoint weighting — should an expensive /search count more than a cheap /health? Non-functional Throughput — peak QPS we need to handle, not just the daily average? Latency budget — how much can the limiter add to every request? Usually ≤ 5 ms is the asked-for ceiling",
+              "Precision — is approximate fine (sliding-window counter) or do we need strict per-second accounting (sliding-window log)? Fail mode — fail-open or fail-closed when the backing store is unreachable? Asking these first earns half the points",
+              "Designing without asking is the most common mistake",
+              "For the rest of this design I'll assume: 10 million requests/day at the gateway, growing 2× yearly",
+              "Per-API-key limiting with three tiers (free / pro / enterprise), enforced at the gateway before any service is hit"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "A rate limiter is the bouncer at the door of your API — it decides who gets in, how often, and when to send them away with a polite \"try again in five seconds.\" The hard part isn't the algorithm; it's making the algorithm work correctly across many gateway instances, fast enough to sit in the hot path of every single request, and gracefully when the limiter itself fails. Three challenges every interviewer is checking for: Shared state across instances — multiple gateway instances behind a load balancer must see the same counter, otherwise a client multiplies their quota by the number of instances. Atomicity at high throughput — read-current, decide, decrement must happen as a single atomic operation or."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "A rate limiter is the bouncer at the door of your API — it decides who gets in, how often, and when to send them away with a polite \"try again in five seconds.\" The hard part isn't the algorithm; it's making the algorithm work correctly across many gateway instances, fast enough to sit in the hot path of every single request, and gracefully when the limiter itself fails. Three challenges every interviewer is checking for: Shared state across instances — multiple gateway instances behind a load balancer must see the same counter, otherwise a client multiplies their quota by the number of instances. Atomicity at high throughput — read-current, decide, decrement must happen as a single atomic operation or."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Jumping straight into the algorithm without clarifying requirements, or using a database for state when Redis is the obvious choice for sub-millisecond latency at this throughput."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Token bucket = capacity (burst) + refill rate (sustained) — two-knob design that maps cleanly to how APIs are priced. Atomicity via Lua script + EVAL — read + decide + write happen server-side on Redis with no interleaving; MULTI/EXEC can't branch on intermediate results. Fail-open on Redis outage — never let the limiter become the outage; pair with a circuit breaker and a local fallback counter. Always return X-RateLimit-Limit, Remaining, Reset — well-built client SDKs use these to self-throttle and never hit 429. TTL."
+          }
+        ],
+        "cap": "I do this with a Lua script via Redis EVAL — it runs server-side with no interleaving possible The script also sets the TTL on the key, so inactive clients evaporate automatically and Redis memory.",
+        "familiarity_anchors": [
+          "Token",
+          "Bucket",
+          "Redis"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement a sliding window counter rate limiter and when would you choose it over token bucket?",
+          "What happens during a Redis primary failover — walk through the failure mode and the user-facing impact.",
+          "How do you handle multi-tier limits (per-second AND per-minute AND per-hour) without serializing the checks?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "URL shortener designed for 100M reads per day"
+      }
+    }
+  ]
+}

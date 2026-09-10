@@ -1,0 +1,255 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+
+const repositoryRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const contentPath = path.join(
+  repositoryRoot,
+  "content/go-fresher/go-syntax-basics/basic-types-and-zero-values/complete-qa.json",
+);
+
+const document = JSON.parse(fs.readFileSync(contentPath, "utf8"));
+
+const answers = {
+  "go-zero-values-explained": {
+    direct:
+      "Every Go variable has a value as soon as it exists. If no initializer is provided, Go assigns the type's zero value: `0` for numbers, `false` for booleans, `\"\"` for strings, and `nil` for pointers, slices, maps, channels, functions, and interfaces. Arrays and structs are zeroed field by field. A zero value is safe to read, but not every zero value is ready for every operation.",
+    keyPoints: [
+      "Go never leaves a variable uninitialized.",
+      "Numbers use `0`, booleans use `false`, and strings use `\"\"`.",
+      "Pointers, slices, maps, channels, functions, and interfaces start as `nil`.",
+      "Arrays and structs receive zero values recursively.",
+      "A nil slice can be appended to; a nil map cannot be written to.",
+    ],
+    speakable:
+      "- Every variable in Go starts in a defined state. For example, if I declare `var count int`, its value is `0`; `var ready bool` is `false`; and `var name string` is an empty string. Go applies the same rule recursively, so every field in a new struct and every element in an array also receives its own zero value.\n\n- Reference-like types start as `nil`, but `nil` does not give all of them the same behaviour. A nil slice has length zero and can be ranged over or appended to. A nil map can be read, but writing to it panics because no map storage has been created. Sending to or receiving from a nil channel blocks forever, and dereferencing a nil pointer panics.\n\n- This design removes uninitialized memory from ordinary Go code and lets types such as `bytes.Buffer`, `sync.Mutex`, and `sync.WaitGroup` work immediately after declaration. It also means that zero must be interpreted in the context of the type. For business data, `0` or an empty string may be a real value rather than “missing.” In that situation I use a pointer, an explicit presence flag, or another type that represents absence clearly.\n\n- The practical rule is: understand the zero value of the type, rely on it when it is a valid starting state, and initialize the value when the first required operation needs storage or a stronger invariant.",
+    deep: [
+      {
+        type: "overview",
+        title: "One rule: every type begins in a known state",
+        content:
+          "Go does not have an uninitialized local-variable state. A declaration creates storage and immediately fills it with the zero value of the declared type. Composite values follow the rule recursively: every element of an array and every field of a struct is zeroed. This makes a newly declared value predictable, but it does not promise that every operation on that value is valid.",
+      },
+      {
+        type: "comparison_table",
+        title: "Zero values and what they allow",
+        content:
+          "| Type | Zero value | Safe immediately | Needs initialization before |\n|---|---|---|---|\n| Number | `0` | Reading and arithmetic | Nothing special |\n| `bool` | `false` | Reading and conditions | Nothing special |\n| `string` | `\"\"` | Reading, comparing, concatenating | Nothing special |\n| Slice | `nil` | `len`, `range`, `append` | Direct index assignment while length is zero |\n| Map | `nil` | `len`, lookup, `range`, `delete` | Writing a key |\n| Channel | `nil` | Comparing with `nil` | Sending or receiving without blocking forever |\n| Pointer | `nil` | Comparing with `nil` | Dereferencing |\n| Interface | `nil` | Comparing with `nil` | Calling a method without a concrete value |",
+      },
+      {
+        type: "flow_diagram",
+        title: "From declaration to first operation",
+        content:
+          "```mermaid\nflowchart LR\n  A[Declare a variable] --> B[Go assigns its zero value]\n  B --> C{Does the next operation need backing storage?}\n  C -- No --> D[Use the zero value]\n  C -- Yes --> E[Initialize with make, new, or a constructor]\n```\nThe question is not whether the value is initialized—it always is. The question is whether its zero state supports the operation you are about to perform.",
+      },
+      {
+        type: "code_example",
+        title: "Nil slice and nil map look similar but behave differently",
+        content:
+          "```go\nvar names []string\nnames = append(names, \"Go\") // valid: append allocates storage\n\nvar scores map[string]int\nscore := scores[\"Go\"]       // valid: a missing key returns 0\n// scores[\"Go\"] = score + 1 // panic: assignment to entry in nil map\n\nscores = make(map[string]int)\nscores[\"Go\"] = score + 1    // valid: the map now has storage\n```\nThe declared values were initialized in both cases. Their permitted operations are different because slices and maps have different runtime representations.",
+      },
+    ],
+  },
+  "go-syntax-basics-basic-types-and-zero-values-when-to-use": {
+    direct:
+      "Use a zero value when it naturally represents a valid starting state, such as an empty counter, an unlocked `sync.Mutex`, or a `bytes.Buffer` with no data. Initialize explicitly when zero is invalid or ambiguous, and use a constructor when several fields must be prepared together—especially maps, channels, dependencies, or required business values.",
+    keyPoints: [
+      "Prefer a useful zero value for simple, safe defaults.",
+      "Use explicit initialization when zero has the wrong business meaning.",
+      "Maps must be created before writes; channels must be created before communication.",
+      "Use a constructor when multiple fields form one invariant.",
+      "A constructor is a convention in Go, not a language requirement.",
+    ],
+    speakable:
+      "- I rely on a zero value when it already means exactly what a newly created value should mean. An integer counter can begin at zero, a boolean flag can begin as false, and types such as `bytes.Buffer` and `sync.Mutex` are deliberately designed to work without a constructor. That keeps the API small and lets callers declare the value directly.\n\n- I initialize explicitly when the zero value cannot perform the required operation. A map must be created with `make` or a literal before the first write. A channel must be created before it can carry values; otherwise a send or receive blocks forever. I also initialize explicitly when zero is a valid business value and therefore cannot also mean “not supplied.”\n\n- I use a constructor function such as `NewCache` when a type has several fields that must agree. For example, a cache may require an allocated map, a positive capacity, and a clock dependency. Returning a fully valid value from the constructor prevents callers from creating a half-ready object.\n\n- A constructor is not automatically better. Go has no constructor keyword, and forcing every small type through `NewX` adds ceremony. My choice is based on the invariant: use the zero value when it is useful, initialize one obvious field directly when that is enough, and introduce a constructor when valid construction requires coordinated work.",
+    deep: [
+      {
+        type: "overview",
+        title: "A useful zero value is an API design choice",
+        content:
+          "A type has a useful zero value when a newly declared instance already represents a safe, meaningful state. This is ideal for simple counters, buffers, and synchronization values. When a type cannot honestly work without setup, make that setup visible through direct initialization or a constructor instead of pretending the zero state is usable.",
+      },
+      {
+        type: "comparison_table",
+        title: "Choose the lightest initialization that preserves correctness",
+        content:
+          "| Choice | Best fit | Example | Main benefit |\n|---|---|---|---|\n| Zero value | The default state is already valid | `var total int` | Minimal setup |\n| Explicit value | One field needs a visible starting value | `retries := 3` | Intent is obvious |\n| `make` | Slice, map, or channel needs runtime backing data | `make(map[string]int)` | The first mutation can succeed |\n| Constructor function | Several fields or dependencies form an invariant | `NewCache(100, clock)` | Invalid partial values stay out of normal use |",
+      },
+      {
+        type: "flow_diagram",
+        title: "Initialization decision",
+        content:
+          "```mermaid\nflowchart TD\n  A{Is the zero value a valid usable state?} -- Yes --> B[Use the zero value]\n  A -- No --> C{Does one obvious field need setup?}\n  C -- Yes --> D[Initialize it directly]\n  C -- No --> E[Use a constructor to establish the invariant]\n```\nChoose based on the guarantee the type needs, not on a rule that every type must or must not have a constructor.",
+      },
+      {
+        type: "code_example",
+        title: "A constructor protects a multi-field invariant",
+        content:
+          "```go\ntype Cache struct {\n    entries map[string]string\n    capacity int\n}\n\nfunc NewCache(capacity int) *Cache {\n    if capacity <= 0 {\n        panic(\"capacity must be positive\")\n    }\n    return &Cache{\n        entries:  make(map[string]string),\n        capacity: capacity,\n    }\n}\n```\nThe constructor earns its place because a nil map and a non-positive capacity would leave `Cache` unable to meet its contract.",
+      },
+    ],
+  },
+  "go-syntax-basics-basic-types-and-zero-values-common-mistake": {
+    direct:
+      "The main mistake is treating every `nil` value as an empty, ready-to-use value. Nil slices, maps, channels, pointers, functions, and interfaces have different rules. A nil slice can be appended to; a nil map panics on writes; a nil channel blocks; and an interface containing a typed nil pointer is not itself nil. Check the exact type and operation.",
+    keyPoints: [
+      "Nil is a zero value shared by several types, not one shared behaviour.",
+      "A nil map supports lookups but panics on assignment.",
+      "A nil channel blocks sends and receives indefinitely.",
+      "An interface holding a typed nil pointer does not compare equal to `nil`.",
+      "Zero may be real data, so do not automatically use it to mean missing.",
+    ],
+    speakable:
+      "- A frequent zero-value bug is assuming that all nil values behave like empty containers. For example, a nil slice has length zero, ranging over it does nothing, and `append` can allocate its backing array. A nil map also has length zero and supports lookups, but assigning a key panics until the map is created.\n\n- Nil channels are different again. A send or receive on a nil channel blocks forever. This is sometimes used deliberately inside a `select` to disable a case, but an accidentally uninitialized channel can make a goroutine appear deadlocked. Nil pointers panic when dereferenced, and nil function values panic when called.\n\n- Interfaces have the most surprising case. An interface value contains a dynamic type and a dynamic value. It equals `nil` only when both are absent. If a typed nil pointer is stored in the interface, the dynamic type is present, so the interface is not nil even though the pointer inside it is.\n\n- There is also a modelling mistake: using `0`, `false`, or an empty string to mean “not provided” when that value is valid input. For APIs or database data I represent presence separately, often with a pointer or a dedicated nullable type. The safe rule is to check the concrete type, the next operation, and the business meaning of zero before choosing an initialization strategy.",
+    deep: [
+      {
+        type: "overview",
+        title: "Nil is a spelling shared by different runtime behaviours",
+        content:
+          "The word `nil` marks the zero value of several kinds of Go values, but each kind has its own operations. Reason from the concrete type—slice, map, channel, pointer, function, or interface—and then ask whether the operation is inspection, mutation, communication, dereference, or invocation. That two-step check prevents most zero-value mistakes.",
+      },
+      {
+        type: "comparison_table",
+        title: "Nil behaviour depends on the type",
+        content:
+          "| Value | Read or inspect | Mutate or use | Failure to remember |\n|---|---|---|---|\n| Nil slice | `len`, `range`, `append` work | `append` may allocate | Indexing still needs sufficient length |\n| Nil map | Lookup, `len`, `range`, `delete` work | Key assignment panics | `make` is required before writes |\n| Nil channel | `len` and `cap` are zero | Send/receive block forever | Accidental deadlock |\n| Nil pointer | Compare with `nil` | Dereference panics | Nil-pointer panic |\n| Nil function | Compare with `nil` | Calling panics | Call of nil function |\n| Typed nil in interface | Interface is usually non-nil | Method call may panic | A simple `err != nil` can be true |",
+      },
+      {
+        type: "flow_diagram",
+        title: "Why a typed nil interface is not nil",
+        content:
+          "```mermaid\nflowchart LR\n  A[var p *Problem = nil] --> B[Assign p to error interface]\n  B --> C[Dynamic type = *Problem]\n  B --> D[Dynamic value = nil]\n  C --> E[Interface is not nil]\n  D --> E\n```\nAn interface compares equal to nil only when it has neither a dynamic type nor a dynamic value.",
+      },
+      {
+        type: "code_example",
+        title: "The typed-nil trap",
+        content:
+          "```go\ntype Problem struct{}\n\nfunc (*Problem) Error() string { return \"problem\" }\n\nfunc load() error {\n    var p *Problem\n    return p // dynamic type *Problem is stored in the interface\n}\n\nfunc main() {\n    err := load()\n    fmt.Println(err == nil) // false\n}\n```\nReturn a literal `nil` when there is no error. Do not put a typed nil pointer inside the error interface.",
+      },
+    ],
+  },
+  "go-syntax-basics-basic-types-and-zero-values-compare": {
+    direct:
+      "A zero value gives every instance a predictable default for free. Explicit initialization makes a non-zero starting choice visible. A constructor can validate input, allocate maps or channels, and connect dependencies before returning the value. Prefer the zero value when it is fully usable; use direct initialization for a simple exception; use a constructor when correctness depends on several coordinated fields.",
+    keyPoints: [
+      "Zero-value design makes types easy to declare and embed.",
+      "Explicit initialization communicates a deliberate non-zero default.",
+      "Constructors establish invariants and may return errors.",
+      "Go constructors are ordinary functions, usually named `NewType`.",
+      "Do not add a constructor when it provides no guarantee beyond the zero value.",
+    ],
+    speakable:
+      "- Zero values, explicit initialization, and constructor functions solve different levels of the same problem. A useful zero value is the simplest API because callers can declare the type and use it immediately. `bytes.Buffer` is a good example: `var b bytes.Buffer` is already ready for writes.\n\n- Explicit initialization is appropriate when one starting value should be visible. A retry policy may start with `MaxAttempts: 3`, or a slice may be created with capacity when the expected size is known. The code remains direct, and there is no need to hide a small literal behind a function.\n\n- A constructor is valuable when valid construction requires work. It can reject invalid arguments, allocate a map or channel, copy caller-owned data, set private fields, or inject dependencies. Because Go constructors are ordinary functions, they can return a value and an error when validation can fail.\n\n- The trade-off is API complexity. If callers can still create the struct literal or zero value and bypass the constructor, the type may not truly enforce its invariant unless fields are kept private or methods handle the zero state. My default is to design a useful zero value where that is honest, use direct initialization for simple choices, and add `NewType` only when it creates a guarantee callers would otherwise have to reproduce. That keeps construction rules proportionate to the type's real responsibilities.",
+    deep: [
+      {
+        type: "overview",
+        title: "Initialization is a strength-of-guarantee decision",
+        content:
+          "The zero value gives a universal language guarantee: the value is predictable. A composite literal adds a local code guarantee: selected fields visibly start with chosen values. A constructor adds an API guarantee: validation and setup happen in one place before the caller receives the value. Pick the weakest mechanism that still makes invalid use difficult.",
+      },
+      {
+        type: "comparison_table",
+        title: "Zero value, literal, or constructor",
+        content:
+          "| Mechanism | What it guarantees | Cost | Good example |\n|---|---|---|---|\n| Zero value | Defined default state | None | Counter, mutex, buffer |\n| Literal/direct initialization | Chosen fields are visible at the call site | Repeated setup is possible | Small options struct |\n| Constructor | Central validation and coordinated setup | Extra API and indirection | Client with required URL and dependency |",
+      },
+      {
+        type: "code_example",
+        title: "Use a constructor when validation can fail",
+        content:
+          "```go\ntype Client struct {\n    baseURL string\n    http    *http.Client\n}\n\nfunc NewClient(baseURL string, client *http.Client) (*Client, error) {\n    if baseURL == \"\" {\n        return nil, errors.New(\"base URL is required\")\n    }\n    if client == nil {\n        client = http.DefaultClient\n    }\n    return &Client{baseURL: baseURL, http: client}, nil\n}\n```\nHere the constructor validates required data and supplies one safe dependency default. A zero `Client` could not honestly make requests.",
+      },
+    ],
+  },
+  "go-syntax-basics-basic-types-and-zero-values-scenario": {
+    direct:
+      "To debug an unexpected zero value, trace where the value should first become non-zero and inspect every boundary before that point: construction, decoding, map lookup, field assignment, and method calls. For nil failures, identify the concrete type and the exact operation. Reproduce the smallest case, check ignored `ok` or `error` results, then add a regression test for the untouched zero state and first mutation.",
+    keyPoints: [
+      "Find the first point where expected and actual state differ.",
+      "Check whether a map lookup silently returned the element zero value.",
+      "Check ignored errors and comma-`ok` results.",
+      "Distinguish nil containers, pointers, interfaces, and channels.",
+      "Test both the untouched value and its first required operation.",
+    ],
+    speakable:
+      "- I start by naming the visible failure precisely: an unexpected `0`, a nil-pointer panic, a map-assignment panic, a blocked channel operation, or missing decoded data. Those symptoms involve zero values but have different causes, so I do not apply the same fix to all of them.\n\n- Next I find the earliest place where the value was expected to change. I check construction and initialization, then input decoding, map lookups, type assertions, and assignments. For example, a map lookup such as `age := ages[id]` returns the element type's zero value when the key is missing, so I use `age, ok := ages[id]` when absence matters. I also check ignored errors because a failed parse often leaves the destination unchanged.\n\n- For nil-related failures I identify the concrete type and operation. A map needs allocation before a write; a channel needs allocation before communication; a pointer needs a valid target before dereference; and an interface may hide a typed nil pointer. Logging both `%T` and `%v` is often more useful than printing only the value.\n\n- I reduce the problem to the smallest failing input and add a regression test covering the untouched zero state, the first mutation, and the missing-input case. The goal is not to initialize everything blindly—it is to restore the specific invariant that the failed operation requires.",
+    deep: [
+      {
+        type: "flow_diagram",
+        title: "Trace the first incorrect state",
+        content:
+          "```mermaid\nflowchart TD\n  A[Name the exact symptom] --> B[Find where the value should change]\n  B --> C{Was input or lookup missing?}\n  C -- Yes --> D[Check error and comma-ok results]\n  C -- No --> E{Is the value nil?}\n  E -- Yes --> F[Identify concrete type and attempted operation]\n  E -- No --> G[Trace assignments and resets]\n  D --> H[Fix the violated invariant]\n  F --> H\n  G --> H\n  H --> I[Add a regression test]\n```",
+      },
+      {
+        type: "code_example",
+        title: "A missing key can look like a real zero",
+        content:
+          "```go\nfunc ageFor(ages map[string]int, id string) (int, error) {\n    age, ok := ages[id]\n    if !ok {\n        return 0, fmt.Errorf(\"unknown user %q\", id)\n    }\n    return age, nil // a real age of 0 is now distinguishable from absence\n}\n```\nUsing the comma-`ok` result keeps “missing” separate from the valid zero value of `int`.",
+      },
+      {
+        type: "deep_explanation",
+        title: "What to inspect for each symptom",
+        content:
+          "For an unexpected scalar zero, inspect missing map keys, failed parsing, omitted JSON fields, and assignments that never ran. For a panic, read the operation in the stack trace: map assignment, pointer dereference, or function call. For a hang, inspect nil channel sends and receives. For a suspicious non-nil interface, print its dynamic type and check for a typed nil pointer. Fix the first broken invariant rather than adding defensive initialization far from the cause.",
+      },
+      {
+        type: "practice_prompt",
+        title: "Check the diagnosis",
+        content:
+          "A request omits `retryCount`, and decoding leaves the field at `0`. Is zero a valid request meaning or does omission need separate validation? State the contract first, then choose a plain `int`, `*int`, or custom optional type and write one test for the omitted field.",
+      },
+    ],
+  },
+};
+
+function metaDescription(value) {
+  const plain = value.replace(/[`*_#]/g, "").replace(/\s+/g, " ").trim();
+  return plain.length <= 158 ? plain : `${plain.slice(0, 155).trimEnd()}...`;
+}
+
+for (const question of document.questions) {
+  const curated = answers[question.slug];
+  if (!curated) {
+    throw new Error(`Missing curated answer for ${question.slug}`);
+  }
+
+  question.direct_answer = curated.direct;
+  question.interviewer_intent = {
+    testing: "Whether the learner understands the exact zero-value rule and can apply it safely.",
+    common_mistake: curated.keyPoints[curated.keyPoints.length - 1],
+    to_stand_out: "Connect the language rule to one concrete operation and its consequence.",
+  };
+  question.answer = {
+    sections: [
+      {
+        type: "key_points",
+        title: "Quick revision",
+        items: curated.keyPoints,
+      },
+      {
+        type: "speakable_answer",
+        title: "Interview answer",
+        answerSize: "standard",
+        content: curated.speakable,
+      },
+      ...curated.deep,
+    ],
+  };
+  question.reading_time_minutes = Math.max(
+    3,
+    Math.ceil(
+      [curated.direct, curated.speakable, ...curated.deep.map((section) => section.content)]
+        .join(" ")
+        .split(/\s+/)
+        .filter(Boolean).length / 210,
+    ),
+  );
+  question.seo = {
+    ...question.seo,
+    metaDescription: metaDescription(curated.direct),
+  };
+}
+
+fs.writeFileSync(contentPath, `${JSON.stringify(document, null, 2)}\n`);
+console.log(`Curated ${document.questions.length} zero-value answers in ${contentPath}`);

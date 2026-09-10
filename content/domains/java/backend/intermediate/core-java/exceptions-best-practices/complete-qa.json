@@ -1,0 +1,202 @@
+{
+  "topic": "Exceptions Best Practices",
+  "topicSlug": "exceptions-best-practices",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "core-java",
+  "questions": [
+    {
+      "id": "checked-vs-unchecked",
+      "title": "Checked vs Unchecked Exceptions",
+      "slug": "checked-vs-unchecked",
+      "question": "When should you use checked versus unchecked exceptions?",
+      "difficulty": "easy",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Checked: recoverable conditions caller should handle \u2014 `IOException`, `SQLException`**\n- **Unchecked (RuntimeException): programming errors, unrecoverable \u2014 `NullPointerException`, `IllegalArgumentException`**\n- **Modern practice: prefer unchecked for domain exceptions \u2014 cleaner API**\n- **Spring uses unchecked: `DataAccessException`, `HttpClientErrorException`**\n- **Red flag:** checked exceptions in a service API \u2014 forces callers to handle what they can't do anything about"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Checked exceptions are part of a method's contract \u2014 the compiler forces callers to either handle them or declare them. They're appropriate when the caller can and should do something meaningful about the failure \u2014 like `FileNotFoundException` where the caller might prompt for a different file path.\n\nUnchecked exceptions (RuntimeException and subclasses) don't require declaration or handling. They represent programming errors \u2014 like `NullPointerException`, `IllegalArgumentException` \u2014 or conditions the caller typically can't recover from.\n\nModern Java practice, especially in Spring, heavily favors unchecked exceptions for domain and business exceptions. Checked exceptions pollute call chains \u2014 every method in the call stack must declare the exception even if it can't handle it. Spring's entire `DataAccessException` hierarchy is unchecked, allowing repository exceptions to propagate naturally to error handlers without being declared at every layer."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Checked Exception Pollution Problem\n\n```java\n// Checked exception propagates through every layer:\npublic class OrderRepository {\n    public Order save(Order order) throws SQLException { ... }  // Checked!\n}\n\npublic class OrderService {\n    public Order createOrder(CreateOrderRequest req) throws SQLException { // Must declare!\n        return orderRepo.save(new Order(req));\n    }\n}\n\npublic class OrderController {\n    public ResponseEntity<Order> createOrder(@RequestBody CreateOrderRequest req)\n            throws SQLException {  // Must declare! Controller shouldn't know about SQL\n        return ResponseEntity.ok(orderService.createOrder(req));\n    }\n}\n// SQLException leaks through the entire stack \u2014 controller knows about DB!\n\n// BETTER: Wrap in unchecked:\npublic class OrderRepository {\n    public Order save(Order order) {\n        try {\n            return jdbcTemplate.save(order);\n        } catch (SQLException e) {\n            throw new DataPersistenceException(\"Failed to save order\", e);  // Unchecked!\n        }\n    }\n}\n// DataPersistenceException extends RuntimeException\n// No need to declare at every layer\n```\n\n## Custom Exception Hierarchy\n\n```java\n// Base business exception:\npublic class BusinessException extends RuntimeException {\n    private final String errorCode;\n\n    public BusinessException(String errorCode, String message) {\n        super(message);\n        this.errorCode = errorCode;\n    }\n\n    public BusinessException(String errorCode, String message, Throwable cause) {\n        super(message, cause);  // Always preserve cause chain!\n        this.errorCode = errorCode;\n    }\n\n    public String getErrorCode() { return errorCode; }\n}\n\n// Domain-specific subclasses:\npublic class OrderNotFoundException extends BusinessException {\n    public OrderNotFoundException(Long id) {\n        super(\"ORDER_NOT_FOUND\", \"Order not found: \" + id);\n    }\n}\n\npublic class InsufficientStockException extends BusinessException {\n    private final Long productId;\n    private final int requested;\n    private final int available;\n\n    public InsufficientStockException(Long productId, int requested, int available) {\n        super(\"INSUFFICIENT_STOCK\",\n            String.format(\"Product %d: requested %d but only %d available\",\n                productId, requested, available));\n        this.productId = productId;\n        this.requested = requested;\n        this.available = available;\n    }\n    // Getters for use in error response construction\n}\n```\n\n## Global Exception Handler\n\n```java\n@RestControllerAdvice\npublic class GlobalExceptionHandler {\n\n    @ExceptionHandler(OrderNotFoundException.class)\n    public ResponseEntity<ErrorResponse> handleOrderNotFound(OrderNotFoundException ex) {\n        return ResponseEntity.status(HttpStatus.NOT_FOUND)\n            .body(new ErrorResponse(ex.getErrorCode(), ex.getMessage()));\n    }\n\n    @ExceptionHandler(InsufficientStockException.class)\n    public ResponseEntity<ErrorResponse> handleInsufficientStock(InsufficientStockException ex) {\n        return ResponseEntity.status(HttpStatus.CONFLICT)\n            .body(new ErrorResponse(ex.getErrorCode(), ex.getMessage(),\n                Map.of(\"productId\", ex.getProductId(),\n                       \"requested\", ex.getRequested(),\n                       \"available\", ex.getAvailable())));\n    }\n\n    @ExceptionHandler(BusinessException.class)  // Catch-all for other business exceptions\n    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex) {\n        return ResponseEntity.status(HttpStatus.BAD_REQUEST)\n            .body(new ErrorResponse(ex.getErrorCode(), ex.getMessage()));\n    }\n\n    @ExceptionHandler(Exception.class)  // Last resort\n    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest req) {\n        log.error(\"Unexpected error on {}: {}\", req.getRequestURI(), ex.getMessage(), ex);\n        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)\n            .body(new ErrorResponse(\"INTERNAL_ERROR\", \"An unexpected error occurred\"));\n        // Don't expose internal details to clients!\n    }\n}\n```\n\n## Exception Handling Rules\n\n```java\n// Rule 1: Always preserve the cause chain\ntry {\n    doSomething();\n} catch (IOException e) {\n    throw new ServiceException(\"Operation failed\", e);  // e is the cause \u2014 preserved!\n    // NOT: throw new ServiceException(\"Operation failed\");  // \u2190 Loses original exception!\n}\n\n// Rule 2: Don't catch and ignore (swallow)\ntry {\n    doSomething();\n} catch (Exception e) {\n    // NEVER: empty catch block\n    // At minimum: log.error(\"...\", e);\n}\n\n// Rule 3: Don't catch Exception when you can catch specific type\ntry {\n    int result = Integer.parseInt(input);\n} catch (NumberFormatException e) {  // Specific \u2014 not Exception\n    throw new InvalidInputException(\"Not a number: \" + input);\n}\n\n// Rule 4: Re-throw immediately if you can't handle it\ntry {\n    return userRepo.findById(id).orElseThrow(...);\n} catch (DataAccessException e) {\n    log.error(\"DB error fetching user {}: {}\", id, e.getMessage());\n    throw;  // Re-throw \u2014 let the global handler deal with it\n    // Or: throw new ServiceException(\"Failed to fetch user\", e);\n}\n```\n\n## Production Reality\n\nEvery service should have a clear exception hierarchy: one base business exception, specific subclasses for different failure modes (not found, validation failure, conflict, external service error), and a global `@RestControllerAdvice` that maps them to HTTP status codes. This means business logic throws meaningful exceptions and never deals with HTTP \u2014 the handler layer does the mapping."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Checked exceptions are part of a method's contract \u2014 the compiler forces callers to either handle them or declare them.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": ""
+          }
+        ],
+        "cap": "Spring's entire DataAccessException hierarchy is unchecked, allowing repository exceptions to propagate naturally to error handlers without being declared at every layer.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "try-with-resources",
+      "title": "Try-With-Resources and AutoCloseable",
+      "slug": "try-with-resources",
+      "question": "How does try-with-resources work and when should you use it?",
+      "difficulty": "easy",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **`AutoCloseable`/`Closeable`: `close()` called automatically at end of try block**\n- **Multiple resources: closed in reverse order of declaration**\n- **Suppressed exceptions: if both try and close throw, close exception is suppressed**\n- **Custom AutoCloseable: for any resource that needs cleanup**\n- **Red flag:** manual `finally` blocks for resource cleanup \u2014 resource leak risk if exception happens"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Try-with-resources, introduced in Java 7, automatically closes any resource that implements `AutoCloseable` when the try block exits \u2014 whether normally or via exception. It replaces error-prone `finally` blocks where forgetting to call `close()` causes resource leaks.\n\nThe resource's `close()` is called before any `catch` or `finally` blocks. If both the try body and `close()` throw exceptions, the `close()` exception is suppressed and attached to the primary exception \u2014 you can retrieve it with `Throwable.getSuppressed()`.\n\nYou can declare multiple resources in the parentheses, separated by semicolons. They're closed in reverse order of declaration \u2014 last declared, first closed. This ensures dependencies are cleaned up in the right order."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Basic Try-With-Resources\n\n```java\n// BEFORE: Error-prone finally block\nInputStream in = null;\ntry {\n    in = new FileInputStream(\"file.txt\");\n    processStream(in);\n} finally {\n    if (in != null) {\n        try {\n            in.close();           // Can also throw \u2014 then outer exception is lost!\n        } catch (IOException ignored) {\n        }\n    }\n}\n\n// AFTER: try-with-resources \u2014 clean and safe\ntry (InputStream in = new FileInputStream(\"file.txt\")) {\n    processStream(in);\n    // in.close() called automatically, even if processStream throws\n}\n\n// Multiple resources \u2014 closed in reverse order:\ntry (\n    Connection conn = dataSource.getConnection();\n    PreparedStatement stmt = conn.prepareStatement(\"SELECT ...\");\n    ResultSet rs = stmt.executeQuery()\n) {\n    while (rs.next()) {\n        processRow(rs);\n    }\n}\n// Close order: rs \u2192 stmt \u2192 conn\n```\n\n## Custom AutoCloseable\n\n```java\n// Wrap any resource that needs cleanup:\npublic class DatabaseTransaction implements AutoCloseable {\n    private final Connection connection;\n    private boolean committed = false;\n\n    public DatabaseTransaction(DataSource ds) throws SQLException {\n        this.connection = ds.getConnection();\n        this.connection.setAutoCommit(false);\n    }\n\n    public Connection getConnection() { return connection; }\n\n    public void commit() throws SQLException {\n        connection.commit();\n        committed = true;\n    }\n\n    @Override\n    public void close() throws SQLException {\n        try {\n            if (!committed) {\n                connection.rollback();  // Auto-rollback if not committed\n            }\n        } finally {\n            connection.close();  // Always close\n        }\n    }\n}\n\n// Usage:\ntry (DatabaseTransaction tx = new DatabaseTransaction(dataSource)) {\n    // ... do work with tx.getConnection()\n    tx.commit();\n    // If exception occurs: close() rollbacks and closes connection\n}\n```\n\n## Production Reality\n\nAll IO operations (files, streams, connections) should use try-with-resources. Spring's `JdbcTemplate` and `HibernateTemplate` handle connection management internally, so you rarely need try-with-resources for database operations in a Spring app. However, for raw `Connection`, `InputStream`, `OutputStream`, external API clients, and lock objects \u2014 always use try-with-resources to guarantee cleanup."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Try-with-resources, introduced in Java 7, automatically closes any resource that implements AutoCloseable when the try block exits \u2014 whether normally or via exception.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "This ensures dependencies are cleaned up in the right order.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "exception-handling-patterns",
+      "title": "Exception Handling Patterns in Spring",
+      "slug": "exception-handling-patterns",
+      "question": "What are the best practices for exception handling in a Spring REST API?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **`@RestControllerAdvice` + `@ExceptionHandler`: centralized exception-to-HTTP mapping**\n- **RFC 7807 Problem Details: standard error response format**\n- **Never expose internal details (stack traces, SQL) in API responses**\n- **Validation exceptions: `MethodArgumentNotValidException` \u2192 400 with field errors**\n- **Log with appropriate level: WARN for expected business exceptions, ERROR for unexpected**\n- **Red flag:** try-catch in every controller method \u2014 scatter-gun approach"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "The best pattern for Spring REST API exception handling is a centralized `@RestControllerAdvice` class that maps all exception types to appropriate HTTP responses. Business exceptions (not found, conflict) should be handled explicitly with meaningful status codes; unexpected exceptions catch all at the bottom with a 500 response that reveals nothing about internal details.\n\nFollow RFC 7807 (Problem Details for HTTP APIs) for consistent error response format \u2014 it's becoming the industry standard. Each error response includes `type`, `title`, `status`, `detail`, and optionally `instance` (the request URI).\n\nFor validation errors from `@Valid` annotations, Spring throws `MethodArgumentNotValidException` \u2014 your handler should extract field-level errors and return them all at once, not just the first failure. This gives API clients everything they need to show meaningful validation messages."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## RFC 7807 Problem Detail Response\n\n```java\n// Standard error response format:\npublic class ProblemDetail {\n    private String type;       // URI identifying the problem type\n    private String title;      // Short, human-readable summary\n    private int status;        // HTTP status code\n    private String detail;     // Human-readable explanation for this occurrence\n    private String instance;   // URI of the request that caused the problem\n    private Map<String, Object> extensions;  // Custom fields\n\n    // Spring 6 / Spring Boot 3 has built-in ProblemDetail:\n    // org.springframework.http.ProblemDetail\n}\n\n// Example response for 404:\n// {\n//   \"type\": \"https://myapi.com/errors/order-not-found\",\n//   \"title\": \"Order Not Found\",\n//   \"status\": 404,\n//   \"detail\": \"Order with ID 42 was not found\",\n//   \"instance\": \"/api/orders/42\"\n// }\n```\n\n## Complete Exception Handler\n\n```java\n@RestControllerAdvice\npublic class ApiExceptionHandler {\n\n    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);\n\n    // Validation errors (e.g., @Valid on @RequestBody)\n    @ExceptionHandler(MethodArgumentNotValidException.class)\n    public ResponseEntity<ValidationErrorResponse> handleValidationErrors(\n            MethodArgumentNotValidException ex, HttpServletRequest request) {\n\n        Map<String, List<String>> fieldErrors = ex.getBindingResult()\n            .getFieldErrors()\n            .stream()\n            .collect(Collectors.groupingBy(\n                FieldError::getField,\n                Collectors.mapping(FieldError::getDefaultMessage, Collectors.toList())\n            ));\n\n        return ResponseEntity.badRequest()\n            .body(new ValidationErrorResponse(400, \"Validation failed\", fieldErrors, request.getRequestURI()));\n    }\n\n    // Not found\n    @ExceptionHandler(EntityNotFoundException.class)\n    public ResponseEntity<ErrorResponse> handleNotFound(\n            EntityNotFoundException ex, HttpServletRequest request) {\n        log.debug(\"Not found: {}\", ex.getMessage());\n        return ResponseEntity.status(HttpStatus.NOT_FOUND)\n            .body(ErrorResponse.of(404, \"NOT_FOUND\", ex.getMessage(), request.getRequestURI()));\n    }\n\n    // Business conflict\n    @ExceptionHandler(BusinessConflictException.class)\n    public ResponseEntity<ErrorResponse> handleConflict(\n            BusinessConflictException ex, HttpServletRequest request) {\n        log.warn(\"Business conflict: {}\", ex.getMessage());\n        return ResponseEntity.status(HttpStatus.CONFLICT)\n            .body(ErrorResponse.of(409, ex.getErrorCode(), ex.getMessage(), request.getRequestURI()));\n    }\n\n    // External service failures\n    @ExceptionHandler(ExternalServiceException.class)\n    public ResponseEntity<ErrorResponse> handleExternalError(\n            ExternalServiceException ex, HttpServletRequest request) {\n        log.error(\"External service error: {}\", ex.getMessage(), ex);\n        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)\n            .body(ErrorResponse.of(503, \"SERVICE_UNAVAILABLE\",\n                \"External service temporarily unavailable\", request.getRequestURI()));\n        // Note: DON'T return ex.getMessage() \u2014 may contain internal details!\n    }\n\n    // Catch-all \u2014 should be rare\n    @ExceptionHandler(Exception.class)\n    public ResponseEntity<ErrorResponse> handleUnexpected(\n            Exception ex, HttpServletRequest request) {\n        // Log with full stack trace \u2014 this is unexpected\n        log.error(\"Unexpected error on {} {}: {}\",\n            request.getMethod(), request.getRequestURI(), ex.getMessage(), ex);\n\n        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)\n            .body(ErrorResponse.of(500, \"INTERNAL_ERROR\",\n                \"An unexpected error occurred\", request.getRequestURI()));\n        // Never expose ex.getMessage() to the client \u2014 may contain sensitive info!\n    }\n}\n```\n\n## Exception Logging Strategy\n\n```java\n// Log at the right level:\n\n// DEBUG: trace-level flow details\nlog.debug(\"Looking up user: {}\", userId);\n\n// INFO: significant business events\nlog.info(\"Order created: {} for user: {}\", orderId, userId);\n\n// WARN: expected failures, business exceptions (something wrong but handled)\nlog.warn(\"Order not found: {} \u2014 returning 404\", orderId);\nlog.warn(\"Authentication failed for: {} \u2014 returning 401\", email);\n\n// ERROR: unexpected failures, integration errors, production issues\nlog.error(\"Database connection failed: {}\", ex.getMessage(), ex);  // Include exception!\nlog.error(\"Payment gateway returned error: {} for order: {}\", response, orderId, ex);\n// ALWAYS include the exception as the last parameter for stack trace in logs\n\n// In exception handler:\n// Expected exceptions (not found, validation): WARN or DEBUG \u2014 no stack trace needed\n// Unexpected exceptions (NullPointer, DB connection): ERROR with full stack trace\n```\n\n## Production Reality\n\nUse Spring Boot 3's built-in `ProblemDetail` support \u2014 it implements RFC 7807 out of the box. Configure it with `spring.mvc.problemdetails.enabled=true`. For security: never return `exception.getMessage()` from unexpected exceptions to the client \u2014 it might expose file paths, SQL queries, or stack frames. Log everything internally, return sanitized messages externally. Use a unique `request-id` header for correlation between client error reports and server logs."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "The best pattern for Spring REST API exception handling is a centralized @RestControllerAdvice class that maps all exception types to appropriate HTTP responses.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          }
+        ],
+        "cap": "This gives API clients everything they need to show meaningful validation messages.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

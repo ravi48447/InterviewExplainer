@@ -1,0 +1,270 @@
+{
+  "topic": "Job And Step Structure",
+  "topicSlug": "job-and-step-structure",
+  "questions": [
+    {
+      "id": "sb-003",
+      "slug": "spring-batch-job-parameters-restart-failed-jobs",
+      "question": "How do Job parameters work in Spring Batch, and how do you restart a failed job from where it left off?",
+      "title": "Spring Batch Job Parameters and Restarting Failed Jobs",
+      "direct_answer": "**Job parameters** uniquely identify a `JobInstance` — the same Job name plus the same parameters always map to the same instance, preventing duplicate runs. When a job fails, its `JobExecution` is marked `FAILED` in the JobRepository, and re-launching with the same parameters triggers a **restart** that skips already-committed steps and resumes from the last failed or incomplete step. The reader's position (saved in `ExecutionContext` as `read_count`) is the checkpoint — `FlatFileItemReader` seeks forward by line count, paging readers skip by offset, and partitioned jobs restart only the failed partitions.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of `JobInstance` vs `JobExecution` and the idempotency model Spring Batch enforces by design",
+        "common_mistake": "Adding a timestamp or run-id parameter every time to force a new `JobInstance` — valid, but candidates should know it also defeats automatic restart for that run",
+        "to_stand_out": "Mention `@StepScope` and `@JobScope` for late binding of parameters into readers/writers, and how `JobParametersIncrementer` enables scheduled reruns without breaking restart"
+      },
+      "company_tags": [
+        "IBM",
+        "Cognizant",
+        "SAP",
+        "Oracle",
+        "Societe Generale"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch's JobInstance Model Enforces Idempotency by Design — Most Teams Fight It Until They Understand Why",
+            "content": "Spring Batch distinguishes three concepts most developers initially conflate: **JobInstance** (what is being processed), **JobExecution** (a specific attempt to process it), and **JobParameters** (the identity of the instance).\n\nA `JobInstance` is identified by **Job name + JobParameters**.\n- Run `orderProcessingJob` with `processingDate=2024-01-15` and Spring Batch creates one JobInstance for that combination.\n- If that run fails and you relaunch with the same parameters, Spring Batch creates a **new JobExecution** for the **same JobInstance** — and restarts from the last committed checkpoint, not from scratch.\n\nIf the first run completed successfully, relaunching with the same parameters throws **`JobInstanceAlreadyCompleteException`**.\n- This is intentional — it prevents accidental re-processing of completed business data.\n- To genuinely rerun a completed job, either launch with different parameters (`reprocessing=true`) or use a `JobParametersIncrementer` like `RunIdIncrementer` that adds a technical `run.id` distinct from your business identity parameters.\n\nThe right design **separates identity parameters (business keys like `processingDate`, `region`) from run-control parameters (technical incrementers like `run.id`)**. Conflating these into a UUID-on-every-launch defeats the restart model — each launch becomes a new instance with no previous state to resume from."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Step Flow with Conditional Branches",
+            "content": "```mermaid\nflowchart TB\n    start[\"Job start\"]\n    start --> validate[\"Step: validateInput\"]\n    validate --> validateDecide{\"Exit status?\"}\n    validateDecide -->|FAILED| alert[\"Step: alertOps (Tasklet)\"]\n    validateDecide -->|COMPLETED| importStep[\"Step: importOrders (Chunk)\"]\n    importStep --> importDecide{\"Exit status?\"}\n    importDecide -->|FAILED| markFailed[\"Job ends FAILED\"]\n    importDecide -->|COMPLETED| countDecide{\"writeCount greater than 0?\"}\n    countDecide -->|yes| archive[\"Step: archiveInputFile (Tasklet)\"]\n    countDecide -->|no| skipArchive[\"Step: logEmptyRun (Tasklet)\"]\n    archive --> notify[\"Step: notifyDownstream\"]\n    skipArchive --> notify\n    notify --> done[\"Job ends COMPLETED\"]\n    alert --> done\n```"
+          },
+          {
+            "type": "step",
+            "title": "How Spring Batch Determines Restart Position — The Checkpoint Mechanism",
+            "content": "When a failed `JobExecution` is restarted, Spring Batch uses the **step execution metadata** to determine where to resume.\n\n**Status-driven step skipping**\n- Each `StepExecution` records a status: `COMPLETED`, `FAILED`, `STOPPED`\n- On restart, `COMPLETED` steps are skipped entirely\n- The first `FAILED` or non-`COMPLETED` step is where execution resumes\n- Steps after the failure point run normally\n\n**Reader checkpoint via `ExecutionContext`**\n- For chunk steps, `read_count` is the checkpoint — number of items read in the last successful chunk commit\n- The reader's `update(ExecutionContext)` callback persists position metadata between commits\n- On restart, `open(ExecutionContext)` restores it\n\n**Reader-specific restart behavior**\n- **Paging readers** (`JdbcPagingItemReader`, `JpaPagingItemReader`) — restart resumes at offset `read_count`; requires the underlying query result to be stable between runs\n- **Cursor readers** (`JdbcCursorItemReader`) — restart re-opens the cursor from the beginning and skips forward `read_count` items\n- **Flat file readers** (`FlatFileItemReader`) — saves the line count; reopens the file and seeks forward\n- Some readers support `setSaveState(false)` to disable restart capability when re-running from scratch is preferred\n\n**Partitioned jobs**\n- Each partition has its own `StepExecution` and `ExecutionContext`\n- Failed partitions restart independently\n- Other completed partitions are not re-executed — major scalability benefit for very large jobs\n\n```java\n@Bean\n@StepScope\npublic JdbcPagingItemReader<Order> reader(\n        DataSource dataSource,\n        @Value(\"#{jobParameters['startDate']}\") String startDate) {\n    return new JdbcPagingItemReaderBuilder<Order>()\n            .name(\"orderReader\")\n            .dataSource(dataSource)\n            .selectClause(\"SELECT id, customer_id, amount\")\n            .fromClause(\"FROM orders\")\n            .whereClause(\"WHERE created >= :startDate\")\n            .sortKeys(Map.of(\"id\", Order.ASCENDING))\n            .parameterValues(Map.of(\"startDate\", startDate))\n            .pageSize(500)\n            .saveState(true)\n            .rowMapper(new OrderRowMapper())\n            .build();\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Designing JobParameters for Production — Identity, Incrementers, and Late Binding",
+            "content": "JobParameters serve two purposes simultaneously: **identifying the business scope** of a run and **enabling operational flexibility** for re-runs and forced new instances. Conflating these in a single parameter set leads to operational friction.\n\n**Clean parameter design**\n- **Business parameters** are the identity — `processingDate`, `region`, `batchType`. These uniquely identify what data the job processes.\n- **Technical parameters** are additive — `run.id` from `RunIdIncrementer` creates uniqueness when you need multiple runs against the same business data (manual reruns after data corrections).\n\n**JobParameters are typed**\n- String, Long, Double, Date\n- Use the right type rather than passing dates as strings and parsing in the processor\n- `@Value(\"#{jobParameters['processingDate']}\")` with a custom converter avoids per-step parsing\n\n**Late binding with `@StepScope` and `@JobScope`**\n- `@StepScope` for readers/writers needing per-step parameters; bean is created when the step starts\n- `@JobScope` for beans depending on job parameters but not step parameters\n- Both scopes defer bean creation past `ApplicationContext` startup so `@Value(\"#{jobParameters['x']}\")` resolves\n\n```java\n@Bean\n@StepScope\npublic FlatFileItemReader<Order> fileReader(\n        @Value(\"#{jobParameters['inputFile']}\") String inputFile) {\n    return new FlatFileItemReaderBuilder<Order>()\n            .name(\"fileReader\")\n            .resource(new FileSystemResource(inputFile))\n            .delimited().names(\"id\", \"customerId\", \"amount\")\n            .targetType(Order.class)\n            .build();\n}\n```\n\n**`JobParametersIncrementer` for scheduled execution**\n- `RunIdIncrementer` adds a `run.id` Long parameter that increments on each launch\n- Combined with business parameters, you get both identity (`processingDate`) and uniqueness (`run.id`)\n- Quartz-triggered jobs and Spring `@Scheduled` jobs typically use this pattern\n\n```java\n@Bean\npublic Job orderProcessingJob(JobRepository repo, Step processStep) {\n    return new JobBuilder(\"orderProcessingJob\", repo)\n            .incrementer(new RunIdIncrementer())\n            .start(processStep)\n            .build();\n}\n```\n\n**Conditional flow with `JobBuilder`**\n- `start(stepA).on(\"FAILED\").to(alertStep).from(stepA).on(\"*\").to(stepB)`\n- Decision points via `JobExecutionDecider` for more complex routing\n- Splits via `split(taskExecutor).add(flow1, flow2)` for parallel steps\n\n**Cleaning up execution metadata**\n- BATCH_JOB_EXECUTION grows by one row per launch\n- After a year of hourly runs that's 8,760 rows per job\n- Schedule a cleanup job (in Spring Batch itself) that deletes execution metadata older than the retention window\n- Typical retention: 90 days for auditing; archive or delete beyond that"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Restart, Allow-Restart, and Force-New-Run — Choosing the Right Operational Pattern",
+            "content": "**When restart-from-checkpoint helps:**\n- Long-running jobs where partial failure means hours of wasted work\n- Jobs with paging or cursor readers that maintain stable position\n- Datasets where re-processing committed records would corrupt downstream state\n\n**When `allowStartIfComplete(true)` helps:**\n- Idempotent steps that should re-run even when the JobInstance has completed\n- Cleanup or notification steps that are safe to repeat\n- Validation steps that should always re-evaluate input\n\n**When forcing a new `JobInstance` helps:**\n- Genuinely new business runs where the previous instance is conceptually unrelated\n- Daily scheduled jobs where each day is its own logical instance — use `processingDate` parameter\n- Manual re-runs after data corrections — add a `correctionId` parameter alongside business identity\n\n**Watch for:**\n- **Timestamp-on-every-launch** — defeats restart entirely; every launch is a new instance with no previous state\n- **Forgotten `RunIdIncrementer`** — scheduled jobs fail with `JobInstanceAlreadyCompleteException` after the first successful run\n- **Paging reader instability** — if the underlying query result changes between runs, offset-based restart skips or repeats records\n- **No cleanup of BATCH_* tables** — millions of rows make queries slow and storage costs add up\n- **Late binding without `@StepScope`** — `@Value(\"#{jobParameters['file']}\")` resolves to null at context load time"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`JobParameters` determine `JobInstance` identity** — same Job name + same parameters = same `JobInstance`.\n- **A `JobInstance` can have multiple `JobExecution`s** — the initial run plus restart attempts.\n- **Adding a timestamp parameter forces a new `JobInstance`** — useful for jobs that must re-run from scratch but defeats restart.\n- **`FAILED` `JobExecution` can be restarted; `COMPLETED` cannot** — by default; use `allowStartIfComplete(true)` for idempotent steps.\n- **`@StepScope` and `@JobScope` enable late binding** — `@Value(\"#{jobParameters['file']}\")` resolves when the step starts, not at context load.\n- **Step restartability depends on `ItemReader` checkpointing** — readers save position to `ExecutionContext`; restart restores it.\n- **Partitioned jobs restart only failed partitions** — major scalability benefit.\n- **`RunIdIncrementer` is the standard pattern for scheduled jobs** — adds technical `run.id` while preserving business identity."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch's restart capability is one of its most powerful features — a job that fails at record 50,000 can resume from record 50,001 rather than starting over. This requires understanding how parameters, instances, and executions relate.\n\n**The identity model:**\n- `JobInstance` = Job name + `JobParameters`; represents a logical run\n- `JobExecution` = one physical attempt of a `JobInstance`; a failed JobInstance gets a new JobExecution on restart\n- `StepExecution` = one attempt of one step; stores `read_count`, `write_count`, `commit_count`, plus the `ExecutionContext` for restart state\n\n**Starting vs restarting:**\n- First run: `jobLauncher.run(job, params)` creates a new JobInstance and JobExecution\n- Restart: same parameters find the existing FAILED JobInstance and create a new JobExecution; completed steps are skipped\n- A COMPLETED JobInstance cannot be re-launched by default — use `allowStartIfComplete(true)` per step if needed\n\n**Late binding with `@StepScope`:**\n- `@StepScope @Bean FlatFileItemReader reader(@Value(\"#{jobParameters['inputFile']}\") String file)`\n- The file value is not available at context load time; `@StepScope` defers bean creation until the step starts\n- Essential for parameterized readers and writers\n\n**Parameter design:**\n- Business parameters are identity (`processingDate`, `region`)\n- Technical parameters are additive (`run.id` from `RunIdIncrementer`)\n- Conflating them — like UUID on every launch — defeats restart entirely\n\nIn an interview, I'd emphasize the JobInstance vs JobExecution distinction and the late binding via `@StepScope` — both are common gotchas that signal production experience."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if you try to restart a COMPLETED job without changing its parameters?",
+        "How would you design a daily batch job so each day's run is independent but also restartable on failure?",
+        "How does Spring Batch store job execution metadata and which BATCH_* tables are involved?",
+        "When would you use `allowStartIfComplete(true)` on a step?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Job Parameters and Restart — Java Guide",
+        "metaDescription": "How Spring Batch JobParameters identify JobInstances, restart from the last checkpoint, late binding via @StepScope, and the JobParametersIncrementer pattern."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Batch's restart capability is one of its most powerful features — a job that fails at record 50,000 can resume from record 50,001 rather than starting over.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Batch distinguishes three concepts most developers initially conflate: JobInstance (what is being processed), JobExecution (a specific attempt to process it), and JobParameters (the identity of the instance). A JobInstance is identified by Job name + JobParameters. Run orderProcessingJob with processingDate=2024-01-15 and Spring Batch creates one JobInstance for that combination. If that run fails and you relaunch with the same parameters, Spring Batch creates a new JobExecution for the same JobInstance — and restarts from the last committed checkpoint, not."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of JobInstance vs JobExecution and the idempotency model Spring Batch enforces by design"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "JobParameters determine JobInstance identity — same Job name + same parameters = same JobInstance",
+              "A JobInstance can have multiple JobExecutions — the initial run plus restart attempts",
+              "Adding a timestamp parameter forces a new JobInstance — useful for jobs that must re-run from scratch but defeats restart",
+              "FAILED JobExecution can be restarted; COMPLETED cannot — by default; use allowStartIfComplete(true) for idempotent steps",
+              "@StepScope and @JobScope enable late binding — @Value(\"#{jobParameters['file']}\") resolves when the step starts, not at context load"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Batch distinguishes three concepts most developers initially conflate: JobInstance (what is being processed), JobExecution (a specific attempt to process it), and JobParameters (the identity of the instance). A JobInstance is identified by Job name + JobParameters. Run orderProcessingJob with processingDate=2024-01-15 and Spring Batch creates one JobInstance for that combination. If that run fails and you relaunch with the same parameters, Spring Batch creates a new JobExecution for the same JobInstance — and restarts from the last committed checkpoint, not from scratch. If the first run completed successfully, relaunching with the same parameters throws JobInstanceAlreadyCompleteException. This is intentional — it prevents accidental re-processing of completed business data. To genuinely rerun a completed job, either launch with different parameters (reprocessing=true) or."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Adding a timestamp or run-id parameter every time to force a new JobInstance",
+              "valid, but candidates should know it also defeats automatic restart for that run"
+            ]
+          }
+        ],
+        "cap": "The identity model: JobInstance = Job name + JobParameters; represents a logical run JobExecution = one physical attempt of a JobInstance; a failed JobInstance gets a new JobExecution on restart StepE",
+        "familiarity_anchors": [
+          "JobInstance",
+          "JobExecution",
+          "FAILED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if you try to restart a COMPLETED job without changing its parameters?",
+          "How would you design a daily batch job so each day's run is independent but also restartable on failure?",
+          "How does Spring Batch store job execution metadata and which BATCH_* tables are involved?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sb-003b",
+      "slug": "job-flow-control-decision-and-split",
+      "question": "How do you control job flow in Spring Batch with conditional transitions, JobExecutionDecider, and parallel splits? When does each pattern apply?",
+      "title": "Spring Batch Job Flow — Conditional Transitions, Deciders, and Splits",
+      "direct_answer": "Spring Batch's `JobBuilder` DSL supports three flow primitives: **conditional transitions** (`start(a).on(\"FAILED\").to(b).from(a).on(\"*\").to(c)`) for routing on a step's exit status, **`JobExecutionDecider`** for branching on arbitrary runtime state (job parameters, ExecutionContext, business rules) without coupling logic to a step's exit status, and **`split(taskExecutor).add(flowA, flowB)`** for executing independent flows in parallel and joining their results. Use transitions for simple success/failure routing, deciders when the branch depends on data computed at runtime rather than a step outcome, and splits when independent steps can safely run concurrently.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can compose non-trivial job flows beyond a linear sequence of steps, and pick the right primitive for the routing requirement",
+        "common_mistake": "Setting a step's exit status from inside a Tasklet to drive routing, when a `JobExecutionDecider` would express the intent more cleanly",
+        "to_stand_out": "Discuss the `FlowJobBuilder` underneath, how `on(\"*\")` matches everything including FAILED, and how `split` joins partition restart state across the parallel flows"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Wells Fargo",
+        "American Express",
+        "Capital One",
+        "Mastercard"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Flow Primitives Cover Almost Every Real Batch Topology",
+            "content": "Real batch jobs are rarely a linear `step1 → step2 → step3`.\n- Production workflows involve validation steps that may fail and trigger alerts, optional steps gated on input data, parallel work that converges before downstream steps, and cleanup steps that always run regardless of whether the main work succeeded.\n- Spring Batch's `JobBuilder` DSL handles all of this with three primitives.\n\n**Conditional transitions** are the simplest — match a step's exit status (`COMPLETED`, `FAILED`, custom strings) and route to the next step accordingly. The DSL `start(a).on(\"FAILED\").to(alertStep).from(a).on(\"*\").to(nextStep)` reads naturally and captures the most common 'on success do X, on failure do Y' pattern.\n\n**`JobExecutionDecider`** handles branching that depends on **runtime state beyond a step's exit status** — a job parameter value, a count from `StepExecution`, a business rule evaluated against ExecutionContext data. Deciders return a `FlowExecutionStatus` that the DSL routes on, just like a step's exit status, but the logic is in plain Java rather than fragile exit-status string overloading.\n\n**`split`** executes independent flows in parallel using a `TaskExecutor`. It's the right primitive when two or more steps have no data dependency and the wall-clock saving justifies the complexity. The split joins all branches before the next step runs — like a fork-join in classical concurrency."
+          },
+          {
+            "type": "step",
+            "title": "Conditional Transitions — Routing on Exit Status",
+            "content": "Conditional transitions are the most common flow primitive. They route based on the previous step's `ExitStatus`, which by default is derived from the step's `BatchStatus` (`COMPLETED` → `\"COMPLETED\"`, `FAILED` → `\"FAILED\"`).\n\n**The basic pattern**\n\n```java\n@Bean\npublic Job orderJob(JobRepository repo, Step validate, Step alertOps,\n                    Step importStep, Step archive) {\n    return new JobBuilder(\"orderJob\", repo)\n            .incrementer(new RunIdIncrementer())\n            .start(validate)\n                .on(\"FAILED\").to(alertOps)\n            .from(validate)\n                .on(\"COMPLETED\").to(importStep)\n            .from(importStep)\n                .on(\"*\").to(archive)\n            .end()\n            .build();\n}\n```\n\n**Reading the DSL**\n- `start(a).on(\"X\").to(b)` — if step `a` exits with status `X`, run step `b` next\n- `from(a).on(\"Y\").to(c)` — alternate route from step `a` for status `Y`\n- `on(\"*\")` — matches **everything**, including `FAILED`; use carefully\n- `end()` — terminates the flow definition\n\n**Custom exit statuses**\n- A `StepExecutionListener` can override the exit status based on step results\n- Useful for distinguishing 'completed but with warnings' from 'completed clean'\n\n```java\n@Bean\npublic StepExecutionListener completionListener() {\n    return new StepExecutionListener() {\n        @Override\n        public ExitStatus afterStep(StepExecution stepExecution) {\n            long skipCount = stepExecution.getSkipCount();\n            if (skipCount > 0) {\n                return new ExitStatus(\"COMPLETED_WITH_SKIPS\");\n            }\n            return null;\n        }\n    };\n}\n```\n\nThen route on the custom status:\n\n```java\n.start(importStep)\n    .on(\"COMPLETED_WITH_SKIPS\").to(reviewSkipsStep)\n.from(importStep)\n    .on(\"COMPLETED\").to(archiveStep)\n```\n\n**Common transition pitfalls**\n- **`on(\"*\")` matches FAILED too** — a step that should only run on success needs `.on(\"COMPLETED\")` explicitly\n- **No transition for FAILED** — without an explicit FAILED route, the job ends as FAILED; sometimes desired, often surprising\n- **Forgetting `end()`** — flow definition is incomplete; build fails at startup\n- **Overloading exit status with business meaning** — 'COMPLETED_WITH_5_PERCENT_ERRORS' is a code smell; use a Decider"
+          },
+          {
+            "type": "step",
+            "title": "JobExecutionDecider — Branching on Runtime State",
+            "content": "When the routing decision depends on data computed at runtime — not just whether a step succeeded — `JobExecutionDecider` is the right primitive. It runs as a flow node, has access to `JobExecution` and `StepExecution`, and returns a `FlowExecutionStatus` that the DSL routes on.\n\n**The interface**\n\n```java\npublic interface JobExecutionDecider {\n    FlowExecutionStatus decide(JobExecution jobExecution, StepExecution stepExecution);\n}\n```\n\n**Example — branch on count of records imported**\n\n```java\n@Component\npublic class ImportSizeDecider implements JobExecutionDecider {\n    @Override\n    public FlowExecutionStatus decide(JobExecution jobExecution,\n                                     StepExecution stepExecution) {\n        long writeCount = stepExecution.getWriteCount();\n        if (writeCount == 0) return new FlowExecutionStatus(\"EMPTY\");\n        if (writeCount > 1_000_000) return new FlowExecutionStatus(\"LARGE\");\n        return new FlowExecutionStatus(\"NORMAL\");\n    }\n}\n```\n\n**Wiring the decider into the flow**\n\n```java\n@Bean\npublic Job importJob(JobRepository repo, Step importStep,\n                     ImportSizeDecider sizeDecider,\n                     Step largeJobNotifyStep, Step normalArchiveStep,\n                     Step skipArchiveStep) {\n    return new JobBuilder(\"importJob\", repo)\n            .incrementer(new RunIdIncrementer())\n            .start(importStep)\n            .next(sizeDecider)\n                .on(\"EMPTY\").to(skipArchiveStep)\n            .from(sizeDecider)\n                .on(\"LARGE\").to(largeJobNotifyStep).next(normalArchiveStep)\n            .from(sizeDecider)\n                .on(\"NORMAL\").to(normalArchiveStep)\n            .end()\n            .build();\n}\n```\n\n**When deciders beat exit-status overloading**\n- The branch depends on multiple inputs (job parameters AND step counts)\n- The condition involves business logic that doesn't belong in a `StepExecutionListener`\n- The same routing logic is needed in multiple jobs\n\n**Decider pitfalls**\n- **Stateful deciders** — can break under restart; rely on `JobExecution` and `StepExecution` only\n- **Side effects in `decide()`** — should be pure routing logic; put work in steps\n- **Returning custom status names without quoting** — the DSL's `on(\"X\")` is string-matched"
+          },
+          {
+            "type": "step",
+            "title": "Split — Parallel Flows with Join",
+            "content": "`split` runs multiple independent flows concurrently using a `TaskExecutor`, then joins back before the next step runs. It's the right primitive when wall-clock time matters and the parallel flows have no data dependency.\n\n**The basic pattern**\n\n```java\n@Bean\npublic Job dailyImportJob(JobRepository repo,\n                          Step loadCustomers, Step loadProducts, Step loadOrders,\n                          Step aggregateAndReport,\n                          TaskExecutor taskExecutor) {\n    Flow customerFlow = new FlowBuilder<SimpleFlow>(\"customerFlow\")\n            .start(loadCustomers).build();\n    Flow productFlow = new FlowBuilder<SimpleFlow>(\"productFlow\")\n            .start(loadProducts).build();\n    Flow orderFlow = new FlowBuilder<SimpleFlow>(\"orderFlow\")\n            .start(loadOrders).build();\n\n    Flow loadAll = new FlowBuilder<SimpleFlow>(\"loadAll\")\n            .split(taskExecutor)\n            .add(customerFlow, productFlow, orderFlow)\n            .build();\n\n    return new JobBuilder(\"dailyImportJob\", repo)\n            .incrementer(new RunIdIncrementer())\n            .start(loadAll)\n            .next(aggregateAndReport)\n            .end()\n            .build();\n}\n```\n\n**TaskExecutor sizing**\n- Number of threads should match the number of parallel flows (or be slightly larger)\n- For three independent loads, a `ThreadPoolTaskExecutor` with `corePoolSize=3, maxPoolSize=3` is appropriate\n- Don't share the executor with the application's web traffic — use a dedicated one for batch\n\n**Restart semantics under split**\n- Each flow's steps have their own `StepExecution` records\n- A failed flow restarts independently; completed flows are not re-executed\n- The split as a whole is `COMPLETED` only when all branches complete\n\n**Common split pitfalls**\n- **Hidden data dependencies** — flows that look independent but actually share a target table can deadlock or corrupt each other\n- **Single-thread `TaskExecutor`** — defeats the purpose; the split serializes\n- **Long-tail flow blocking the join** — if one flow takes 10x longer than others, you're paying for parallelism without benefit\n- **Mixing split with multi-threaded steps inside a flow** — the thread budget compounds; thread pool exhaustion follows"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Conditional Transitions vs Deciders vs Splits",
+            "content": "Each primitive solves a different routing problem. Pick the simplest one that captures the requirement.\n\n| Primitive | Use For | Avoid When |\n|---|---|---|\n| Conditional transitions | Branching on a step's exit status | The decision needs runtime state beyond exit status |\n| `JobExecutionDecider` | Branching on job parameters, counts, business rules | A simple exit-status match would suffice |\n| `split` + `TaskExecutor` | Independent flows that can safely run concurrently | Flows have hidden data dependencies or shared resources |\n| Linear `next(...)` chain | Simple sequential steps | Real branching is needed — don't simulate it with throwaway exit statuses |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Complex Flow Helps, When It Hurts",
+            "content": "**When complex flow helps:**\n- Real branching requirements that linear chains can't capture\n- Validation-fail-alert patterns common in financial and compliance workflows\n- Independent work that benefits from parallelism (loading reference tables before main processing)\n- Audit and compliance scenarios where the flow itself is a documented business process\n\n**When complex flow hurts:**\n- Simple jobs where a linear `next(a).next(b).next(c)` would suffice — extra DSL nodes obscure intent\n- Flows with shared state across branches — splits introduce race conditions\n- Deciders that drift toward containing business logic — that belongs in a step, not a routing primitive\n\n**Watch for:**\n- **`on(\"*\")` masking errors** — a wildcard that matches FAILED runs the next step on a broken upstream\n- **Decider stateful logic broken on restart** — deciders must be deterministic given the same `JobExecution`/`StepExecution`\n- **Split with single-thread executor** — silent serialization\n- **Long-tail flow in a split** — the join waits for the slowest branch; balance flow durations\n- **Custom exit statuses scattered across listeners** — hard to trace; consolidate routing logic in deciders"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Conditional transitions** — `start(a).on(\"FAILED\").to(b).from(a).on(\"*\").to(c)`; route on a step's `ExitStatus`.\n- **`on(\"*\")` matches everything including FAILED** — use `on(\"COMPLETED\")` for success-only routes.\n- **`JobExecutionDecider`** — branches on runtime state beyond exit status; returns `FlowExecutionStatus`.\n- **Deciders must be deterministic** — given the same `JobExecution`/`StepExecution`, must return the same status; otherwise restart breaks.\n- **`split(taskExecutor).add(flowA, flowB)`** — runs independent flows concurrently; joins before the next step.\n- **Each flow in a split has independent restart state** — failed flows restart independently.\n- **`StepExecutionListener.afterStep`** can override exit status — useful for `COMPLETED_WITH_SKIPS` patterns.\n- **Anti-patterns** — overloading exit status with business meaning, side effects in deciders, hidden data dependencies in splits."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch gives you three flow primitives that cover almost every real batch topology: conditional transitions, JobExecutionDecider, and split.\n\n**Conditional transitions:**\n- `start(a).on(\"FAILED\").to(alertStep).from(a).on(\"*\").to(nextStep)`\n- Routes on a step's `ExitStatus`, which by default mirrors `BatchStatus`\n- A `StepExecutionListener` can override exit status to capture nuance like `COMPLETED_WITH_SKIPS`\n- Watch for `on(\"*\")` — it matches FAILED too; use `on(\"COMPLETED\")` for success-only routes\n\n**`JobExecutionDecider`:**\n- For branching on runtime state beyond exit status — job parameters, step counts, business rules\n- Returns a `FlowExecutionStatus` that the DSL routes on\n- Must be deterministic — given the same `JobExecution`/`StepExecution` it must return the same status, or restart breaks\n- Pure routing logic only; put work in steps, not deciders\n\n**`split(taskExecutor).add(flowA, flowB)`:**\n- Runs independent flows in parallel using a `TaskExecutor`\n- Joins all branches before the next step runs\n- Each flow has its own `StepExecution` records and restarts independently\n- Pitfalls: hidden data dependencies between flows, single-thread executor that defeats the purpose, long-tail flow blocking the join\n\n**Decision rule:**\n- Linear chain when no branching is needed\n- Conditional transitions for simple success/failure routing\n- Decider when the branch depends on runtime data, not just exit status\n- Split when independent flows can safely run concurrently and wall-clock matters\n\nIn an interview, I'd emphasize that overloading exit status with business meaning is the most common smell — that's what JobExecutionDecider exists for."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does `on(\"*\")` match FAILED steps, and how do you write a route that runs only on success?",
+        "How does a JobExecutionDecider behave when a job is restarted from a step that runs after the decider?",
+        "What happens to in-flight flows when one branch of a split fails?",
+        "When would you use a custom ExitStatus from a StepExecutionListener vs a JobExecutionDecider?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Job Flow Control — Decider, Split, Conditional Transitions",
+        "metaDescription": "How to control Spring Batch job flow with conditional transitions, JobExecutionDecider, and parallel splits. When each pattern applies and the common pitfalls."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Batch gives you three flow primitives that cover almost every real batch topology: conditional transitions, JobExecutionDecider, and split.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Real batch jobs are rarely a linear step1 → step2 → step3. Production workflows involve validation steps that may fail and trigger alerts, optional steps gated on input data, parallel work that converges before downstream steps, and cleanup steps that always run regardless of whether the main work succeeded. Spring Batch's JobBuilder DSL handles all of this with three primitives. Conditional transitions are the simplest — match a step's exit status (COMPLETED, FAILED, custom strings) and route to the next."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can compose non-trivial job flows beyond a linear sequence of steps, and pick the right primitive for the routing requirement"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Conditional transitions — start(a)",
+              "on(\"FAILED\")",
+              "to(c); route on a step's ExitStatus",
+              "on(\"*\") matches everything including FAILED — use on(\"COMPLETED\") for success-only routes",
+              "JobExecutionDecider — branches on runtime state beyond exit status; returns FlowExecutionStatus"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Real batch jobs are rarely a linear step1 → step2 → step3. Production workflows involve validation steps that may fail and trigger alerts, optional steps gated on input data, parallel work that converges before downstream steps, and cleanup steps that always run regardless of whether the main work succeeded. Spring Batch's JobBuilder DSL handles all of this with three primitives. Conditional transitions are the simplest — match a step's exit status (COMPLETED, FAILED, custom strings) and route to the next step accordingly. The DSL start(a).on(\"FAILED\").to(alertStep).from(a).on(\"*\").to(nextStep) reads naturally and captures the most common 'on success do X, on failure do Y' pattern. JobExecutionDecider handles branching that depends on runtime state beyond a step's exit status — a job parameter value, a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Setting a step's exit status from inside a Tasklet to drive routing, when a JobExecutionDecider would express the intent more cleanly"
+            ]
+          }
+        ],
+        "cap": "Conditional transitions: start(a).on(\"FAILED\").to(alertStep).from(a).on(\"\").to(nextStep) Routes on a step's ExitStatus, which by default mirrors BatchStatus A StepExecutionListener can override exit s",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "JobBuilder"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does `on(\"*\")` match FAILED steps, and how do you write a route that runs only on success?",
+          "How does a JobExecutionDecider behave when a job is restarted from a step that runs after the decider?",
+          "What happens to in-flight flows when one branch of a split fails?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

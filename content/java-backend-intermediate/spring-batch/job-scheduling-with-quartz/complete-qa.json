@@ -1,0 +1,270 @@
+{
+  "topic": "Job Scheduling with Quartz",
+  "topicSlug": "job-scheduling-with-quartz",
+  "questions": [
+    {
+      "id": "sbt-quartz-001",
+      "slug": "spring-batch-quartz-scheduling-clustered",
+      "question": "How do you schedule Spring Batch jobs with Quartz, especially in a clustered environment where only one instance should run the job?",
+      "title": "Scheduling Spring Batch Jobs with Quartz (Clustered)",
+      "direct_answer": "Spring's **`@Scheduled`** is fine for a single instance, but in **multi-node deployments** every pod fires the same job — you need a scheduler with **distributed locking**. **Quartz** supports this via a **JDBC-backed JobStore with `org.quartz.jobStore.isClustered=true`** — DB row locks ensure only one node picks up each trigger. The integration pattern: configure Quartz tables (`qrtz_*`), create a `JobDetail` + `Trigger` that calls `JobLauncher.run(batchJob, params)`, enable clustering. Alternatives are **ShedLock** (lightweight DB lock atop `@Scheduled`) and **Kubernetes CronJob** (orchestration outside the app). For mature production Spring Batch, Quartz clustered mode plus `JobLauncher` is the standard combo.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Scheduler selection, distributed-locking concern, Quartz clustering, Batch integration",
+        "common_mistake": "Using `@Scheduled` in a multi-replica deployment; not enabling Quartz clustering",
+        "to_stand_out": "Compare Quartz vs ShedLock vs K8s CronJob; discuss misfire policies, thread-pool sizing, JobParameters uniqueness, and `requestsRecovery` for node-failure handling"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "JP Morgan",
+        "Capital One",
+        "Wells Fargo",
+        "American Express"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Real Question — One Trigger, One Node",
+            "content": "A Spring Batch job needs a **trigger** — cron, fixed interval, or external event. The right choice depends on whether the application runs on a single instance or a cluster.\n\n**Single-instance scheduling:**\n- `@Scheduled` is built-in, zero dependencies, perfect for one JVM\n- Falls apart in multi-node deployments — every replica fires\n\n**Cluster-safe scheduling options:**\n- **Quartz** — rich scheduler with cron, misfire handling, persistence, **clustering** (DB-backed)\n- **ShedLock** — wrapper around `@Scheduled` using a DB lock for distributed-safe execution\n- **Kubernetes CronJob** — K8s schedules a Pod that runs a one-shot Boot app; simplest in K8s\n- **Spring Cloud Data Flow** — visual orchestration for batch pipelines\n- **Airflow / external DAG tools** — orchestrator triggers via REST/CLI\n\n**The key question:** *do I want this job to run on exactly one instance at a given fire time?* If yes, plain `@Scheduled` is wrong. **Quartz clustered mode** solves this — all nodes share the same DB-based Quartz schema; one node grabs the trigger lock and runs the job; others see it's taken and move on."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Quartz Clustered Scheduling Topology",
+            "content": "```mermaid\nflowchart LR\n    pod1[\"Pod 1 (Quartz scheduler)\"]\n    pod2[\"Pod 2 (Quartz scheduler)\"]\n    pod3[\"Pod 3 (Quartz scheduler)\"]\n    quartzDb[(\"Postgres (qrtz_* tables)\")]\n    pod1 -->|poll and lock| quartzDb\n    pod2 -->|poll and lock| quartzDb\n    pod3 -->|poll and lock| quartzDb\n    quartzDb -->|winner = pod2| pod2\n    pod2 --> launcher[\"JobLauncher\"]\n    launcher --> job[\"Spring Batch Job (orderImportJob)\"]\n    job --> batchDb[(\"Batch metadata DB (BATCH_* tables)\")]\n```"
+          },
+          {
+            "type": "step",
+            "title": "Setting Up Quartz with Spring Batch",
+            "content": "Spring Boot's `spring-boot-starter-quartz` provides autoconfig; Quartz tables and the `JobLauncher` bridge tie everything together.\n\n**Dependencies**\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-quartz</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-batch</artifactId>\n</dependency>\n```\n\n**`application.yml` for clustered Quartz**\n\n```yaml\nspring:\n  quartz:\n    job-store-type: jdbc\n    jdbc:\n      initialize-schema: never\n    properties:\n      org.quartz.scheduler.instanceName: AcmeScheduler\n      org.quartz.scheduler.instanceId: AUTO\n      org.quartz.jobStore.class: org.springframework.scheduling.quartz.LocalDataSourceJobStore\n      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate\n      org.quartz.jobStore.isClustered: true\n      org.quartz.jobStore.clusterCheckinInterval: 20000\n      org.quartz.threadPool.threadCount: 10\n```\n\n**Bridge Quartz to `JobLauncher`**\n\n```java\npublic class SpringBatchQuartzJob extends QuartzJobBean {\n    @Autowired private JobLauncher jobLauncher;\n    @Autowired private Job reportingJob;\n\n    @Override\n    protected void executeInternal(JobExecutionContext ctx) {\n        JobParameters params = new JobParametersBuilder()\n                .addLong(\"run.time\", System.currentTimeMillis())\n                .addString(\"triggeredBy\", ctx.getTrigger().getKey().getName())\n                .toJobParameters();\n        try {\n            jobLauncher.run(reportingJob, params);\n        } catch (Exception e) {\n            throw new JobExecutionException(e, false);\n        }\n    }\n}\n```\n\n**Schedule the job**\n\n```java\n@Configuration\npublic class QuartzConfig {\n    @Bean\n    public JobDetail reportingJobDetail() {\n        return JobBuilder.newJob(SpringBatchQuartzJob.class)\n                .withIdentity(\"reportingJob\")\n                .storeDurably()\n                .requestRecovery(true)\n                .build();\n    }\n\n    @Bean\n    public Trigger reportingTrigger(JobDetail reportingJobDetail) {\n        CronScheduleBuilder cron = CronScheduleBuilder\n                .cronSchedule(\"0 30 2 * * ?\")\n                .withMisfireHandlingInstructionFireAndProceed();\n        return TriggerBuilder.newTrigger()\n                .forJob(reportingJobDetail)\n                .withIdentity(\"reportingTrigger\")\n                .withSchedule(cron)\n                .build();\n    }\n}\n```\n\n**Setup gotchas**\n- Apply Quartz DDL out-of-band (`tables_postgres.sql`); do not use `initialize-schema: always` in prod\n- All nodes must connect to the same Quartz database/schema\n- `instanceId: AUTO` ensures each node has a unique identity for cluster checkin\n- `storeDurably()` keeps the JobDetail in the DB even when no triggers reference it"
+          },
+          {
+            "type": "step",
+            "title": "Alternatives — ShedLock, Kubernetes CronJob",
+            "content": "Quartz isn't always the right tool. Two alternatives cover most other scenarios.\n\n**ShedLock — lightweight DB lock atop `@Scheduled`**\n\n```xml\n<dependency>\n    <groupId>net.javacrumbs.shedlock</groupId>\n    <artifactId>shedlock-spring</artifactId>\n</dependency>\n<dependency>\n    <groupId>net.javacrumbs.shedlock</groupId>\n    <artifactId>shedlock-provider-jdbc-template</artifactId>\n</dependency>\n```\n\n```java\n@EnableSchedulerLock(defaultLockAtMostFor = \"10m\")\n@Configuration\npublic class SchedConfig {\n    @Bean\n    public LockProvider lockProvider(DataSource ds) {\n        return new JdbcTemplateLockProvider(ds);\n    }\n}\n\n@Component\nclass ReportingScheduler {\n    @Autowired JobLauncher launcher;\n    @Autowired Job reportingJob;\n\n    @Scheduled(cron = \"0 30 2 * * ?\")\n    @SchedulerLock(name = \"reportingJob\", lockAtMostFor = \"30m\", lockAtLeastFor = \"1m\")\n    public void run() throws Exception {\n        launcher.run(reportingJob, new JobParametersBuilder()\n                .addLong(\"run.time\", System.currentTimeMillis())\n                .toJobParameters());\n    }\n}\n```\n\n- ShedLock creates a `shedlock` table\n- Only one node holds the named lock at a time\n- Schedule lives in `@Scheduled` — no dynamic schedule changes without redeploy\n\n**Kubernetes CronJob**\n\n```yaml\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: reporting-job\nspec:\n  schedule: \"30 2 * * *\"\n  concurrencyPolicy: Forbid\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n            - name: reporting\n              image: mycompany/batch:1.2.3\n              args: [\"--spring.batch.job.names=reportingJob\"]\n          restartPolicy: OnFailure\n```\n\n- K8s creates a fresh Pod at each schedule\n- Pod runs the Boot app; app runs the batch job and exits\n- No scheduler inside the application\n- `concurrencyPolicy: Forbid` prevents overlapping runs\n\n**Decision rule:**\n- Need cron with misfire policies and dynamic scheduling → **Quartz**\n- Just need cluster-safe `@Scheduled` → **ShedLock**\n- Operating in K8s and prefer separation → **Kubernetes CronJob**"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Quartz vs ShedLock vs Kubernetes CronJob",
+            "content": "Pick the simplest tool that meets the operational requirements.\n\n| Aspect | Quartz Clustered | ShedLock | K8s CronJob |\n|---|---|---|---|\n| Distributed safety | Built-in (cluster JobStore) | Layered DB lock | K8s controller |\n| Cron features | Rich (misfire policies) | `@Scheduled` cron expression | Kubernetes cron |\n| Persistence | Schedules in DB | Code only | YAML manifest |\n| Dynamic schedule changes | Via Scheduler API | Requires redeploy | `kubectl edit` |\n| Setup complexity | High (schema + config) | Low (one lock table) | Low if K8s native |\n| Operational separation | App + scheduler together | App + scheduler together | Separate Pod per run |\n| Missed-trigger handling | Configurable misfire | Manual | K8s `startingDeadlineSeconds` |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Production Practices, Misfires, and Recovery",
+            "content": "**When Quartz clustered helps:**\n- Multi-node deployments where exactly one node should fire a trigger\n- Complex scheduling requirements (calendars, priorities, misfire policies)\n- Jobs that need to be discoverable and modifiable at runtime via the Scheduler API\n- Operations team comfortable with scheduler internals\n\n**When Quartz hurts:**\n- Single-instance deployments — `@Scheduled` is simpler\n- Teams without Quartz operational expertise — scheduler bugs are obscure\n- Workloads better expressed as K8s CronJobs (independent batch images, separate resource limits)\n\n**Watch for:**\n- **Forgetting to enable clustering** — every node runs the job; duplicate work and possible data corruption\n- **`initialize-schema: always` in prod** — overwrites Quartz tables on startup; apply DDL via Flyway/Liquibase instead\n- **Same `JobParameters` every run** — `JobInstanceAlreadyCompleteException`; use `RunIdIncrementer` or timestamp\n- **Long-running jobs starving the Quartz thread pool** — increase `threadCount` or run jobs async\n- **No misfire handling** — default policy (`SMART_POLICY`) may pile up missed fires\n- **Missing `requestRecovery(true)`** — node crash orphans in-flight work; another node won't pick it up\n- **Quartz and Batch schemas mixed up** — separate them or document the boundary\n- **`@Scheduled` running alongside Quartz on the same job** — duplicate fires\n\n**Misfire policies (cron triggers)**\n- `withMisfireHandlingInstructionFireAndProceed()` — fire once now, skip intermediate; good for daily reports\n- `withMisfireHandlingInstructionDoNothing()` — skip missed fires; good for high-frequency syncs that shouldn't pile up\n- `withMisfireHandlingInstructionIgnoreMisfires()` — fire all missed instances immediately; rarely what you want\n\n**Thread-pool sizing**\n- `org.quartz.threadPool.threadCount` = max concurrent jobs\n- Too small → jobs miss triggers\n- Too large → resource contention when many jobs fire at once\n- Typical: 5-20 depending on job concurrency\n\n**Node-failure recovery**\n- Quartz cluster detects dead nodes via missed `clusterCheckinInterval` (default 15s)\n- In-flight jobs on dead nodes are re-fired only if `JobDetail.requestRecovery(true)`\n- Recovered jobs may run twice — ensure idempotency in your Batch job\n\n**Observability**\n- Expose Quartz metrics (Micrometer): triggers count, jobs in progress, misfire count\n- Log every `JobExecution` outcome with MDC keys: `jobId`, `batchJobName`, `triggerKey`\n- Alert on: misfire rate > 0, consecutive failures, job duration anomalies\n\n**A mature production pattern:**\n- Quartz clustered mode with DDL via Flyway\n- Each Quartz job is a thin bridge calling `JobLauncher` with timestamp params\n- Misfire policy explicitly chosen per trigger\n- Thread pool sized from peak concurrency measurements\n- Metrics and alerts on misfires and duration anomalies\n- Disable Quartz before DB restore to avoid firing stale triggers"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Scheduled` is unsafe in clusters** — fires on every node.\n- **Quartz clustered mode** uses DB row locks so only one node fires each trigger.\n- **Bridge Quartz to Batch** via `QuartzJobBean` calling `JobLauncher.run(...)`.\n- **Unique `JobParameters` per run** — use `RunIdIncrementer` or a timestamp parameter.\n- **ShedLock** is a lightweight alternative — `@Scheduled` plus a DB lock table.\n- **Kubernetes CronJob** schedules outside the app — simplest in K8s-native stacks.\n- **Misfire policies** control behavior when triggers can't fire on time; `fire-and-proceed` for daily, `do-nothing` for high-frequency.\n- **`requestRecovery(true)`** ensures crashed jobs re-fire on another node — idempotency required."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring's `@Scheduled` works for single-instance deployments, but in a cluster every replica fires the trigger — you need a scheduler with distributed locking.\n\n**Quartz clustered mode is the standard answer:**\n- JDBC-backed JobStore with `org.quartz.jobStore.isClustered=true`\n- All nodes share the same Quartz schema\n- One node grabs the trigger row lock and runs the job\n- Bridge to Spring Batch via `QuartzJobBean` calling `JobLauncher.run(job, params)`\n- Always include a unique parameter (timestamp or `RunIdIncrementer`) so each fire creates a new `JobInstance`\n\n**ShedLock is the lightweight alternative:**\n- `@Scheduled` plus `@SchedulerLock(name, lockAtMostFor, lockAtLeastFor)`\n- Backed by a `LockProvider` (JDBC, Redis, ZooKeeper)\n- Only one node holds the named lock at a time\n- Use when you want simplicity over Quartz's rich features\n\n**Kubernetes CronJob is the operational alternative:**\n- K8s schedules a fresh Pod at each tick\n- Pod runs the Boot app, runs the batch job, exits\n- No scheduler inside the application\n- Use when you're K8s-native and want operational separation\n\n**Production practices:**\n- Apply Quartz DDL via Flyway, not `initialize-schema`\n- Set explicit misfire policies — `fire-and-proceed` for daily reports, `do-nothing` for high-frequency syncs\n- Size the Quartz thread pool to peak job concurrency\n- Set `requestRecovery(true)` on JobDetails so node crashes don't orphan work\n- Make Batch jobs idempotent — recovery may re-run them\n- Emit Micrometer metrics for misfires, durations, in-flight jobs\n\n**Anti-patterns to call out:**\n- `@Scheduled` in a multi-replica deployment\n- Same `JobParameters` every run (`JobInstanceAlreadyCompleteException`)\n- `initialize-schema: always` in production\n- Long-running jobs starving the Quartz thread pool\n\nIn an interview I'd emphasize that the choice is operational, not technical — Quartz, ShedLock, and K8s CronJob all work; pick by team expertise and infrastructure context."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Quartz clustering actually guarantee only one node runs a trigger?",
+        "What's the difference between misfire policies fire-and-proceed and do-nothing?",
+        "When would you prefer ShedLock over Quartz?",
+        "How do you ensure idempotency when a node crashes mid-job and Quartz recovers it?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch and Quartz Clustered Scheduling Guide",
+        "metaDescription": "Schedule Spring Batch jobs with Quartz in clustered mode; compare with ShedLock and Kubernetes CronJob; misfire policies, recovery, and JobParameters."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring's @Scheduled works for single-instance deployments, but in a cluster every replica fires the trigger — you need a scheduler with distributed locking.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A Spring Batch job needs a trigger — cron, fixed interval, or external event. The right choice depends on whether the application runs on a single instance or a cluster. Single-instance scheduling: @Scheduled is built-in, zero dependencies, perfect for one JVM Falls apart in multi-node deployments — every replica fires Cluster-safe scheduling options: Quartz — rich scheduler with cron, misfire handling, persistence, clustering (DB-backed) ShedLock — wrapper around @Scheduled using a DB lock for distributed-safe execution Kubernetes CronJob — K8s."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Scheduler selection, distributed-locking concern, Quartz clustering, Batch integration"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@Scheduled is unsafe in clusters — fires on every node",
+              "Quartz clustered mode uses DB row locks so only one node fires each trigger",
+              "Bridge Quartz to Batch via QuartzJobBean calling JobLauncher",
+              "Unique JobParameters per run — use RunIdIncrementer or a timestamp parameter",
+              "ShedLock is a lightweight alternative — @Scheduled plus a DB lock table"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A Spring Batch job needs a trigger — cron, fixed interval, or external event. The right choice depends on whether the application runs on a single instance or a cluster. Single-instance scheduling: @Scheduled is built-in, zero dependencies, perfect for one JVM Falls apart in multi-node deployments — every replica fires Cluster-safe scheduling options: Quartz — rich scheduler with cron, misfire handling, persistence, clustering (DB-backed) ShedLock — wrapper around @Scheduled using a DB lock for distributed-safe execution Kubernetes CronJob — K8s schedules a Pod that runs a one-shot Boot app; simplest in K8s Spring Cloud Data Flow — visual orchestration for batch pipelines Airflow / external DAG tools — orchestrator triggers via REST/CLI The key question: do I want this job."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using @Scheduled in a multi-replica deployment",
+              "not enabling Quartz clustering"
+            ]
+          }
+        ],
+        "cap": "Quartz clustered mode is the standard answer: JDBC-backed JobStore with org.quartz.jobStore.isClustered=true All nodes share the same Quartz schema One node grabs the trigger row lock and runs the job",
+        "familiarity_anchors": [
+          "Spring",
+          "Scheduled",
+          "Quartz"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Quartz clustering actually guarantee only one node runs a trigger?",
+          "What's the difference between misfire policies fire-and-proceed and do-nothing?",
+          "When would you prefer ShedLock over Quartz?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sbt-quartz-002",
+      "slug": "quartz-misfire-recovery-and-jobparameters-uniqueness",
+      "question": "How do Quartz misfire policies and `requestRecovery` interact with Spring Batch JobInstance uniqueness? How do you design for crash-safe scheduled batch jobs?",
+      "title": "Quartz Misfires, Recovery, and Spring Batch JobInstance Uniqueness",
+      "direct_answer": "Quartz **misfire policies** control what happens when a trigger can't fire on time — `fireAndProceed` for catch-up-once semantics, `doNothing` for skip-and-wait. **`requestRecovery(true)`** on a `JobDetail` causes the trigger to re-fire on another node when its owner crashes mid-execution. Both interact with Spring Batch's **JobInstance uniqueness rule** — same `Job` name plus same `JobParameters` is one logical instance. Crash-safe design means: include a **timestamp or run-id parameter** so each fire creates a new instance; make the **batch job idempotent** so recovery doesn't double-process; and ensure the **Quartz JobDetail and Spring Batch Job names** are decoupled so you can rename triggers without breaking job restart.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "medium",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand the interplay between Quartz semantics and Spring Batch's identity model under failure scenarios",
+        "common_mistake": "Setting `requestRecovery(true)` on a non-idempotent job, or using fixed parameters that cause `JobInstanceAlreadyCompleteException` on the recovery fire",
+        "to_stand_out": "Discuss the difference between Quartz's job-level recovery and Spring Batch's step-level restart, and how they compose without duplicating work"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Morgan Stanley",
+        "Wells Fargo",
+        "Capital One",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Quartz Has Its Own Failure Semantics That Compose with Spring Batch's",
+            "content": "Quartz and Spring Batch each have their own model for what happens under failure, and the two compose subtly. Misunderstanding the composition leads to either skipped runs (silent gaps in scheduled jobs) or double-runs (duplicate processing).\n\n**Quartz's failure axis: misfires and recovery**\n- **Misfire** — a trigger should have fired but didn't (scheduler down, thread pool busy, missed by `misfireThreshold`)\n- **Recovery** — a Quartz job that was running on a dead node, re-assigned to a live node\n\n**Spring Batch's failure axis: JobInstance and restart**\n- **JobInstance** — Job name + JobParameters; uniqueness is enforced\n- **JobExecution** — one attempt of a JobInstance; FAILED executions can be restarted\n- **Restart** — same JobInstance picks up at the last committed step/chunk\n\n**The composition problem:**\n- Quartz fires a trigger at 02:30; the batch job runs and crashes at 03:15\n- Quartz's recovery re-fires the trigger on another node at 03:16\n- The batch job tries to launch with the same `JobParameters` and gets `JobInstanceAlreadyCompleteException` if the prior run completed, or restarts the prior FAILED execution if it didn't\n\n**The design rule:** decide explicitly whether each scheduled fire is a **new logical run** (timestamp/run-id parameter) or a **continuation of a prior fire** (parameters constant per logical run, recovery picks up restart)."
+          },
+          {
+            "type": "step",
+            "title": "Quartz Misfire Policies — What They Mean for Spring Batch",
+            "content": "Misfire policies decide what happens when a trigger should have fired but didn't. The choice matters for batch jobs because it determines whether you get the missed run later or skip it entirely.\n\n**Cron trigger misfire policies**\n- `withMisfireHandlingInstructionFireAndProceed()` — fire once now, skip intermediate; good for daily reports where missing yesterday is fine\n- `withMisfireHandlingInstructionDoNothing()` — skip missed; wait for next scheduled fire; good for high-frequency syncs that shouldn't pile up\n- `withMisfireHandlingInstructionIgnoreMisfires()` — fire all missed; rarely what you want for batch jobs\n\n**Simple trigger misfire policies**\n- `withMisfireHandlingInstructionFireNow()`\n- `withMisfireHandlingInstructionRescheduleNextWithRemainingCount()`\n- `withMisfireHandlingInstructionRescheduleNowWithRemainingCount()`\n\n**Concrete examples:**\n\n```java\n@Bean\npublic Trigger dailyReportTrigger(JobDetail dailyReportJob) {\n    return TriggerBuilder.newTrigger()\n            .forJob(dailyReportJob)\n            .withSchedule(CronScheduleBuilder.cronSchedule(\"0 30 2 * * ?\")\n                    .withMisfireHandlingInstructionFireAndProceed())\n            .build();\n}\n\n@Bean\npublic Trigger metricsSyncTrigger(JobDetail metricsSyncJob) {\n    return TriggerBuilder.newTrigger()\n            .forJob(metricsSyncJob)\n            .withSchedule(CronScheduleBuilder.cronSchedule(\"*/5 * * * * ?\")\n                    .withMisfireHandlingInstructionDoNothing())\n            .build();\n}\n```\n\n**Misfire threshold**\n- `org.quartz.jobStore.misfireThreshold` (default 60s) — how long after a missed fire Quartz still considers it 'on time'\n- Set to a value larger than your typical scheduler restart window\n- Smaller value = more misfires triggered; larger value = fires that should be late are still considered on time\n\n**The interaction with JobParameters:**\n- A `fireAndProceed` policy will eventually fire — but the batch job needs unique parameters or it'll trip `JobInstanceAlreadyCompleteException`\n- A `doNothing` policy skips entirely — no JobInstance created; nothing to worry about\n\n**Misfire pitfalls:**\n- **Default `SMART_POLICY`** — vendor-specific; explicit policy is always clearer\n- **Setting `misfireThreshold` too small** in flaky environments — every blip causes a misfire\n- **`doNothing` for daily reports** — you silently skip a day if the scheduler hiccups"
+          },
+          {
+            "type": "step",
+            "title": "requestRecovery, JobInstance Uniqueness, and Idempotency",
+            "content": "`requestRecovery(true)` on a `JobDetail` tells Quartz to re-fire the job on another node when its owner crashes. The interaction with Spring Batch's JobInstance model is the source of most production bugs.\n\n**The recovery flow:**\n- Node A picks up trigger; runs `QuartzJobBean.executeInternal()`; calls `jobLauncher.run(job, params)`\n- Node A crashes mid-execution\n- Quartz cluster detects via missed `clusterCheckinInterval`\n- Another node sees `requestRecovery(true)` and re-fires the trigger\n- The recovered fire calls `jobLauncher.run(job, params)` with the **same parameters as the original**\n\n**Three possible outcomes:**\n- The original `JobExecution` was COMPLETED before the crash → `JobInstanceAlreadyCompleteException`; nothing happens\n- The original `JobExecution` was STARTED at crash → restart resumes from the last committed step/chunk\n- The original `JobExecution` is still in STARTED status (no cleanup ran) → restart attempt fails with `JobExecutionAlreadyRunningException`\n\n**Crash-safe design**\n\n```java\npublic class CrashSafeBatchQuartzJob extends QuartzJobBean {\n    @Autowired private JobLauncher jobLauncher;\n    @Autowired private Job reportingJob;\n    @Autowired private JobExplorer jobExplorer;\n\n    @Override\n    protected void executeInternal(JobExecutionContext ctx) {\n        long fireInstanceId = Long.parseLong(\n                ctx.getFireInstanceId().replaceAll(\"\\\\D\", \"\").substring(0, 10));\n        JobParameters params = new JobParametersBuilder()\n                .addLong(\"fireInstanceId\", fireInstanceId)\n                .addString(\"triggeredBy\", ctx.getTrigger().getKey().getName())\n                .toJobParameters();\n        try {\n            JobExecution exec = jobLauncher.run(reportingJob, params);\n            if (exec.getStatus() == BatchStatus.FAILED) {\n                throw new JobExecutionException(\"Batch job failed\", false);\n            }\n        } catch (JobInstanceAlreadyCompleteException ignored) {\n        } catch (Exception e) {\n            throw new JobExecutionException(e, false);\n        }\n    }\n}\n```\n\n**The cleanup problem**\n- Crashed Node A's `JobExecution` and `StepExecution` rows stay in STARTED status indefinitely\n- Until they're marked FAILED, restart tries fail with `JobExecutionAlreadyRunningException`\n- Need a **separate cleanup job** that runs every N minutes, finds STARTED executions older than threshold, marks them FAILED\n\n```java\npublic class AbandonedExecutionsCleanupTasklet implements Tasklet {\n    private final JobRepository jobRepo;\n    private final JobExplorer explorer;\n    private final Duration threshold;\n\n    @Override\n    public RepeatStatus execute(StepContribution contribution, ChunkContext ctx) {\n        Set<JobExecution> running = explorer.findRunningJobExecutions(\"reportingJob\");\n        Instant cutoff = Instant.now().minus(threshold);\n        for (JobExecution exec : running) {\n            if (exec.getStartTime().toInstant().isBefore(cutoff)) {\n                exec.setStatus(BatchStatus.FAILED);\n                exec.setExitStatus(ExitStatus.FAILED.addExitDescription(\"Abandoned after node crash\"));\n                exec.setEndTime(new Date());\n                jobRepo.update(exec);\n            }\n        }\n        return RepeatStatus.FINISHED;\n    }\n}\n```\n\n**Idempotency requirements**\n- Recovered jobs may double-process committed chunks if the batch job is non-idempotent\n- UPSERT writers, idempotency keys, and the outbox pattern all help\n- Side effects (emails, API calls) deserve special attention — they're not rolled back"
+          },
+          {
+            "type": "step",
+            "title": "Designing Crash-Safe Scheduled Batch Jobs",
+            "content": "A crash-safe scheduled batch job composes Quartz's recovery semantics with Spring Batch's restart semantics. Three pieces are essential.\n\n**1. Decide whether each fire is a new logical run or a continuation**\n\n- **New logical run per fire** — include a timestamp or `fireInstanceId` parameter; recovery creates a new `JobInstance`; cleanup of in-flight crashed instances is a separate concern\n- **Continuation across recovery** — keep parameters constant per logical period (e.g., `processingDate=2024-01-15`); recovery restarts the FAILED execution\n\n**2. Make the batch job idempotent**\n\n- Reads via paging readers with stable sort keys\n- UPSERT writers (`INSERT ... ON CONFLICT DO UPDATE`)\n- Idempotency keys in business records\n- Outbox pattern for non-transactional side effects\n- Defer side effects (emails, API calls) to a final step that runs only after the chunk step completes\n\n**3. Operational hygiene**\n\n- Cleanup job for abandoned `JobExecution`s in STARTED status\n- Metrics on misfire count, recovery count, job duration\n- Alerts on consecutive failures, abnormal duration, missing scheduled fires\n- Logs with MDC: `triggerKey`, `fireInstanceId`, `jobInstanceId`, `jobExecutionId`\n\n**Decoupling Quartz JobDetail names from Spring Batch Job names**\n\n```java\n@Bean\npublic JobDetail dailyReportJobDetail() {\n    return JobBuilder.newJob(SpringBatchQuartzJob.class)\n            .withIdentity(\"dailyReportTrigger\")\n            .usingJobData(\"batchJobName\", \"reportingJob\")\n            .storeDurably()\n            .requestRecovery(true)\n            .build();\n}\n\npublic class SpringBatchQuartzJob extends QuartzJobBean {\n    @Autowired private JobRegistry jobRegistry;\n    @Autowired private JobLauncher jobLauncher;\n\n    @Override\n    protected void executeInternal(JobExecutionContext ctx) throws JobExecutionException {\n        String batchJobName = ctx.getMergedJobDataMap().getString(\"batchJobName\");\n        try {\n            Job batchJob = jobRegistry.getJob(batchJobName);\n            JobParameters params = buildParams(ctx);\n            jobLauncher.run(batchJob, params);\n        } catch (Exception e) {\n            throw new JobExecutionException(e, false);\n        }\n    }\n}\n```\n\nThis lets you rename Quartz triggers without breaking the underlying batch job, and lets one Quartz bean serve multiple batch jobs."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Recovery Helps, When It Hurts",
+            "content": "**When `requestRecovery(true)` helps:**\n- Long-running jobs where a node crash is expensive to discard\n- Jobs that are idempotent and tolerate re-execution safely\n- Critical schedules where a missed run has business impact\n\n**When `requestRecovery(true)` hurts:**\n- Non-idempotent jobs — recovered execution may double-process\n- Short jobs where re-running from scratch is cheaper than restart\n- Jobs whose side effects (emails, API calls) cannot be safely repeated\n\n**When `fireAndProceed` misfire policy helps:**\n- Daily reports — running yesterday's report at 03:30 instead of 02:30 is fine\n- Maintenance jobs — late is better than skipped\n\n**When `fireAndProceed` misfire policy hurts:**\n- High-frequency jobs that should not pile up — every 5-minute sync running 30 minutes late is wasted work\n- Jobs whose business semantics depend on running at the scheduled time\n\n**Watch for:**\n- **Same parameters every run + restart-on-recovery semantics** — `JobInstanceAlreadyCompleteException` after the first successful run\n- **Timestamp parameter + recovery** — recovery creates a new JobInstance, doesn't restart the failed one; original FAILED execution lingers\n- **No cleanup of abandoned `JobExecution`s** — STARTED status forever; restart attempts blocked\n- **`requestRecovery(true)` + non-idempotent batch job** — duplicate writes, duplicate side effects\n- **Default `SMART_POLICY` misfire** — surprising vendor-specific behavior; always set explicit policy\n- **`misfireThreshold` too small** — flaky environments produce constant misfires"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Misfire policy** — `fireAndProceed` for daily, `doNothing` for high-frequency; never leave default `SMART_POLICY`.\n- **`requestRecovery(true)`** — re-fire on another node when owner crashes; idempotency required.\n- **JobInstance uniqueness rule** — same Job name + same JobParameters = one instance.\n- **Crash-safe design** — decide per fire: new logical run (timestamp param) or continuation (constant param + restart).\n- **Cleanup job for abandoned executions** — mark STARTED status older than threshold as FAILED.\n- **Decouple Quartz JobDetail names from Spring Batch Job names** — `JobRegistry.getJob(name)` lookup.\n- **Non-transactional side effects need extra care** — emails and API calls aren't rolled back; outbox pattern."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Quartz and Spring Batch each have their own failure semantics, and the two compose subtly.\n\n**Quartz's failure axis:**\n- Misfire — trigger should have fired but didn't (scheduler down, thread pool busy)\n- Recovery — a job running on a dead node re-fires on a live node when `requestRecovery(true)` is set\n\n**Spring Batch's failure axis:**\n- JobInstance = Job name + JobParameters; uniqueness enforced\n- JobExecution = one attempt of a JobInstance; FAILED executions can be restarted\n\n**The composition rule:**\n- Decide explicitly whether each scheduled fire is a new logical run or a continuation\n- New run per fire — include timestamp/fireInstanceId parameter; recovery creates a new JobInstance\n- Continuation — keep parameters constant per logical period; recovery restarts the FAILED execution\n\n**Misfire policies:**\n- `fireAndProceed` — fire once now, skip intermediate; good for daily reports\n- `doNothing` — skip missed, wait for next; good for high-frequency syncs\n- `ignoreMisfires` — rarely what you want\n- Never leave the default `SMART_POLICY` — vendor-specific behavior\n\n**`requestRecovery(true)` semantics:**\n- Recovered job re-fires with the same parameters as the original\n- Original was COMPLETED → `JobInstanceAlreadyCompleteException`\n- Original was STARTED at crash → restart resumes from last committed step\n- Original still in STARTED status (no cleanup) → restart fails with `JobExecutionAlreadyRunningException`\n\n**Operational hygiene:**\n- Cleanup job marks abandoned `JobExecution`s in STARTED status as FAILED after threshold\n- Metrics on misfire count, recovery count, job duration\n- Decouple Quartz JobDetail names from Spring Batch Job names — use `JobRegistry.getJob(name)` lookup\n\n**Idempotency requirements:**\n- Recovered jobs may double-process committed chunks if the batch job is non-idempotent\n- UPSERT writers, idempotency keys, outbox pattern\n- Side effects (emails, API calls) — defer to a final step or use outbox\n\n**Anti-patterns:**\n- `requestRecovery(true)` on non-idempotent jobs\n- Same parameters every run + restart-on-recovery semantics\n- No cleanup of abandoned executions\n- Default `SMART_POLICY` misfire\n\nIn an interview I'd emphasize the JobInstance uniqueness rule — that's the constraint Quartz semantics have to compose around."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens when Quartz recovers a job whose original JobExecution is still in STARTED status?",
+        "How would you design a daily batch job so that recovery picks up the failed execution rather than creating a new one?",
+        "Why is the default misfire policy SMART_POLICY a poor choice for production batch jobs?",
+        "How does the cleanup job for abandoned executions interact with Quartz's recovery mechanism?"
+      ],
+      "seo": {
+        "metaTitle": "Quartz Misfires, Recovery, and Spring Batch Uniqueness",
+        "metaDescription": "How Quartz misfire policies and requestRecovery interact with Spring Batch JobInstance uniqueness. Crash-safe design for scheduled batch jobs."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Quartz and Spring Batch each have their own failure semantics, and the two compose subtly.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Quartz and Spring Batch each have their own model for what happens under failure, and the two compose subtly. Misunderstanding the composition leads to either skipped runs (silent gaps in scheduled jobs) or double-runs (duplicate processing). Quartz's failure axis: misfires and recovery Misfire — a trigger should have fired but didn't (scheduler down, thread pool busy, missed by misfireThreshold) Recovery — a Quartz job that was running on a dead node, re-assigned to a live node Spring Batch's failure axis."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the interplay between Quartz semantics and Spring Batch's identity model under failure scenarios"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Misfire policy — fireAndProceed for daily, doNothing for high-frequency; never leave default SMART_POLICY",
+              "requestRecovery(true) — re-fire on another node when owner crashes; idempotency required",
+              "JobInstance uniqueness rule — same Job name + same JobParameters = one instance",
+              "Crash-safe design — decide per fire: new logical run (timestamp param) or continuation (constant param + restart)",
+              "Cleanup job for abandoned executions — mark STARTED status older than threshold as FAILED"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Quartz and Spring Batch each have their own model for what happens under failure, and the two compose subtly. Misunderstanding the composition leads to either skipped runs (silent gaps in scheduled jobs) or double-runs (duplicate processing). Quartz's failure axis: misfires and recovery Misfire — a trigger should have fired but didn't (scheduler down, thread pool busy, missed by misfireThreshold) Recovery — a Quartz job that was running on a dead node, re-assigned to a live node Spring Batch's failure axis: JobInstance and restart JobInstance — Job name + JobParameters; uniqueness is enforced JobExecution — one attempt of a JobInstance; FAILED executions can be restarted Restart — same JobInstance picks up at the last committed step/chunk The composition problem: Quartz fires."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Setting requestRecovery(true) on a non-idempotent job, or using fixed parameters that cause JobInstanceAlreadyCompleteException on the recovery fire"
+            ]
+          }
+        ],
+        "cap": "Quartz's failure axis: Misfire — trigger should have fired but didn't (scheduler down, thread pool busy) Recovery — a job running on a dead node re-fires on a live node when requestRecovery(true) is s",
+        "familiarity_anchors": [
+          "Quartz",
+          "JobDetail",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens when Quartz recovers a job whose original JobExecution is still in STARTED status?",
+          "How would you design a daily batch job so that recovery picks up the failed execution rather than creating a new one?",
+          "Why is the default misfire policy SMART_POLICY a poor choice for production batch jobs?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

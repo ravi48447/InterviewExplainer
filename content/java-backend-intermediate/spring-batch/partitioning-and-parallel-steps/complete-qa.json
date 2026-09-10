@@ -1,0 +1,282 @@
+{
+  "topic": "Partitioning and Parallel Steps",
+  "topicSlug": "partitioning-and-parallel-steps",
+  "questions": [
+    {
+      "id": "sbt-part-001",
+      "slug": "spring-batch-partitioning-parallel-strategies",
+      "question": "Explain the four Spring Batch parallelism strategies — multi-threaded step, parallel steps, async processor/writer, and partitioning (local/remote).",
+      "title": "Spring Batch Parallelism: Multi-Threaded, Async, Partitioning",
+      "direct_answer": "Spring Batch has four parallelism strategies. **Multi-threaded step** runs one step on multiple threads sharing the reader/writer (reader must be thread-safe; restart weakens). **Parallel steps** run independent steps concurrently via a `split` in the job flow. **Async processor/writer** wraps each item in a `Future` on a thread pool — best when the **processor is I/O-bound**. **Partitioning** splits input into ranges; a master step launches N worker steps locally or on remote JVMs via messaging — scales best and preserves restartability per slice. Choose based on where the bottleneck is: CPU (partitioning / multi-threaded), per-item I/O (async), independent workloads (parallel steps).",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of Batch concurrency primitives, when each applies, thread-safety/restartability trade-offs",
+        "common_mistake": "Using multi-threaded step with non-thread-safe reader; partitioning when a simpler strategy would work",
+        "to_stand_out": "Discuss `Partitioner` interface, grid size vs thread pool size, remote partitioning with Kafka/AMQP, restart semantics per strategy"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "JP Morgan",
+        "Citi",
+        "Capital One",
+        "Bloomberg"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Parallelism — Map the Bottleneck to the Right Strategy",
+            "content": "Single-threaded Spring Batch steps bottleneck on **per-item I/O** (external API per record), **CPU work** on large datasets, **DB throughput** (single connection serializes inserts), or **independent workloads** the job could run concurrently. The four parallelism strategies map to these bottlenecks differently — picking the wrong one wastes complexity without solving the problem.\n\n**The four strategies in order of complexity:**\n- **Multi-threaded step** — one step, multiple threads share reader/writer\n- **Parallel steps** — independent steps run concurrently via `split`\n- **Async processor/writer** — `AsyncItemProcessor` / `AsyncItemWriter` execute per-item processing on a thread pool\n- **Partitioning (local or remote)** — master step splits input; N worker steps process slices independently\n\n**Decision principle:**\n- Bottleneck is processor I/O per item → **async processor/writer**\n- Independent unrelated work → **parallel steps**\n- Huge dataset that splits naturally by key → **partitioning**\n- Simple single-machine throughput, restart not critical → **multi-threaded step**\n- Otherwise → stay single-threaded and tune chunk size + writer choice first"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Master + Worker Topology for Partitioning",
+            "content": "```mermaid\nflowchart TB\n    job[\"Job: nightlyReport\"]\n    job --> masterStep[\"Master Step (partitioner+handler)\"]\n    masterStep --> partitioner[\"Partitioner: split input into N slices (e.g., hash(customerId) mod N)\"]\n    partitioner --> ctx1[\"ExecutionContext slice 1 (minId=0, maxId=100K)\"]\n    partitioner --> ctx2[\"ExecutionContext slice 2 (minId=100K, maxId=200K)\"]\n    partitioner --> ctxN[\"ExecutionContext slice N (minId=900K, maxId=1M)\"]\n    ctx1 --> worker1[\"Worker Step 1 (reader+processor+writer)\"]\n    ctx2 --> worker2[\"Worker Step 2 (reader+processor+writer)\"]\n    ctxN --> workerN[\"Worker Step N (reader+processor+writer)\"]\n    worker1 --> repo[(\"JobRepository (StepExecution per worker)\")]\n    worker2 --> repo\n    workerN --> repo\n    masterStep -.coordinates via.-> handler[\"PartitionHandler (TaskExecutor or MessageChannel)\"]\n    handler -.local.-> threadPool[\"ThreadPoolTaskExecutor (in-JVM workers)\"]\n    handler -.remote.-> queue[\"Message Channel (Kafka, AMQP, JMS)\"]\n    queue --> remoteWorker1[\"Remote Worker JVM 1\"]\n    queue --> remoteWorkerM[\"Remote Worker JVM M\"]\n```"
+          },
+          {
+            "type": "step",
+            "title": "Strategy 1 — Multi-Threaded Step",
+            "content": "The simplest strategy and often the wrong default. One step, multiple threads share the same reader and writer.\n\n**Configuration**\n\n```java\n@Bean\npublic Step multiThreadedStep(JobRepository repo, PlatformTransactionManager tx,\n                              SynchronizedItemStreamReader<Order> reader,\n                              ItemWriter<Order> writer) {\n    return new StepBuilder(\"mt\", repo)\n            .<Order, Order>chunk(100, tx)\n            .reader(reader)\n            .writer(writer)\n            .taskExecutor(new SimpleAsyncTaskExecutor(\"mt-\"))\n            .throttleLimit(4)\n            .build();\n}\n```\n\n**Requirements and gotchas**\n- **Reader must be thread-safe** — most aren't. `JdbcCursorItemReader`, `FlatFileItemReader` maintain cursor state; wrap with `SynchronizedItemStreamReader`\n- **Restart semantics weaken** — multiple threads advance the reader concurrently; `ExecutionContext` position may be inaccurate on restart\n- **Output order is lost** — items written out of input order\n\n```java\n@Bean\npublic SynchronizedItemStreamReader<Order> safeReader(JdbcCursorItemReader<Order> delegate) {\n    SynchronizedItemStreamReader<Order> r = new SynchronizedItemStreamReader<>();\n    r.setDelegate(delegate);\n    return r;\n}\n```\n\n**Use when**\n- I/O-bound step on a single machine\n- Simple writer, restart-order not critical\n- Quick win where partitioning would be overkill\n\n**Avoid when**\n- Strict restart correctness matters\n- Reader cannot be made thread-safe\n- Throughput requirements exceed what one JVM can do"
+          },
+          {
+            "type": "step",
+            "title": "Strategy 2 — Parallel Steps via Split Flow",
+            "content": "Multiple independent steps run concurrently using a `TaskExecutor`. The split joins all branches before the next step runs.\n\n```java\n@Bean\npublic Job importJob(JobRepository repo,\n                     Step loadCustomers, Step loadProducts, Step loadOrders,\n                     Step aggregate, TaskExecutor taskExecutor) {\n    Flow loadAll = new FlowBuilder<SimpleFlow>(\"loadAll\")\n            .split(taskExecutor)\n            .add(\n                new FlowBuilder<SimpleFlow>(\"custFlow\").start(loadCustomers).build(),\n                new FlowBuilder<SimpleFlow>(\"prodFlow\").start(loadProducts).build(),\n                new FlowBuilder<SimpleFlow>(\"ordFlow\").start(loadOrders).build())\n            .build();\n\n    return new JobBuilder(\"importJob\", repo)\n            .start(loadAll)\n            .next(aggregate)\n            .build();\n}\n```\n\n**Behavior**\n- Each step has its own reader/writer — no thread-safety issues\n- Each step has independent restart state — failed branches restart independently\n- The aggregate step waits for all branches to complete\n\n**Use when**\n- Genuinely independent workloads (load three reference tables before main processing)\n- Wall-clock matters and the workloads have no data dependency\n\n**Pitfalls**\n- **Hidden data dependencies** — flows that share a target table can deadlock\n- **Single-thread executor** — silent serialization\n- **Long-tail flow blocking the join** — one slow flow holds back the next step"
+          },
+          {
+            "type": "step",
+            "title": "Strategy 3 — Async Processor and Writer",
+            "content": "The processor runs on a thread pool and returns a `Future`; the writer unwraps the futures and writes the actual results. The reader stays single-threaded — no thread-safety issues.\n\n```java\n@Bean\npublic AsyncItemProcessor<Order, Invoice> asyncProcessor(\n        ItemProcessor<Order, Invoice> delegate) {\n    AsyncItemProcessor<Order, Invoice> p = new AsyncItemProcessor<>();\n    p.setDelegate(delegate);\n    p.setTaskExecutor(processorPool());\n    return p;\n}\n\n@Bean\npublic AsyncItemWriter<Invoice> asyncWriter(ItemWriter<Invoice> delegate) {\n    AsyncItemWriter<Invoice> w = new AsyncItemWriter<>();\n    w.setDelegate(delegate);\n    return w;\n}\n\n@Bean\npublic Step processOrdersAsync(JobRepository repo, PlatformTransactionManager tx,\n                               ItemReader<Order> reader,\n                               AsyncItemProcessor<Order, Invoice> ap,\n                               AsyncItemWriter<Invoice> aw) {\n    return new StepBuilder(\"orders\", repo)\n            .<Order, Future<Invoice>>chunk(100, tx)\n            .reader(reader).processor(ap).writer(aw)\n            .build();\n}\n\n@Bean\npublic ThreadPoolTaskExecutor processorPool() {\n    ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();\n    exec.setCorePoolSize(10);\n    exec.setMaxPoolSize(20);\n    exec.setThreadNamePrefix(\"async-proc-\");\n    exec.initialize();\n    return exec;\n}\n```\n\n**Why it works**\n- Reader is still single-threaded — no thread-safety issues\n- `AsyncItemProcessor` submits each item to the executor; returns a `Future<Invoice>`\n- Chunk fills with `Future`s; `AsyncItemWriter` calls `future.get()` and writes actual results\n\n**Use when**\n- Processor makes HTTP calls, external lookups, CPU-heavy transformations per item\n- Per-item latency dominates step duration\n\n**Avoid when**\n- Reader/writer are the bottleneck (still serial)\n- Item processing has shared mutable state"
+          },
+          {
+            "type": "step",
+            "title": "Strategy 4 — Partitioning (Local and Remote)",
+            "content": "A master step splits input into N slices via a `Partitioner`; each slice runs as an independent **worker step** with its own reader, processor, writer, and `ExecutionContext`.\n\n**Local partitioning**\n\n```java\n@Bean\npublic Partitioner rangePartitioner() {\n    return gridSize -> {\n        long totalRows = 1_000_000L;\n        long rowsPerSlice = totalRows / gridSize;\n        Map<String, ExecutionContext> map = new HashMap<>();\n        for (int i = 0; i < gridSize; i++) {\n            ExecutionContext ec = new ExecutionContext();\n            ec.putLong(\"minId\", i * rowsPerSlice);\n            ec.putLong(\"maxId\", (i + 1) * rowsPerSlice);\n            map.put(\"partition\" + i, ec);\n        }\n        return map;\n    };\n}\n\n@Bean\npublic Step partitionedMasterStep(JobRepository repo, Step workerStep,\n                                  Partitioner partitioner,\n                                  TaskExecutor partitionExecutor) {\n    return new StepBuilder(\"master\", repo)\n            .partitioner(\"worker\", partitioner)\n            .step(workerStep)\n            .gridSize(10)\n            .taskExecutor(partitionExecutor)\n            .build();\n}\n\n@Bean\n@StepScope\npublic JdbcPagingItemReader<Order> workerReader(\n        DataSource ds,\n        @Value(\"#{stepExecutionContext['minId']}\") Long minId,\n        @Value(\"#{stepExecutionContext['maxId']}\") Long maxId) {\n    return new JdbcPagingItemReaderBuilder<Order>()\n            .name(\"workerReader\")\n            .dataSource(ds)\n            .selectClause(\"SELECT id, customer_id, amount\")\n            .fromClause(\"FROM orders\")\n            .whereClause(\"WHERE id BETWEEN :minId AND :maxId\")\n            .sortKeys(Map.of(\"id\", Order.ASCENDING))\n            .parameterValues(Map.of(\"minId\", minId, \"maxId\", maxId))\n            .pageSize(500)\n            .rowMapper(new OrderRowMapper())\n            .build();\n}\n```\n\n**Key traits**\n- Each worker has its own `ExecutionContext` with slice parameters\n- Each worker is a full step — restartable, skip/retry, independent metrics\n- Scales by `gridSize × worker throughput`\n- Worker step **must be `@StepScope`** to receive the partition context via `@Value(\"#{stepExecutionContext['minId']}\")`\n\n**Remote partitioning**\n- Workers run on separate JVMs; coordinated via messaging (AMQP, JMS, Kafka)\n- Master publishes `StepExecutionRequest` messages; worker nodes consume, run, reply with status\n- Use Spring Batch Integration's `MessageChannelPartitionHandler`\n\n```java\n@Bean\npublic MessageChannelPartitionHandler partitionHandler(\n        MessagingTemplate template,\n        QueueChannel replies) {\n    MessageChannelPartitionHandler handler = new MessageChannelPartitionHandler();\n    handler.setStepName(\"workerStep\");\n    handler.setGridSize(10);\n    handler.setMessagingOperations(template);\n    handler.setReplyChannel(replies);\n    return handler;\n}\n```\n\n**When to use remote**\n- More than 10M rows, scaling beyond one JVM\n- Cluster of worker pods on Kubernetes\n- Workers needing dedicated machines (GPU nodes, high-memory instances)\n\n**Partitioner strategies**\n- **Range-based** — min/max ID per partition; simple for integer keys\n- **Hash-based** — `mod(key, gridSize)`; uniform distribution for non-uniform IDs\n- **Column-value** — one partition per region/tenant/file\n- **File-based** — one partition per input file\n\nBeware **data skew** — range partitioning over a dense first segment and sparse rest creates unequal work; hash usually gives better uniformity."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Strategy Comparison",
+            "content": "Pick the simplest strategy that fits the bottleneck.\n\n| Strategy | Best For | Restart Semantics | Thread-Safety Requirement |\n|---|---|---|---|\n| Multi-threaded step | Simple I/O-bound step on one machine | Weak; reader position imprecise | Reader must be wrapped (`SynchronizedItemStreamReader`) |\n| Parallel steps (split) | Independent workloads in DAG | Strong; each step independent | None (each step has its own reader/writer) |\n| Async processor/writer | Per-item I/O-bound (HTTP, lookups) | Normal (reader serial) | Processor outputs must be thread-safe |\n| Partitioning (local) | Large datasets, in-JVM scaling | Strong; per-partition restart | None (each worker has its own reader/writer) |\n| Partitioning (remote) | Massive datasets, cluster scaling | Strong; per-partition restart | None; messaging coordinates |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Choosing a Strategy and the Pitfalls That Follow",
+            "content": "**When parallelism helps:**\n- Bottleneck identified by measurement, not theory\n- Datasets large enough that wall-clock saving justifies complexity\n- Idempotent processors and writers ready for re-execution under restart\n\n**When parallelism hurts:**\n- Small datasets where framework overhead exceeds work\n- Non-idempotent side effects amplified across threads or partitions\n- Shared resources (single DB connection, single index) contend under concurrent writes\n\n**Watch for:**\n- **Multi-threaded + non-thread-safe reader** — corruption or exceptions; wrap in `SynchronizedItemStreamReader`\n- **Partitioning with non-idempotent writer** — restart of a failed partition duplicates rows; UPSERT or idempotency keys required\n- **Oversized grid** — thousands of tiny partitions; framework overhead dominates\n- **Undersized grid** — workers idle; doesn't scale\n- **Skewed partitioner** — one worker does 90% of the work; prefer hash for uniform IDs\n- **Async processor returning non-thread-safe objects** — corruption in writer\n- **Writer contention** — all partitions hit the same DB index; consider per-partition tables and a final merge step\n- **Missing `@StepScope`** on worker step — `@Value(\"#{stepExecutionContext['x']}\")` resolves to null at context load\n\n**Tuning guidance:**\n- Start with grid size = number of cores on the worker host\n- Match thread pool size to I/O bandwidth, not CPU cores, for I/O-bound work\n- For async processor: pool size ~= concurrent I/O ops (≈ 2 × RTT × throughput)\n- Monitor DB load — partitioning heavy inserts can hammer a single primary\n\n**Production example — nightly reporting ETL**\n- 40M rows; local partitioning, grid size 40, thread pool 20\n- Partitioner: `hash(customer_id) mod 40`\n- Worker: chunk 500, `JdbcBatchItemWriter`\n- Result: 6 minutes (down from 90 minutes single-threaded)\n- Read from replica, write to primary\n- Restart only re-runs failed partitions"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Four strategies** — multi-threaded step, parallel steps, async processor/writer, partitioning.\n- **Multi-threaded step** — shared reader/writer must be thread-safe; weakens restart.\n- **Parallel steps (split)** — independent DAG branches; each has its own reader/writer.\n- **Async processor/writer** — processor on thread pool; reader stays serial; great for per-item I/O.\n- **Partitioning** — master splits input; worker steps run per slice; best scalability and restart semantics.\n- **Local vs remote partitioning** — local in one JVM, remote on separate JVMs via messaging.\n- **Grid size vs thread pool size** — partitions created vs concurrent workers; can differ.\n- **Idempotency is non-negotiable** — failed partitions re-run; processors and writers must tolerate it."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch has four parallelism strategies, and the right one depends on where the bottleneck is.\n\n**Multi-threaded step:**\n- One step, multiple threads share reader/writer\n- Reader must be thread-safe — wrap in `SynchronizedItemStreamReader`\n- Restart semantics weaken — `ExecutionContext` position imprecise\n- Use for I/O-bound steps where restart-order isn't critical\n\n**Parallel steps via split:**\n- Independent steps run concurrently using a `TaskExecutor`\n- Each step has its own reader/writer — no thread-safety issues\n- Each has independent restart state\n- Use for genuinely independent workloads (loading reference tables in parallel)\n\n**Async processor/writer:**\n- `AsyncItemProcessor` wraps the processor in a `Future` on a thread pool\n- `AsyncItemWriter` unwraps the futures and writes actual results\n- Reader stays single-threaded — no thread-safety issues\n- Use when the processor is I/O-bound (HTTP calls, external lookups)\n\n**Partitioning:**\n- Master step splits input via `Partitioner` into N slices\n- Each slice runs as an independent worker step with its own reader/writer\n- Local partitioning — workers in one JVM via `TaskExecutor`\n- Remote partitioning — workers on separate JVMs via Kafka, AMQP, JMS messaging\n- Worker step must be `@StepScope` to receive partition context via `@Value(\"#{stepExecutionContext['x']}\")`\n- Best scalability + restart semantics — failed partitions restart independently\n\n**Decision framework:**\n- Bottleneck in processor (per-item I/O) → async processor/writer\n- Multiple independent workloads → parallel steps\n- Huge dataset that splits naturally → partitioning\n- Simple single-machine, restart not critical → multi-threaded\n- None fit or small dataset → stay single-threaded; tune chunk size and writer choice first\n\n**Pitfalls to call out:**\n- Multi-threaded + non-thread-safe reader — corruption\n- Partitioning + non-idempotent writer — duplicates on restart\n- Oversized/undersized grid — framework overhead or idle workers\n- Skewed partitioner — one worker does 90% of work; prefer hash for uniformity\n- Writer contention on a single DB index — all partitions serialize on the same lock\n\nIn an interview I'd emphasize that you measure first, then pick the strategy. Multi-threaded step is rarely the right answer in 2026 — async or partitioning almost always beat it on both performance and correctness."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does multi-threaded step break restart semantics, and how do you work around it?",
+        "How would you implement remote partitioning with Kafka as the message channel?",
+        "What is data skew in partitioning, and how do you detect and fix it?",
+        "When would AsyncItemProcessor be the wrong choice?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Partitioning and Parallelism Strategies",
+        "metaDescription": "Comprehensive guide to Spring Batch parallelism: multi-threaded step, split flow, async processor, local and remote partitioning, with restart and skew analysis."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Batch has four parallelism strategies, and the right one depends on where the bottleneck is.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Single-threaded Spring Batch steps bottleneck on per-item I/O (external API per record), CPU work on large datasets, DB throughput (single connection serializes inserts), or independent workloads the job could run concurrently. The four parallelism strategies map to these bottlenecks differently — picking the wrong one wastes complexity without solving the problem. The four strategies in order of complexity: Multi-threaded step — one step, multiple threads share reader/writer Parallel steps — independent steps run concurrently via split Async processor/writer — AsyncItemProcessor."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of Batch concurrency primitives, when each applies, thread-safety/restartability trade-offs"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Four strategies — multi-threaded step, parallel steps, async processor/writer, partitioning",
+              "Multi-threaded step — shared reader/writer must be thread-safe; weakens restart",
+              "Parallel steps (split) — independent DAG branches; each has its own reader/writer",
+              "Async processor/writer — processor on thread pool; reader stays serial; great for per-item I/O",
+              "Partitioning — master splits input; worker steps run per slice; best scalability and restart semantics"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Single-threaded Spring Batch steps bottleneck on per-item I/O (external API per record), CPU work on large datasets, DB throughput (single connection serializes inserts), or independent workloads the job could run concurrently. The four parallelism strategies map to these bottlenecks differently — picking the wrong one wastes complexity without solving the problem. The four strategies in order of complexity: Multi-threaded step — one step, multiple threads share reader/writer Parallel steps — independent steps run concurrently via split Async processor/writer — AsyncItemProcessor / AsyncItemWriter execute per-item processing on a thread pool Partitioning (local or remote) — master step splits input; N worker steps process slices independently Decision principle: Bottleneck is processor I/O per item → async processor/writer Independent unrelated work → parallel."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using multi-threaded step with non-thread-safe reader",
+              "partitioning when a simpler strategy would work"
+            ]
+          }
+        ],
+        "cap": "Multi-threaded step is rarely the right answer in 2026 — async or partitioning almost always beat it on both performance and correctness.",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "Multi"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does multi-threaded step break restart semantics, and how do you work around it?",
+          "How would you implement remote partitioning with Kafka as the message channel?",
+          "What is data skew in partitioning, and how do you detect and fix it?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sbt-part-002",
+      "slug": "remote-partitioning-with-messaging-design",
+      "question": "How do you design a remote partitioning topology in Spring Batch using Kafka or AMQP? What are the failure modes and how do you handle restart?",
+      "title": "Remote Partitioning Design — Kafka, AMQP, Failure Modes, Restart",
+      "direct_answer": "Remote partitioning uses **Spring Batch Integration's `MessageChannelPartitionHandler`** to publish `StepExecutionRequest` messages to a queue (Kafka, RabbitMQ, JMS); worker JVMs subscribe, execute the worker step against their slice's `ExecutionContext`, and reply with `StepExecution` status. The master polls or listens for replies and aggregates outcomes. Critical design choices are **at-least-once message delivery** (workers must be idempotent), **per-partition timeout** (master must declare a partition failed if no reply arrives), **dead-letter handling** (poison messages from worker JVM crashes), and **JobRepository sharing** so the master can read worker step status from the BATCH_* tables.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "medium",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can architect a distributed batch system and reason about messaging semantics, restart, and failure modes",
+        "common_mistake": "Assuming Kafka delivery is exactly-once or that workers can be stateful across messages",
+        "to_stand_out": "Discuss JobRepository as the source of truth, worker idempotency requirements, partition timeout handling, and the failover model when worker JVMs crash mid-step"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "JP Morgan",
+        "Capital One",
+        "Stripe",
+        "Coinbase"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Remote Partitioning Is a Distributed Batch Pattern Built on Messaging",
+            "content": "Local partitioning maxes out at one JVM's CPU and memory. **Remote partitioning** scales across JVMs by treating workers as independent processes coordinated by messaging.\n\n**The components:**\n- **Master step** — runs the `Partitioner`, publishes `StepExecutionRequest` per slice, waits for replies, aggregates results\n- **Message channel** — Kafka, RabbitMQ, JMS, ActiveMQ; carries requests and replies\n- **Worker JVMs** — subscribe to the request channel, execute the worker step against their slice, publish reply to the master\n- **Shared JobRepository** — the BATCH_* tables in a database accessible to both master and workers; this is the source of truth for step status\n\n**Why messaging instead of in-memory coordination:**\n- Workers can run on separate hosts (Kubernetes pods, dedicated VMs)\n- Failures are isolated — a worker crash does not take down the master\n- Horizontal scaling — add more worker pods to increase throughput\n- Workers can be heterogeneous — some on GPU nodes, some on high-memory nodes\n\n**The hard parts:**\n- **At-least-once delivery** — Kafka, RabbitMQ both deliver at-least-once; workers must be idempotent\n- **Partition timeout** — if a worker JVM crashes between accepting the request and replying, the master must declare the partition failed and restart it\n- **Restart correctness** — on job restart, only failed partitions re-run; the JobRepository tracks each partition's `StepExecution` status independently"
+          },
+          {
+            "type": "step",
+            "title": "Wiring Remote Partitioning with Kafka",
+            "content": "Spring Batch Integration provides `MessageChannelPartitionHandler` and helper classes for the master/worker handshake. The configuration mirrors local partitioning but replaces the `TaskExecutor` with a messaging channel.\n\n**Master configuration**\n\n```java\n@Bean\npublic MessageChannelPartitionHandler partitionHandler(\n        MessagingTemplate template,\n        @Qualifier(\"replies\") PollableChannel replies) {\n    MessageChannelPartitionHandler handler = new MessageChannelPartitionHandler();\n    handler.setStepName(\"workerStep\");\n    handler.setGridSize(10);\n    handler.setMessagingOperations(template);\n    handler.setReplyChannel(replies);\n    handler.setPollInterval(2000);\n    handler.setTimeout(300_000);\n    return handler;\n}\n\n@Bean\npublic Step masterStep(JobRepository repo, Partitioner partitioner,\n                       MessageChannelPartitionHandler handler) {\n    return new StepBuilder(\"masterStep\", repo)\n            .partitioner(\"workerStep\", partitioner)\n            .partitionHandler(handler)\n            .build();\n}\n```\n\n**Worker configuration (separate JVM)**\n\n```java\n@Bean\npublic StepExecutionRequestHandler stepExecutionRequestHandler(\n        JobExplorer jobExplorer, StepLocator stepLocator) {\n    StepExecutionRequestHandler handler = new StepExecutionRequestHandler();\n    handler.setJobExplorer(jobExplorer);\n    handler.setStepLocator(stepLocator);\n    return handler;\n}\n\n@Bean\npublic IntegrationFlow workerFlow(KafkaTemplate<String, byte[]> kafka,\n                                  StepExecutionRequestHandler handler) {\n    return IntegrationFlow.from(Kafka.messageDrivenChannelAdapter(\n            consumerFactory(), \"batch-requests\"))\n            .handle(handler, \"handle\")\n            .channel(replyChannel())\n            .get();\n}\n\n@Bean\n@StepScope\npublic JdbcPagingItemReader<Order> workerReader(\n        DataSource ds,\n        @Value(\"#{stepExecutionContext['minId']}\") Long minId,\n        @Value(\"#{stepExecutionContext['maxId']}\") Long maxId) {\n    return new JdbcPagingItemReaderBuilder<Order>()\n            .dataSource(ds)\n            .selectClause(\"SELECT id, customer_id, amount\")\n            .fromClause(\"FROM orders\")\n            .whereClause(\"WHERE id BETWEEN :minId AND :maxId\")\n            .sortKeys(Map.of(\"id\", Order.ASCENDING))\n            .parameterValues(Map.of(\"minId\", minId, \"maxId\", maxId))\n            .pageSize(500)\n            .rowMapper(new OrderRowMapper())\n            .build();\n}\n```\n\n**Shared JobRepository**\n- Both master and workers connect to the same database holding BATCH_JOB_EXECUTION, BATCH_STEP_EXECUTION, BATCH_STEP_EXECUTION_CONTEXT\n- Worker writes its `StepExecution` status to the shared repo\n- Master reads worker status from the repo (fallback when reply messages are lost)\n\n**Two communication patterns**\n- **Request-reply via messaging** — master waits for reply messages on a dedicated channel\n- **JobRepository polling** — master polls BATCH_STEP_EXECUTION; useful when reply channel is unreliable"
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and How the Topology Handles Them",
+            "content": "Distributed systems fail in ways local systems don't. Anticipate the failure modes upfront.\n\n**Worker JVM crashes after accepting the request**\n- The worker started processing but did not reply\n- Master's partition timeout expires; partition marked FAILED in JobRepository\n- On job restart, only this partition re-runs (other completed partitions skipped)\n- Workers must be idempotent — partial commits before crash will be re-processed\n\n**Worker JVM crashes mid-chunk**\n- The chunk transaction rolled back — no partial writes\n- StepExecution status remains STARTED in the repo until timeout\n- A separate \"stuck step\" cleanup job marks abandoned executions FAILED\n\n**Reply message lost (Kafka rebalance, network blip)**\n- Worker completed, reply went unacknowledged\n- Master's partition timeout expires\n- Master falls back to JobRepository — reads the worker's StepExecution status\n- If status is COMPLETED, partition succeeds despite missing reply\n\n**Duplicate request delivery (at-least-once)**\n- Kafka may redeliver if worker crashed between processing and ack\n- The repeat worker creates a new StepExecution for the same partition (different `JobExecution.id`)\n- Worker must check the JobRepository before processing — if a previous StepExecution for this partition is COMPLETED, skip\n- Or write idempotent business logic — UPSERT, idempotency keys\n\n**Partition timeout too short**\n- Master declares partition FAILED while worker still processing\n- On restart, the partition runs again — wasted work and possible double-write if not idempotent\n- Set timeout based on p99 partition duration, not p50\n\n**Master JVM crashes**\n- Job execution status stays STARTED in repo\n- A separate operational job marks abandoned JobExecutions FAILED after a configurable timeout\n- Restart launches a new JobExecution; partitions that completed are skipped\n\n**Kafka topic partition assignment changes mid-job**\n- Worker is rebalanced away from a partition mid-step\n- The work is re-delivered to another consumer\n- Same idempotency requirement\n\n**Operational hardening**\n- Dead-letter topic for poison messages — workers that fail repeatedly publish to a DLQ\n- Replay from JobRepository — operational tool that re-publishes requests for FAILED partitions\n- Monitoring on partition durations — outliers indicate skew or worker problems\n- Circuit breaker on the master — if N consecutive partition timeouts, halt the job and alert"
+          },
+          {
+            "type": "step",
+            "title": "Restart, Idempotency, and Operational Patterns",
+            "content": "Restart in remote partitioning is more nuanced than in local partitioning because the failure surface includes messaging.\n\n**Restart semantics**\n- A failed `JobExecution` retains all StepExecutions (master + each partition's worker) in the repo\n- Restart launches a new `JobExecution` for the same `JobInstance`\n- Master step re-runs — but only partitions with FAILED StepExecutions are re-published to the worker channel\n- Workers process the re-delivered partition slices from scratch — idempotency required\n\n**Idempotency strategies**\n- **UPSERT writers** — `INSERT ... ON CONFLICT (id) DO UPDATE` for Postgres; `INSERT ... ON DUPLICATE KEY UPDATE` for MySQL\n- **Idempotency keys in business records** — natural keys or hash of input\n- **Outbox pattern** — write side effects to a table inside the chunk transaction; a dispatcher publishes them once\n- **Defer side effects to a final step** — emails, API calls run only after partitioned import is fully complete\n\n**Operational patterns**\n- **Cleanup job** — a Spring Batch job that runs every N minutes, finds StepExecutions in STARTED status older than threshold, marks them FAILED\n- **Replay tool** — operator runs a script that finds FAILED partitions and re-publishes their requests\n- **Per-partition observability** — Micrometer metrics tagged with partition name; alert on outliers\n- **Schema versioning** — partition's `ExecutionContext` may include a schema version; workers reject stale schemas to avoid running outdated business logic\n\n```java\npublic class CleanupAbandonedExecutionsTasklet implements Tasklet {\n    private final JobRepository jobRepo;\n    private final Duration threshold;\n\n    @Override\n    public RepeatStatus execute(StepContribution contribution, ChunkContext ctx) {\n        Set<JobExecution> running = jobRepo.findRunningJobExecutions(\"orderJob\");\n        Instant cutoff = Instant.now().minus(threshold);\n        for (JobExecution exec : running) {\n            for (StepExecution step : exec.getStepExecutions()) {\n                if (step.getStatus() == BatchStatus.STARTED &&\n                    step.getStartTime().toInstant().isBefore(cutoff)) {\n                    step.setStatus(BatchStatus.FAILED);\n                    step.setExitStatus(ExitStatus.FAILED.addExitDescription(\"abandoned\"));\n                    jobRepo.update(step);\n                }\n            }\n        }\n        return RepeatStatus.FINISHED;\n    }\n}\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Local vs Remote Partitioning Trade-offs",
+            "content": "Pick the simplest topology that meets the throughput requirement.\n\n| Aspect | Local Partitioning | Remote Partitioning |\n|---|---|---|\n| Scaling unit | One JVM's threads | N worker JVMs |\n| Throughput ceiling | Host CPU and memory | Cluster size |\n| Failure isolation | Worker crash = JVM crash | Worker crash isolated |\n| Coordination | `TaskExecutor` (in-memory) | Messaging (Kafka, AMQP, JMS) |\n| Operational complexity | Low | High (DLQ, cleanup, monitoring) |\n| Idempotency requirement | Yes | Yes (more critical due to redelivery) |\n| Restart granularity | Per partition | Per partition |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Remote Partitioning Earns Its Complexity",
+            "content": "**When remote partitioning helps:**\n- Datasets too large for one JVM (>10M rows or memory-intensive processing)\n- Workloads needing heterogeneous worker hosts (GPU, high-memory)\n- Burst workloads on Kubernetes — scale workers up for the job, scale down after\n- Multi-tenant batch systems where tenants run on isolated workers\n\n**When remote partitioning hurts:**\n- Datasets that fit in one JVM — local partitioning is simpler and faster\n- Teams without messaging operational expertise — Kafka/AMQP infrastructure is a major dependency\n- Jobs with low fault tolerance — distributed coordination adds failure modes\n- Short-running jobs — startup overhead dominates\n\n**Watch for:**\n- **Non-idempotent writers** — at-least-once delivery means duplicate runs of the same partition\n- **Partition timeout too short** — causes premature failure declaration\n- **Master JVM as single point of failure** — implement master cleanup job\n- **Missing dead-letter topic** — poison partitions block the topic\n- **JobRepository contention** — many workers writing to BATCH_* tables; size the DB connection pool\n- **Messaging schema drift** — `StepExecutionRequest` payload changes break in-flight workers\n- **Worker version skew** — old worker code processing new partition contexts; schema-version the context"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`MessageChannelPartitionHandler`** wires the master to a messaging channel; workers subscribe and reply.\n- **Shared JobRepository** is the source of truth for partition status — master falls back to it when reply messages are lost.\n- **At-least-once delivery** — workers must be idempotent; UPSERT, idempotency keys, outbox patterns.\n- **Partition timeout** — set on p99 duration; too short causes premature failure declaration.\n- **Master JVM crash recovery** — separate cleanup job marks abandoned executions FAILED.\n- **Restart re-runs only failed partitions** — JobRepository tracks each partition independently.\n- **Dead-letter topic** for poison partitions — operators replay after fixing root cause.\n- **Workers must be `@StepScope`** to receive partition context via `@Value(\"#{stepExecutionContext['x']}\")`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Remote partitioning scales Spring Batch beyond one JVM by treating workers as independent processes coordinated by messaging.\n\n**The components:**\n- Master step runs the `Partitioner` and `MessageChannelPartitionHandler`; publishes `StepExecutionRequest` per slice to the messaging channel; waits for replies\n- Worker JVMs subscribe to the request channel; execute the worker step against their slice's `ExecutionContext`; reply with `StepExecution` status\n- Shared JobRepository (BATCH_* tables) is the source of truth — master falls back to it when reply messages are lost\n\n**Critical design choices:**\n- **At-least-once delivery** — Kafka, RabbitMQ both deliver at-least-once; workers must be idempotent (UPSERT, idempotency keys, outbox)\n- **Partition timeout** — master must declare a partition failed if no reply arrives; set on p99 duration not p50\n- **Dead-letter topic** for poison partitions; operator replays after fixing\n- **JobRepository sharing** so master can read worker step status from the BATCH_* tables when messaging fails\n\n**Failure modes:**\n- Worker crashes after accepting request — partition timeout fires; marked FAILED; restart re-runs only this partition\n- Reply message lost — master falls back to JobRepository; if StepExecution is COMPLETED, partition succeeds\n- Duplicate delivery — repeat worker creates new StepExecution; idempotent business logic prevents corruption\n- Master JVM crash — separate cleanup job marks abandoned executions FAILED after threshold\n\n**Restart semantics:**\n- Failed `JobExecution` retains all StepExecutions in the repo\n- Restart launches new `JobExecution` for same `JobInstance`\n- Only FAILED partition StepExecutions get re-published\n- Workers process re-delivered slices from scratch — idempotency mandatory\n\n**When to use remote vs local:**\n- Datasets that fit in one JVM — local partitioning is simpler\n- More than 10M rows or heterogeneous worker hosts — remote partitioning earns its complexity\n- Teams without Kafka/AMQP expertise — local partitioning first\n\nIn an interview I'd emphasize the JobRepository as source of truth and the at-least-once idempotency requirement — those are the two pieces that distinguish a working topology from a broken one."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle the case where a worker JVM crashes after writing some chunks but before replying to the master?",
+        "Why is the JobRepository the source of truth even when reply messages succeed?",
+        "How would you implement a cleanup job that marks abandoned StepExecutions as FAILED?",
+        "What are the trade-offs between Kafka, RabbitMQ, and JMS for the partition channel?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Remote Partitioning with Kafka and AMQP",
+        "metaDescription": "Designing remote partitioning topologies in Spring Batch with messaging — at-least-once delivery, partition timeout, restart semantics, and failure handling."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Remote partitioning scales Spring Batch beyond one JVM by treating workers as independent processes coordinated by messaging.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Local partitioning maxes out at one JVM's CPU and memory. Remote partitioning scales across JVMs by treating workers as independent processes coordinated by messaging. The components: Master step — runs the Partitioner, publishes StepExecutionRequest per slice, waits for replies, aggregates results Message channel — Kafka, RabbitMQ, JMS, ActiveMQ; carries requests and replies Worker JVMs — subscribe to the request channel, execute the worker step against their slice, publish reply to the master Shared JobRepository — the BATCH_* tables in a database accessible to both master and workers; this is the."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Spring Batch Integration provides MessageChannelPartitionHandler and helper classes for the master/worker handshake.",
+              "The configuration mirrors local partitioning but replaces the TaskExecutor with a messaging channel.",
+              "Master configuration ``java @Bean public MessageChannelPartitionHandler partitionHandler( MessagingTemplate template, @Qualifier(\"replies\") PollableChannel replies) { MessageChannelPartitionHandler handler = new MessageChannelPartitionHandler(); handler.setStepName(\"workerStep\"); handler.setGridSize(10); handler.setMessagingOperations(template); handler.setReplyChannel(replies); handler.setPollInterval(2000); handler.setTimeout(300_000); return handler; } @Bean public Step masterStep(JobRepository repo, Partitioner partitioner, MessageChannelPartitionHandler handler) { return new StepBuilder(\"masterStep\", repo) .partitioner(\"workerStep\", partitioner) .partitionHandler(handler) .build(); } ` Worker configuration (separate JVM) `java @Bean public StepExecutionRequestHandler stepExecutionRequestHandler( JobExplorer jobExplorer, StepLocator stepLocator) { StepExecutionRequestHandler handler = new StepExecutionRequestHandler(); handler.setJobExplorer(jobExplorer); handler.setStepLocator(stepLocator); return handler; } @Bean public IntegrationFlow workerFlow(KafkaTemplate<String, byte[]> kafka, StepExecutionRequestHandler handler) { return IntegrationFlow.from(Kafka.messageDrivenChannelAdapter( consumerFactory(), \"batch-requests\")) .handle(handler, \"handle\") .channel(replyChannel()) .get(); } @Bean @StepScope public JdbcPagingItemReader<Order> workerReader( DataSource ds, @Value(\"#{stepExecutionContext['minId']}\") Long minId, @Value(\"#{stepExecutionContext['maxId']}\") Long maxId) { return new JdbcPagingItemReaderBuilder<Order>() .dataSource(ds) .selectClause(\"SELECT id, customer_id, amount\") .fromClause(\"FROM orders\") .whereClause(\"WHERE id."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "MessageChannelPartitionHandler wires the master to a messaging channel; workers subscribe and reply",
+              "Shared JobRepository is the source of truth for partition status — master falls back to it when reply messages are lost",
+              "At-least-once delivery — workers must be idempotent; UPSERT, idempotency keys, outbox patterns",
+              "Partition timeout — set on p99 duration; too short causes premature failure declaration",
+              "Master JVM crash recovery — separate cleanup job marks abandoned executions FAILED"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Assuming Kafka delivery is exactly-once or that workers can be stateful across messages"
+          }
+        ],
+        "cap": "The components: Master step runs the Partitioner and MessageChannelPartitionHandler; publishes StepExecutionRequest per slice to the messaging channel; waits for replies Worker JVMs subscribe to the r",
+        "familiarity_anchors": [
+          "Remote",
+          "Spring",
+          "Batch"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle the case where a worker JVM crashes after writing some chunks but before replying to the master?",
+          "Why is the JobRepository the source of truth even when reply messages succeed?",
+          "How would you implement a cleanup job that marks abandoned StepExecutions as FAILED?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

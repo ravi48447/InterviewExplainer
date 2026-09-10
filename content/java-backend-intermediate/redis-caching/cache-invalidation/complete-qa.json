@@ -1,0 +1,131 @@
+{
+  "topic": "Cache Invalidation",
+  "topicSlug": "cache-invalidation",
+  "questions": [
+    {
+      "id": "redis-011",
+      "slug": "cache-invalidation-strategies",
+      "question": "What are the main cache invalidation strategies and how do you implement them in Spring Boot with Redis?",
+      "title": "Cache Invalidation Strategies in Spring Boot with Redis",
+      "direct_answer": "Cache invalidation strategies include TTL-based expiry (entries expire automatically after a fixed duration), event-driven invalidation (write operations evict or update specific cache keys), pattern-based bulk eviction (delete all keys matching a prefix), and publish/subscribe invalidation (broadcast eviction commands to all application nodes sharing a distributed cache). Spring's @CacheEvict handles explicit invalidation, but complex invalidation patterns often require direct RedisTemplate usage or a Redis pub/sub broadcast.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of cache consistency strategies beyond simple TTLs, especially for distributed systems where multiple app instances share a Redis cache.",
+        "common_mistake": "Relying solely on TTL for consistency without handling write-triggered invalidation, resulting in stale data for the full TTL duration after an update.",
+        "to_stand_out": "Discuss the two hard problems of computer science joke, then seriously cover versioned cache keys as an alternative to explicit invalidation, and mention cache-tag-based invalidation used by CDNs and frameworks like Symfony."
+      },
+      "company_tags": [
+        "Etsy",
+        "Shopify",
+        "GitHub",
+        "Stack Overflow",
+        "Cloudflare"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why cache invalidation is hard — and how to manage it",
+            "content": "Phil Karlton's famous quip — 'there are only two hard things in computer science: cache invalidation and naming things' — resonates because invalidation sits at the intersection of consistency, performance, and operational complexity. Every invalidation strategy trades one of these for another.\n\nTTL-based expiry is the simplest: every entry gets an `EXPIRE` and Redis automatically evicts it after the timer elapses. The staleness window equals the TTL — a 10-minute TTL means users may see data up to 10 minutes out of date. This is acceptable for product catalogs, feature flags, or configuration, but unacceptable for user balances or inventory counts. Even when you use event-driven invalidation, always set a TTL as a safety net so orphaned keys (from bugs or missed events) eventually clean up.\n\nEvent-driven invalidation ties cache eviction to write operations. When a `User` entity is updated, the service explicitly evicts `users:42` from Redis. Spring's `@CacheEvict` automates this declaratively. The challenge is cascading invalidation: updating a `Category` might affect thousands of `Product` cache entries. Pattern-based eviction (`SCAN` + `DEL` for matching keys) handles this but is expensive on large keyspaces. Avoid `KEYS *` in production — it blocks the single-threaded Redis command loop for the entire scan duration.\n\nFor multi-level caching (Caffeine in front of Redis), a single instance evicting from Redis does not clear other instances' local caches. Redis pub/sub broadcast invalidation solves this: the writing instance publishes an invalidation message, and all instances subscribe and evict from their local caches. Versioned cache keys offer an alternative: encode a generation counter in the key (`product:42:v7`), bump the version on write, and let old entries expire via TTL — no explicit invalidation needed."
+          },
+          {
+            "type": "overview",
+            "title": "Four Cache Invalidation Strategies",
+            "content": "**Strategy 1 — TTL-Based Expiry (Passive)**\nEvery cached entry gets a time-to-live. Redis automatically removes it when the timer elapses. Staleness window equals the TTL. Best as a safety net under all other strategies.\n\n**Strategy 2 — Event-Driven Invalidation (Active)**\nWrite operations explicitly evict or update specific cache keys. Spring's `@CacheEvict` handles this declaratively. Challenge: cascading invalidation when one write affects many cached entries.\n\n**Strategy 3 — Versioned Cache Keys**\nEncode a generation counter in the key: `product:42:v7`. On write, increment the version. Old entries become unreachable and expire via TTL. No explicit invalidation logic needed.\n\n**Strategy 4 — Pub/Sub Broadcast Invalidation**\nFor multi-level caches (Caffeine + Redis), the writing instance publishes an invalidation event on a Redis channel. All instances subscribe and evict from their local caches. Essential when local in-process caches front the shared Redis cache.\n\n| Strategy | Staleness | Complexity | Best For |\n|---|---|---|---|\n| TTL-only | Up to TTL duration | Lowest | Config data, feature flags |\n| Event-driven (`@CacheEvict`) | Near-zero | Low-medium | User profiles, product data |\n| Versioned keys | Near-zero | Medium | High-cardinality entities |\n| Pub/Sub broadcast | Near-zero (cross-instance) | Medium-high | Multi-level cache architectures |"
+          },
+          {
+            "type": "code_example",
+            "title": "Event-Driven Invalidation with @CacheEvict",
+            "content": "Event-driven invalidation using Spring's cache annotations:\n\n```java\n@Service\npublic class ProductService {\n\n    // Read path: cache the result\n    @Cacheable(value = \"products\", key = \"#id\")\n    public Product findById(Long id) {\n        return productRepo.findById(id).orElseThrow();\n    }\n\n    // Write path: evict the stale entry after update\n    @CacheEvict(value = \"products\", key = \"#product.id\")\n    public Product update(Product product) {\n        return productRepo.save(product);\n    }\n\n    // Cascading invalidation: category change affects many products\n    @Caching(evict = {\n        @CacheEvict(value = \"categories\", key = \"#id\"),\n        @CacheEvict(value = \"products\", allEntries = true)\n    })\n    public void updateCategory(Long id, Category category) {\n        categoryRepo.save(category);\n    }\n\n    // Pattern-based eviction using RedisTemplate directly\n    public void evictProductsByPrefix(String prefix) {\n        Set<String> keys = redisTemplate.keys(\"products:\" + prefix + \"*\");\n        if (keys != null && !keys.isEmpty()) {\n            redisTemplate.delete(keys);\n        }\n    }\n}\n```\n\n**Warning:** `redisTemplate.keys()` uses the `KEYS` command, which blocks the Redis event loop on large keyspaces. For production, use `SCAN` via `RedisTemplate.execute()` with a `ScanOptions` cursor instead."
+          },
+          {
+            "type": "code_example",
+            "title": "Pub/Sub Broadcast for Local Cache Sync",
+            "content": "Multi-instance cache sync using Redis Pub/Sub:\n\n```java\n@Configuration\npublic class CacheInvalidationConfig {\n\n    public static final String INVALIDATION_CHANNEL = \"cache:invalidate\";\n\n    @Bean\n    public RedisMessageListenerContainer listenerContainer(\n            RedisConnectionFactory cf) {\n        RedisMessageListenerContainer container =\n            new RedisMessageListenerContainer();\n        container.setConnectionFactory(cf);\n        container.addMessageListener(\n            new CacheInvalidationListener(localCacheManager()),\n            new ChannelTopic(INVALIDATION_CHANNEL));\n        return container;\n    }\n}\n```\n\n```java\npublic class CacheInvalidationListener implements MessageListener {\n\n    private final CacheManager localCache;\n\n    @Override\n    public void onMessage(Message message, byte[] pattern) {\n        String payload = new String(message.getBody());\n        // payload format: \"cacheName:key\"\n        String[] parts = payload.split(\":\", 2);\n        Cache cache = localCache.getCache(parts[0]);\n        if (cache != null) {\n            cache.evict(parts[1]);\n        }\n    }\n}\n```\n\n```java\n@Service\npublic class UserService {\n\n    @Autowired private StringRedisTemplate redis;\n\n    @CacheEvict(value = \"users\", key = \"#user.id\")\n    public User updateUser(User user) {\n        User saved = userRepo.save(user);\n        // Broadcast to all instances so they evict local Caffeine cache\n        redis.convertAndSend(\n            CacheInvalidationConfig.INVALIDATION_CHANNEL,\n            \"users:\" + saved.getId());\n        return saved;\n    }\n}\n```\n\nThis pattern ensures that when instance A updates a user, instances B and C immediately evict their local Caffeine cache entries. The Redis cache is evicted by `@CacheEvict`, and the pub/sub broadcast handles the local caches."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **TTL is the simplest invalidation** — entries expire automatically; appropriate when a small staleness window is acceptable; every cache entry should have a TTL even when other invalidation is used as a safety net\n- **`@CacheEvict` on write for immediate consistency** — delete the cache key in the same service method that writes to the database; the next read re-fetches fresh data and repopulates the cache\n- **TTL as backup even with event-driven invalidation** — if the eviction call fails (Redis unavailable, exception before eviction runs), the TTL ensures the stale entry eventually expires; never rely on eviction alone\n- **Versioned cache keys for bulk invalidation** — `user:v3:{id}` replaces `user:v2:{id}` after a major schema change; old keys expire via TTL without a targeted eviction sweep\n- **Write-through maintains cache-database consistency at write time** — update both the cache and the database in the same operation; the cache is always current but every write touches both; appropriate for high-read, low-write hot data"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Cache invalidation is the hard part of caching — knowing when a cached value is stale and needs to be refreshed. The three main strategies are TTL-based expiry, event-driven invalidation, and versioned keys.\n\n**TTL — simplest, always slightly stale**\n- Set a time-to-live on every cache entry — `SET key value EX 300` expires after 5 minutes regardless of whether the underlying data changed\n- TTL is appropriate when some staleness is acceptable: product catalog, configuration settings, reference data that changes infrequently; the application tolerate serving data that's up to 5 minutes old\n- The downside: a record updated 10 seconds after caching will serve the old value for the remaining TTL; for writes that must be visible immediately, TTL alone is insufficient\n\n**Event-driven invalidation — immediate consistency**\n- When a record is updated, explicitly delete or update the corresponding cache key — `@CacheEvict` in Spring, or a manual `redisTemplate.delete(key)` call in the service method that performs the write\n- This is the correct pattern when reads must reflect the latest write promptly — a user updates their profile and the next page load must show the change, not the cached version\n- The risk: if the write succeeds but the cache eviction fails (Redis is temporarily unavailable), the cache remains stale; use cache eviction as a best-effort operation, relying on a backup TTL to eventually expire the stale entry\n\n**Versioned keys — invalidate by changing the key**\n- Instead of evicting a key, change the version portion of the key — `product:v2:123` replaces `product:v1:123` after an update; the old key is never explicitly deleted, it just stops being referenced and expires via TTL\n- Useful for bulk invalidation: incrementing a global version prefix invalidates all cache entries of that type without needing to know which specific keys to evict"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why should you avoid using KEYS * in production and what is the alternative?",
+        "How do versioned cache keys eliminate the need for explicit invalidation?",
+        "How does Spring's @Caching annotation let you combine @CacheEvict and @CachePut in one method?"
+      ],
+      "seo": {
+        "metaTitle": "Cache Invalidation Strategies in Redis and Spring Boot | Interview Guide",
+        "metaDescription": "Learn TTL-based, event-driven, pattern-based, and pub/sub cache invalidation strategies for Redis in Spring Boot with practical Java code examples."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Cache invalidation is the hard part of caching — knowing when a cached value is stale and needs to be refreshed.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Phil Karlton's famous quip — 'there are only two hard things in computer science: cache invalidation and naming things' — resonates because invalidation sits at the intersection of consistency, performance, and operational complexity. Every invalidation strategy trades one of these for another. TTL-based expiry is the simplest: every entry gets an EXPIRE and Redis automatically evicts it after the timer elapses. The staleness window equals the TTL — a 10-minute TTL means users may see data up to 10 minutes."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical knowledge of cache consistency strategies beyond simple TTLs, especially for distributed systems where multiple app instances share a Redis cache."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "TTL is the simplest invalidation — entries expire automatically",
+              "appropriate when a small staleness window is acceptable",
+              "every cache entry should have a TTL even when other invalidation is used as a safety net @CacheEvict on write for immediate consistency — delete the cache key in the same service method that writes to the database",
+              "the next read re-fetches fresh data and repopulates the cache TTL as backup even with event-driven invalidation — if the eviction call fails (Redis unavailable, exception before eviction runs), the TTL ensures the stale entry eventually expires",
+              "never rely on eviction alone Versioned cache keys for bulk invalidation — user:v3:{id} replaces user:v2:{id} after a major schema change",
+              "old keys expire via TTL without a targeted eviction sweep Write-through maintains cache-database consistency at write time — update both the cache and the database in the same operation",
+              "the cache is always current but every write touches both",
+              "appropriate for high-read, low-write hot data"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Event-driven invalidation using Spring's cache annotations: ``java @Service public class ProductService { // Read path: cache the result @Cacheable(value = \"products\", key = \"#id\") public Product findById(Long id) { return productRepo.findById(id).orElseThrow(); } // Write path: evict the stale entry after update @CacheEvict(value = \"products\", key = \"#product.id\") public Product update(Product product) { return productRepo.save(product); } // Cascading invalidation: category change affects many products @Caching(evict = { @CacheEvict(value = \"categories\", key = \"#id\"), @CacheEvict(value = \"products\", allEntries = true) }) public void updateCategory(Long id, Category category) { categoryRepo.save(category); } // Pattern-based eviction using RedisTemplate directly public void evictProductsByPrefix(String prefix) { Set<String> keys = redisTemplate.keys(\"products:\" + prefix + \"*\"); if (keys != null && !keys.isEmpty()) { redisTemplate.delete(keys); } } } ` Warning."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Relying solely on TTL for consistency without handling write-triggered invalidation, resulting in stale data for the full TTL duration after an update"
+            ]
+          }
+        ],
+        "cap": "TTL — simplest, always slightly stale Set a time-to-live on every cache entry — SET key value EX 300 expires after 5 minutes regardless of whether the underlying data changed TTL is appropriate when s",
+        "familiarity_anchors": [
+          "Cache",
+          "Spring",
+          "CacheEvict"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why should you avoid using KEYS * in production and what is the alternative?",
+          "How do versioned cache keys eliminate the need for explicit invalidation?",
+          "How does Spring's @Caching annotation let you combine @CacheEvict and @CachePut in one method?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app using Redis for session and cache"
+      }
+    }
+  ]
+}

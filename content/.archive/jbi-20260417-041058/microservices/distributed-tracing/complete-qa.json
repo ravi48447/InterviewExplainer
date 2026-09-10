@@ -1,0 +1,243 @@
+{
+  "topic": "Distributed Tracing",
+  "topicSlug": "distributed-tracing",
+  "questions": [
+    {
+      "id": "ms-007",
+      "slug": "distributed-tracing-correlation-id",
+      "question": "How do you implement distributed tracing across microservices?",
+      "title": "Distributed Tracing with Micrometer Tracing (Spring Boot 3)",
+      "direct_answer": "Distributed tracing correlates logs and metrics across service boundaries using trace IDs. Spring Boot 3 uses Micrometer Tracing with Brave/OpenTelemetry, propagating context automatically via HTTP headers.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "How you debug production issues that span multiple services",
+        "common_mistake": "Using a custom correlation-ID header without standard trace propagation",
+        "to_stand_out": "Distinguish between trace ID (whole request), span ID (one service hop), and baggage (user-defined context)"
+      },
+      "company_tags": [
+        "Uber",
+        "Twitter",
+        "Cloudflare",
+        "Datadog"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem: One Request, Five Log Files, Zero Correlation",
+            "content": "A user clicks \"Place Order\" and the request touches the API gateway, order service, inventory service, payment service, and notification service. The order fails. Where? You open five Kibana dashboards and search by timestamp, hoping the same second range catches the right log line in each service. It doesn't, because clocks are skewed by 200ms across hosts. You spend 40 minutes correlating logs that a trace ID would have linked in one click.\n\nDistributed tracing solves this by assigning a single **trace ID** at the entry point (typically the API gateway) and propagating it in HTTP headers to every downstream call. Each service also generates a **span ID** for its portion of the work. Spans are linked into a tree that shows the full call path \u2014 which services were called, in what order, how long each took, and where the failure occurred.\n\nThe mental model is simple: a **trace** is the entire journey of one user request across all services. A **span** is one unit of work within that trace \u2014 a service processing the request, a database query, an HTTP call to a downstream dependency. Spans have parent-child relationships: the order service's span is the parent; the inventory and payment spans are children. The result is a flame graph showing exactly where time was spent and where errors occurred.\n\nThe standard propagation header is **W3C Trace Context** (`traceparent` / `tracestate`), which has replaced the older Zipkin B3 format. Using W3C headers ensures interoperability across languages, frameworks, and observability vendors \u2014 your Java services and your Go services and your Python scripts all participate in the same trace."
+          },
+          {
+            "type": "step",
+            "title": "Spring Boot 3 Auto-Instrumentation \u2014 Near-Zero Code Required",
+            "content": "Spring Boot 3 integrated Micrometer Tracing as the native observability API, replacing the old Spring Cloud Sleuth library. The setup is two dependencies and three lines of YAML \u2014 most of the instrumentation happens automatically.\n\n```xml\n<dependency>\n    <groupId>io.micrometer</groupId>\n    <artifactId>micrometer-tracing-bridge-brave</artifactId>\n</dependency>\n<dependency>\n    <groupId>io.zipkin.reporter2</groupId>\n    <artifactId>zipkin-reporter-brave</artifactId>\n</dependency>\n```\n\n```yaml\nmanagement:\n  tracing:\n    sampling:\n      probability: 1.0         # 100% in dev; 0.05\u20130.10 in production\nspring:\n  application:\n    name: order-service        # appears in trace metadata\nlogging:\n  pattern:\n    level: \"%5p [${spring.application.name},%X{traceId},%X{spanId}]\"\n```\n\nWith this configuration, every log line automatically includes the trace and span IDs. When you search for `traceId=abc123` in your log aggregator, you get every log line from every service that participated in that request \u2014 in order.\n\nThe auto-instrumentation covers `RestTemplate`, `WebClient`, `RestClient`, Spring Data JPA, `@Async` methods, and scheduled tasks. Each outgoing HTTP call automatically injects the `traceparent` header; each incoming call extracts it. You don't write any propagation code. The only requirement is that you use Spring's HTTP clients instead of raw `java.net.HttpURLConnection` \u2014 Spring can only instrument what it controls."
+          },
+          {
+            "type": "step",
+            "title": "Custom Spans and Async Propagation \u2014 Where Auto-Instrumentation Falls Short",
+            "content": "Auto-instrumentation handles HTTP calls and database queries. But when a critical business operation \u2014 payment processing, fraud scoring, inventory reservation \u2014 happens within a single service, you want its own span in the trace so you can see how long it took and whether it failed.\n\nCreate custom spans with the Micrometer `Tracer` API. The try-with-resources pattern ensures the span is always closed, even if the operation throws.\n\n```java\n@Service\npublic class PaymentService {\n    private final Tracer tracer;\n\n    public PaymentResult processPayment(Order order) {\n        Span paymentSpan = tracer.nextSpan().name(\"payment-gateway-call\");\n        try (Tracer.SpanInScope ws = tracer.withSpan(paymentSpan.start())) {\n            paymentSpan.tag(\"order.id\", order.getId());\n            paymentSpan.tag(\"amount\", order.getTotal().toString());\n            PaymentResult result = gateway.charge(order);\n            paymentSpan.tag(\"payment.status\", result.getStatus());\n            return result;\n        } catch (PaymentException e) {\n            paymentSpan.error(e);  // marks span as failed in trace UI\n            throw e;\n        } finally {\n            paymentSpan.end();\n        }\n    }\n}\n```\n\nAsync boundaries \u2014 Kafka, RabbitMQ, `@Async` thread pool hand-offs \u2014 are where traces silently break. When the order service publishes an event to Kafka, the consumer runs in a different service on a different thread, with no HTTP headers to extract context from. Spring Cloud Stream with Micrometer handles this automatically for `@StreamListener` and functional consumers, but custom Kafka producers need manual injection.\n\n```java\nSpan current = tracer.currentSpan();\nif (current != null) {\n    ProducerRecord<String, OrderEvent> record =\n        new ProducerRecord<>(\"order-events\", event);\n    tracing.propagation().injector(ProducerRecord::headers)\n        .inject(current.context(), record);\n    kafkaTemplate.send(record);\n}\n```\n\nWithout this injection, the consumer's processing appears as an orphaned trace with no connection to the originating request. You can't see end-to-end latency from the user's click to the notification being sent."
+          },
+          {
+            "type": "step",
+            "title": "Sampling Strategy \u2014 The Cost vs Visibility Balance",
+            "content": "Tracing 100% of requests in production is expensive. Each span generates metadata that must be collected, transmitted, stored, and indexed. At 10,000 RPS across 5 services with an average of 4 spans per request, that's 200,000 spans per second \u2014 roughly 50GB of storage per day in Zipkin or Jaeger.\n\nThe standard approach is **probability-based sampling** \u2014 trace a percentage of requests. Start at 5\u201310% for most services. This gives you enough traces for general latency analysis while keeping storage costs manageable. Keep the ability to **dynamically raise sampling** during incidents \u2014 a feature flag or config server change that bumps to 100% when you're actively debugging.\n\nEven unsampled traces should have their IDs in log lines. The log pattern `%X{traceId}` works regardless of whether the trace is exported to Zipkin. This means you can always correlate logs by trace ID \u2014 you just won't have the visual flame graph in the trace UI. For the traces that are sampled, set a retention policy (7\u201314 days) to prevent storage from growing indefinitely.\n\nSampling can be smarter than random. **Error-biased sampling** always exports traces that contain an error span, regardless of the probability setting. This ensures you always have trace data for failures, which are the traces you actually need during incidents. Resilience4j and Micrometer support this through custom `Sampler` implementations that check the span's error state before deciding whether to export."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Trace = full journey, span = one unit of work** \u2014 trace ID ties all services together; parent-child relationships build a flame graph.\n- **W3C `traceparent` header** \u2014 the interoperability standard; ensures Java, Go, Python, and Node services contribute to the same trace.\n- **100% sampling melts storage** \u2014 10K RPS \u00d7 5 services \u00d7 4 spans \u2248 50GB/day; use 5\u201310% with error-biased override.\n- **Async boundaries silently break traces** \u2014 Kafka consumers and `@Async` lose context unless you inject/extract headers at boundaries.\n- **Log correlation works without sampling** \u2014 `%X{traceId}` in log pattern adds trace IDs even for unsampled traces."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Distributed tracing solves the problem of debugging requests that span multiple services. When an order fails in production, you need to know exactly where it failed \u2014 the gateway, the order service, the inventory check, or the payment call. Without tracing, you're correlating five log files by timestamp and hoping server clocks are synchronized.\n\n**How it works:**\n- A trace ID is assigned at the entry point and propagated in W3C `traceparent` headers to every downstream call; each service generates a span ID for its work, with parent-child relationships building a flame graph\n- In Spring Boot 3, Micrometer Tracing handles propagation automatically through `RestTemplate`, `WebClient`, and Spring Data without code changes; add the log pattern `%X{traceId}` to correlate logs across services with a single search\n\n**The async boundary gotcha:**\n- When the order service publishes to Kafka, the consumer loses trace context because there's no HTTP header to extract from the message\n- You must explicitly inject the trace context into Kafka record headers at publish time, and extract it in the consumer; without this, the consumer's trace appears orphaned with no connection to the originating request\n\n**Sampling strategy:**\n- Never sample at 100% \u2014 at 10K RPS across 5 services, that's 50GB of trace data per day in Zipkin or Jaeger\n- Use 5\u201310% probability sampling with error-biased override so failures are always captured regardless of the sampling rate; log correlation with `%X{traceId}` still works on unsampled requests\n\nI recommend wiring Micrometer Tracing from day one \u2014 retrofitting trace propagation through async boundaries is significantly harder than getting it right at service creation time."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between Zipkin and Jaeger?",
+        "How do you propagate trace context through Kafka messages?",
+        "What is OpenTelemetry and why is it preferred over vendor-specific tracing libraries?"
+      ],
+      "seo": {
+        "metaTitle": "Distributed Tracing Spring Boot Microservices \u2014 Java Interview",
+        "metaDescription": "Distributed tracing with Micrometer Tracing in Spring Boot 3. Trace IDs, span IDs, Zipkin integration, and log correlation across microservices."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Distributed tracing solves the problem of debugging requests that span multiple services.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A user clicks \"Place Order\" and the request touches the API gateway, order service, inventory service, payment service, and notification service. The order fails. Where? You open five Kibana dashboards and search by timestamp, hoping the same second range catches the right log line in each service. It doesn't, because clocks are skewed by 200ms across hosts. You spend 40 minutes correlating logs that a trace ID would have linked in one click. Distributed tracing solves this by assigning a single trace ID at the entry point (typically the API."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Spring Boot 3 integrated Micrometer Tracing as the native observability API, replacing the old Spring Cloud Sleuth library.",
+              "The setup is two dependencies and three lines of YAML \u2014 most of the instrumentation happens automatically.",
+              "``xml <dependency> <groupId>io.micrometer</groupId> <artifactId>micrometer-tracing-bridge-brave</artifactId> </dependency> <dependency> <groupId>io.zipkin.reporter2</groupId> <artifactId>zipkin-reporter-brave</artifactId> </dependency> ` `yaml management: tracing: sampling: probability: 1.0 # 100% in dev; 0.05\u20130.10 in production spring: application: name: order-service # appears in trace metadata logging: pattern: level: \"%5p [${spring.application.name},%X{traceId},%X{spanId}]\" ` With this configuration, every log line automatically includes the trace and span IDs.",
+              "When you search for traceId=abc123 in your log aggregator, you get every log line from every service that participated in that request \u2014 in order.",
+              "The auto-instrumentation covers RestTemplate, WebClient, RestClient, Spring Data JPA, @Async methods, and scheduled tasks.",
+              "Each outgoing HTTP call automatically injects the traceparent header; each incoming call extracts it."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Trace = full journey, span = one unit of work \u2014 trace ID ties all services together; parent-child relationships build a flame graph",
+              "W3C traceparent header \u2014 the interoperability standard; ensures Java, Go, Python, and Node services contribute to the same trace",
+              "100% sampling melts storage \u2014 10K RPS \u00d7 5 services \u00d7 4 spans \u2248 50GB/day; use 5\u201310% with error-biased override",
+              "Async boundaries silently break traces \u2014 Kafka consumers and @Async lose context unless you inject/extract headers at boundaries",
+              "Log correlation works without sampling \u2014 %X{traceId} in log pattern adds trace IDs even for unsampled traces"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using a custom correlation-ID header without standard trace propagation"
+          }
+        ],
+        "cap": "How it works: A trace ID is assigned at the entry point and propagated in W3C traceparent headers to every downstream call; each service generates a span ID for its work, with parent-child relationshi",
+        "familiarity_anchors": [
+          "Distributed",
+          "Spring",
+          "Micrometer"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between Zipkin and Jaeger?",
+          "How do you propagate trace context through Kafka messages?",
+          "What is OpenTelemetry and why is it preferred over vendor-specific tracing libraries?"
+        ]
+      }
+    },
+    {
+      "id": "scc-006",
+      "slug": "distributed-tracing-micrometer-zipkin",
+      "question": "How do you implement distributed tracing in a Spring Cloud application using Micrometer and Zipkin?",
+      "title": "Distributed Tracing with Micrometer Tracing and Zipkin",
+      "direct_answer": "Micrometer Tracing (which replaced Spring Cloud Sleuth in Spring Boot 3) instruments Spring components to automatically propagate trace IDs and span IDs across HTTP calls and message queues. Spans are exported to Zipkin (or Jaeger/Tempo) for visualization. Each request gets a unique traceId that flows through every service in the call chain.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you understand the trace/span/baggage model, how context propagation works across HTTP and messaging, and how to interpret a distributed trace to diagnose latency",
+        "common_mistake": "Confusing metrics (aggregated counters/gauges \u2014 Prometheus/Micrometer) with distributed tracing (per-request call graphs \u2014 Zipkin/Jaeger). They solve different problems and are complementary, not alternatives.",
+        "to_stand_out": "Explain B3 vs W3C TraceContext propagation header formats, describe sampling strategies (probabilistic vs rate-limiting), mention how to add custom span attributes for business context, and discuss correlating trace IDs in log aggregation (ELK/Grafana Loki)"
+      },
+      "company_tags": [
+        "google",
+        "twitter",
+        "uber",
+        "spotify",
+        "cloudflare"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "When a User Reports a Slow Checkout, You Need One ID That Connects Logs Across Five Services \u2014 That's the Entire Point of Distributed Tracing",
+            "content": "In a monolith, debugging a slow request means reading one thread's stack trace. In microservices, a single checkout fans out: API Gateway \u2192 Order Service \u2192 Inventory Service \u2192 Payment Service \u2192 Notification Service. Each service writes its own logs. When the user reports a 5-second delay, you know the request entered the gateway and eventually completed \u2014 but which service was slow? The Payment Service log shows a call took time, the Inventory log shows nothing unusual, and there's no way to connect them to the same user request without a shared identifier.\n\n**Distributed tracing provides the connection: a trace ID generated at the entry point and propagated through every service in the call chain.** Each service records its work as a span \u2014 a named, timed unit \u2014 linked to the trace. The result is a tree of spans with exact timing: inventory check took 50ms, payment authorization took 4.8 seconds, notification took 10ms. The bottleneck is immediately visible.\n\nThe mistake many candidates make: conflating tracing with metrics. **Metrics are aggregated statistics** \u2014 95th-percentile latency over the last 5 minutes, total request count per endpoint. Prometheus and Micrometer Meters answer: \"Is the system behaving normally overall?\" **Tracing is per-request detail** \u2014 exactly what happened to this specific request, which services it touched, and how long each took. Zipkin and Jaeger answer: \"What went wrong with request X?\" You need both; they are complementary tools, not alternatives.\n\nMicrometer Tracing replaced Spring Cloud Sleuth in Spring Boot 3. The programming model is the same, but the library is now part of the Micrometer ecosystem rather than Spring Cloud."
+          },
+          {
+            "type": "step",
+            "title": "Setup \u2014 Two Dependencies and Zero Code Changes for Automatic HTTP Tracing",
+            "content": "Micrometer Tracing auto-instruments Spring's HTTP stack \u2014 incoming requests, RestTemplate, WebClient, Feign, and Spring Cloud Stream messaging \u2014 without any annotations or code changes. Add the tracer bridge and a reporter, then configure the export endpoint.\n\n```xml\n<!-- Micrometer Tracing + Brave tracer bridge -->\n<dependency>\n  <groupId>io.micrometer</groupId>\n  <artifactId>micrometer-tracing-bridge-brave</artifactId>\n</dependency>\n<!-- Zipkin span reporter -->\n<dependency>\n  <groupId>io.zipkin.reporter2</groupId>\n  <artifactId>zipkin-reporter-brave</artifactId>\n</dependency>\n```\n\n```yaml\nmanagement:\n  tracing:\n    sampling:\n      probability: 0.1     # sample 10% of requests; 1.0 for dev/staging\n  zipkin:\n    tracing:\n      endpoint: http://zipkin:9411/api/v2/spans\n```\n\nWith these two changes, every HTTP request that arrives at your service gets a trace context. If a trace ID already exists in the incoming headers, the service creates a child span under that trace. If no trace ID is present, the service creates a new trace. Every outgoing HTTP call carries the current trace ID forward in the headers.\n\nMicrometer also injects `traceId` and `spanId` into the **MDC (Mapped Diagnostic Context)** automatically. Every log line your application writes includes these IDs without any changes to your logging code. This is the practical daily benefit developers notice first: searching a log aggregator by trace ID returns every log line across all services for that specific request."
+          },
+          {
+            "type": "step",
+            "title": "How Context Crosses Service Boundaries \u2014 HTTP Headers and Messaging Headers",
+            "content": "Trace context propagation is the mechanism connecting spans across services. When Service A calls Service B, Micrometer injects the current trace and span IDs into HTTP headers before sending. Service B extracts them, creates a child span linked to Service A's span, and the trace tree grows.\n\nTwo header formats are in production use today:\n\n- **B3 propagation** (Zipkin's original format): separate headers \u2014 `X-B3-TraceId`, `X-B3-SpanId`, `X-B3-ParentSpanId`, `X-B3-Sampled`. Compatible with older Zipkin deployments and many non-Spring services. The multi-header format is `B3_MULTI`; a single-header format (`b3: {traceId}-{spanId}-{sampling}`) is `B3_SINGLE`.\n- **W3C TraceContext** (`traceparent` header): `traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01` \u2014 one header containing version, trace ID, parent span ID, and flags. The emerging standard, natively supported by OpenTelemetry and modern observability platforms.\n\nConfigure with `management.tracing.propagation.type=B3_MULTI` (Micrometer default) or `W3C`. In a polyglot environment, W3C is the better choice \u2014 it's supported by OpenTelemetry SDKs for Go, Node, Python, and others.\n\nFor **asynchronous messaging** via Spring Cloud Stream or Spring Kafka, Micrometer injects trace context into message headers automatically. The consumer extracts the context and creates a span linked to the producer's trace \u2014 connecting asynchronous flows across broker boundaries. A trace tree can span: HTTP request \u2192 Kafka producer \u2192 Kafka consumer \u2192 downstream HTTP call \u2014 all as a single unified trace, making it possible to debug end-to-end latency across synchronous and asynchronous boundaries."
+          },
+          {
+            "type": "step",
+            "title": "Sampling Strategies, Custom Business Spans, and the Log Search Pattern That Replaces Manual Correlation",
+            "content": "**Never trace 100% of requests in production.** Tracing adds serialization, network traffic to the collector, and storage cost. A high-traffic service at 10,000 req/s generates 10,000 spans per second at 100% sampling \u2014 overwhelming Zipkin's storage. `probability: 0.1` (10%) captures enough traffic to understand behavior without the cost.\n\nThe gap in probabilistic sampling: low-frequency errors. A 0.1% error rate at 10% sampling means 1 in 1000 error requests is traced. For debugging production incidents, that's often insufficient. Implement a custom `Sampler` that forces sampling for any request that results in a 5xx response:\n\n```java\n@Bean\nSampler errorForcingSampler() {\n    return (traceContext, span) -> {\n        // Force sampling for error spans regardless of global probability\n        if (span.tags().containsKey(\"error\")) return SamplingFlags.SAMPLED;\n        return SamplingFlags.NOT_SAMPLED_OR_PARENT; // use global rate\n    };\n}\n```\n\n**Custom spans** add business context that auto-instrumentation cannot provide. Knowing a payment processing span took 4 seconds is useful. Knowing it was processing a $50,000 transaction is more useful for prioritization.\n\n```java\n@Autowired Tracer tracer;\n\nSpan span = tracer.nextSpan().name(\"process-payment\").start();\ntry (Tracer.SpanInScope scope = tracer.withSpan(span)) {\n    span.tag(\"payment.amount\", amount.toString());\n    span.tag(\"payment.currency\", currency);\n    span.tag(\"payment.method\", paymentMethod);\n    return paymentGateway.charge(amount, currency);\n} catch (Exception e) {\n    span.error(e);\n    throw e;\n} finally {\n    span.end();\n}\n```\n\nWith `payment.amount` as a span tag in Zipkin, you can filter: \"show me all traces where payment amount > $10,000 that took longer than 3 seconds.\" This is observability with business context \u2014 the difference between \"something was slow\" and \"high-value transactions are slow.\""
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "In microservices, a single request fans out across multiple services. Without distributed tracing, **correlating logs across services is impossible.** You see errors in isolation with no way to trace them back to the originating request.\n\nDistributed tracing assigns a **trace ID** at the entry point and propagates it to every downstream service. Each service's work is a **span** with timing data. The full trace is a tree of spans.\n\nMicrometer Tracing (replacing Sleuth in Boot 3) generates IDs and propagates context automatically via HTTP headers. Zipkin collects and visualizes the traces \u2014 its timeline view shows exactly which service is the bottleneck.\n\n**Sampling is critical** \u2014 tracing 100% of requests in production generates enormous data. 10% sampling is common, but always force-trace errors.\n\nThe most practical benefit: trace ID in every log line via MDC. Search by trace ID to reconstruct the full request flow across all services.\n\nIn practice, I use Micrometer Tracing with Brave, Zipkin for visualization, and 10% sampling with 100% error tracing."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Trace ID propagates across all services via W3C traceparent header** \u2014 generated at the entry point; every downstream service includes it in logs and passes it forward; correlates the full request flow.\n- **Micrometer Tracing replaced Spring Cloud Sleuth in Boot 3** \u2014 vendor-neutral abstraction supporting Brave and OpenTelemetry; auto-instruments RestTemplate, WebClient, and messaging.\n- **Sampling 100% of requests in production is impractical** \u2014 10% sampling (`management.tracing.sampling.probability=0.1`) balances observability with storage costs; force-trace errors regardless of sampling rate.\n- **Trace ID injected into MDC enables log correlation** \u2014 every log line includes `traceId` and `spanId`; searching by trace ID across all service logs reconstructs the request flow.\n- **Zipkin dependency graph shows service-to-service call patterns** \u2014 identifies which services are called most frequently and which spans have the highest latency; essential for finding bottlenecks."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between B3 propagation and W3C TraceContext propagation headers?",
+        "How do you correlate distributed trace IDs with logs in Elasticsearch/Kibana?",
+        "What is the difference between Zipkin and Jaeger for distributed tracing?"
+      ],
+      "seo": {
+        "metaTitle": "Distributed Tracing Micrometer Zipkin Spring Cloud | Java Intermediate Interview | InterviewExplainer",
+        "metaDescription": "Distributed tracing with Micrometer Tracing and Zipkin in Spring Cloud \u2014 trace/span model, B3 propagation, custom spans, Kafka propagation, sampling strategies."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "In microservices, a single request fans out across multiple services.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "In a monolith, debugging a slow request means reading one thread's stack trace. In microservices, a single checkout fans out: API Gateway \u2192 Order Service \u2192 Inventory Service \u2192 Payment Service \u2192 Notification Service. Each service writes its own logs. When the user reports a 5-second delay, you know the request entered the gateway and eventually completed \u2014 but which service was slow? The Payment Service log shows a call took time, the Inventory log shows nothing unusual, and there's no way to connect them to the same user request."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Micrometer Tracing auto-instruments Spring's HTTP stack \u2014 incoming requests, RestTemplate, WebClient, Feign, and Spring Cloud Stream messaging \u2014 without any annotations or code changes.",
+              "Add the tracer bridge and a reporter, then configure the export endpoint.",
+              "``xml <!-- Micrometer Tracing + Brave tracer bridge --> <dependency> <groupId>io.micrometer</groupId> <artifactId>micrometer-tracing-bridge-brave</artifactId> </dependency> <!-- Zipkin span reporter --> <dependency> <groupId>io.zipkin.reporter2</groupId> <artifactId>zipkin-reporter-brave</artifactId> </dependency> ` `yaml management: tracing: sampling: probability: 0.1 # sample 10% of requests; 1.0 for dev/staging zipkin: tracing: endpoint: http://zipkin:9411/api/v2/spans ` With these two changes, every HTTP request that arrives at your service gets a trace context.",
+              "If a trace ID already exists in the incoming headers, the service creates a child span under that trace.",
+              "If no trace ID is present, the service creates a new trace.",
+              "Every outgoing HTTP call carries the current trace ID forward in the headers."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Trace ID propagates across all services via W3C traceparent header \u2014 generated at the entry point; every downstream service includes it in logs and passes it forward; correlates the full request flow",
+              "Micrometer Tracing replaced Spring Cloud Sleuth in Boot 3 \u2014 vendor-neutral abstraction supporting Brave and OpenTelemetry; auto-instruments RestTemplate, WebClient, and messaging",
+              "Sampling 100% of requests in production is impractical \u2014 10% sampling (management",
+              "probability=0",
+              "1) balances observability with storage costs; force-trace errors regardless of sampling rate"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Confusing metrics (aggregated counters/gauges \u2014 Prometheus/Micrometer) with distributed tracing (per-request call graphs \u2014 Zipkin/Jaeger). They solve different problems and are complementary, not alternatives."
+          }
+        ],
+        "cap": "In practice, I use Micrometer Tracing with Brave, Zipkin for visualization, and 10% sampling with 100% error tracing.",
+        "familiarity_anchors": [
+          "Micrometer",
+          "Tracing",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between B3 propagation and W3C TraceContext propagation headers?",
+          "How do you correlate distributed trace IDs with logs in Elasticsearch/Kibana?",
+          "What is the difference between Zipkin and Jaeger for distributed tracing?"
+        ]
+      }
+    }
+  ]
+}

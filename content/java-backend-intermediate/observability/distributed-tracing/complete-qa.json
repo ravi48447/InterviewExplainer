@@ -1,0 +1,395 @@
+{
+  "topic": "Distributed Tracing",
+  "topicSlug": "distributed-tracing",
+  "questions": [
+    {
+      "id": "obs-003",
+      "slug": "distributed-tracing-spring-cloud-sleuth-zipkin-jaeger",
+      "question": "How do you implement distributed tracing in Spring Boot using Spring Cloud Sleuth and Zipkin or Jaeger?",
+      "title": "Distributed Tracing with Spring Cloud Sleuth and Zipkin/Jaeger",
+      "direct_answer": "Add Spring Cloud Sleuth (or Micrometer Tracing in Boot 3) to auto-instrument HTTP, messaging, and database calls. Configure an exporter to send spans to Zipkin or Jaeger. Trace and span IDs are automatically propagated in HTTP headers.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of trace propagation, span context, and the difference between Sleuth and OpenTelemetry-based tracing.",
+        "common_mistake": "Not setting `spring.sleuth.sampler.probability` in production, resulting in 100% trace sampling that overwhelms the backend.",
+        "to_stand_out": "Explain the move from Sleuth to Micrometer Tracing in Spring Boot 3 and why OpenTelemetry is now the preferred standard."
+      },
+      "company_tags": [
+        "Uber",
+        "Lyft",
+        "Twitter",
+        "Grab",
+        "Monzo"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem Tracing Solves: 500ms Latency, Five Services, Zero Visibility",
+            "content": "When a request takes 500ms but your service's own code runs in 10ms, the question becomes: which of the five downstream services is responsible for the other 490ms? Logs can tell you that each service processed the request, but not how long each one took or in what order they were called. Metrics can tell you that the overall P99 is high, but not which specific call chain is slow.\n\n**Distributed tracing** solves this by assigning a unique **trace ID** to each incoming request and propagating it through every service boundary via HTTP headers. Each service creates **spans** — named time intervals representing its own work — that are children of the caller's span. The result is a tree of spans that renders as a **waterfall diagram** in tools like Zipkin or Jaeger, showing exactly where the time went.\n\nIn Spring Boot, this instrumentation is automatic. Spring Cloud Sleuth (Boot 2) or Micrometer Tracing (Boot 3) intercepts RestTemplate, WebClient, Feign, Kafka, and RabbitMQ calls, propagating trace context through headers without any manual code."
+          },
+          {
+            "type": "step",
+            "title": "Auto-Instrumentation and the Sampling Rate That Melts Backends",
+            "content": "The magic of Spring's tracing integration is that adding the dependency is enough for basic instrumentation. Sleuth (Boot 2) or Micrometer Tracing with the OTel bridge (Boot 3) automatically wraps HTTP clients, JDBC calls, and messaging producers/consumers with spans.\n\n```yaml\n# Spring Boot 2 with Sleuth\nspring:\n  application:\n    name: order-service\n  sleuth:\n    sampler:\n      probability: 0.1   # Sample 10% of traces\n  zipkin:\n    base-url: http://zipkin:9411\n\n# Spring Boot 3 with Micrometer Tracing\nmanagement:\n  tracing:\n    sampling:\n      probability: 0.1\n  zipkin:\n    tracing:\n      endpoint: http://zipkin:9411/api/v2/spans\n```\n\nThe **sampling probability** is the most operationally important setting. The default in some configurations is 1.0 — meaning 100% of traces are exported. For a service handling 10,000 requests per second, that is 10,000 complete traces per second flowing to your tracing backend. Zipkin and Jaeger are not designed for this volume and will either drop data or consume enormous storage. Set sampling to 0.1 (10%) in production for general coverage. Use **tail-based sampling** in the OpenTelemetry Collector to capture every trace that had an error or exceeded a latency threshold, regardless of the head-based probability."
+          },
+          {
+            "type": "step",
+            "title": "Custom Spans for Business-Critical Operations: Tags That Make Traces Useful",
+            "content": "Auto-instrumentation covers HTTP calls, JDBC queries, and messaging. But it does not know about your business logic. When a checkout operation calls an external payment gateway, the auto-instrumented span shows a generic HTTP call. Adding a custom span with business-specific tags makes the trace immediately useful for debugging.\n\n```java\n@Service\npublic class PaymentService {\n    private final Tracer tracer;\n\n    public PaymentResult charge(PaymentRequest req) {\n        Span span = tracer.nextSpan().name(\"payment.charge\").start();\n        try (Tracer.SpanInScope scope = tracer.withSpan(span)) {\n            span.tag(\"payment.provider\", req.getProvider());\n            span.tag(\"payment.amount\", String.valueOf(req.getAmount()));\n            PaymentResult result = paymentGateway.charge(req);\n            span.tag(\"payment.status\", result.getStatus());\n            return result;\n        } catch (Exception e) {\n            span.error(e);  // marks the span as failed in the waterfall\n            throw e;\n        } finally {\n            span.end();\n        }\n    }\n}\n```\n\nThe tags — provider, amount, status — let you filter traces in Jaeger by business context rather than just service name. When latency spikes only for one payment provider, filtering by `payment.provider=stripe` isolates the problem immediately. Without these tags, you would be scanning through thousands of traces manually looking for the slow ones."
+          },
+          {
+            "type": "step",
+            "title": "The Sleuth-to-Micrometer Tracing Migration Path in Boot 3",
+            "content": "Spring Cloud Sleuth was deprecated when Spring Boot 3 was released. The replacement is **Micrometer Tracing**, which provides a similar API but is backed by either the OpenTelemetry SDK or Brave (the Zipkin client). The migration preserves most of the programming model — `Tracer`, `Span`, and `SpanInScope` work the same way — but the underlying instrumentation is now vendor-neutral.\n\nThe key dependency changes are straightforward. Replace `spring-cloud-starter-sleuth` with `micrometer-tracing-bridge-otel` (for OpenTelemetry) or `micrometer-tracing-bridge-brave` (for Brave/Zipkin). Add the appropriate exporter: `opentelemetry-exporter-zipkin` for Zipkin, `opentelemetry-exporter-otlp` for an OpenTelemetry Collector.\n\nThe propagation format also changed. Sleuth defaulted to B3 headers (`X-B3-TraceId`, `X-B3-SpanId`). OpenTelemetry uses W3C Trace Context (`traceparent` header) by default. If you have a mixed fleet of Boot 2 and Boot 3 services, configure both propagation formats on the Boot 3 services so they can receive B3 headers from Boot 2 callers and send W3C headers to Boot 3 callers. This dual propagation support is built into the OTel SDK and requires only a configuration property change."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Trace ID propagated across service boundaries via HTTP headers** — `traceparent` (W3C) or `X-B3-TraceId` (B3); every service that processes the request creates a child span under the same trace ID\n- **Spring Boot 3: `micrometer-tracing` replaces Spring Cloud Sleuth** — use `micrometer-tracing-bridge-otel` for OpenTelemetry; `micrometer-tracing-bridge-brave` for Zipkin/Jaeger B3 format; Sleuth is not available in Spring Boot 3\n- **Auto-instrumentation covers HTTP, Kafka, and Spring Data** — outbound RestTemplate and WebClient calls, Kafka producer/consumer, and database queries appear as spans without manual instrumentation\n- **Sleuth/Micrometer Tracing populates `traceId` in MDC** — every log line includes the trace ID; paste it into Jaeger to open the full trace; correlates logs with traces without manual MDC.put() calls\n- **Sampling rate controls collector load** — 100% sampling is expensive; set `spring.sleuth.sampler.probability=0.1` for 10% sampling; always sample requests with errors regardless of probability"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Distributed tracing assigns a unique trace ID to each incoming request and propagates it across every service and database call — which means you can see the full timeline of one request and pinpoint exactly where latency comes from.\n\n**How tracing works**\n- When a request arrives at the first service, the tracing library (Sleuth or Micrometer Tracing) generates a trace ID and a span ID; subsequent outbound calls to other services include the trace ID in HTTP headers (`traceparent` in W3C format, or `X-B3-TraceId` in Zipkin B3 format)\n- Each service that processes the request creates its own span — a timed unit of work within the trace; a span records start time, end time, service name, and tags (HTTP status, database query, error message)\n- Spans are reported asynchronously to a collector (Jaeger, Zipkin, or OpenTelemetry Collector) and correlated by trace ID to reconstruct the full tree\n\n**Spring Boot setup**\n- Spring Boot 2: add `spring-cloud-starter-sleuth` and `spring-cloud-sleuth-zipkin`; Sleuth auto-instruments HTTP, Spring Kafka, and Spring Data calls; configure `spring.zipkin.base-url` for the collector\n- Spring Boot 3: Sleuth is replaced by `micrometer-tracing-bridge-otel` (OpenTelemetry) or `micrometer-tracing-bridge-brave` (Zipkin/Jaeger); configure an exporter for the collector backend\n\n**What gets auto-instrumented**\n- Every inbound HTTP request and outbound `RestTemplate`, `WebClient`, or `FeignClient` call\n- Spring Kafka consumer and producer operations — the trace ID is embedded in Kafka message headers\n- Spring Data repositories — database queries appear as spans under the HTTP request span, showing exactly how much of the request time was spent in the database\n\n**Reading traces in Jaeger/Zipkin**\n- A trace with one HTTP request span and three database spans shows the service spent 450ms in three sequential queries — the bottleneck is clear without reading logs\n- Filter by `http.url` or `error=true` to find all failing traces for a specific endpoint across all service instances"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a trace ID and a span ID?",
+        "How does B3 propagation differ from W3C Trace Context?",
+        "What sampling strategy would you use in a high-throughput service?"
+      ],
+      "seo": {
+        "title": "Distributed Tracing with Spring Cloud Sleuth and Zipkin/Jaeger — Java Interview Answer",
+        "description": "How to implement distributed tracing in Spring Boot using Spring Cloud Sleuth, Micrometer Tracing, Zipkin, and Jaeger with code examples.",
+        "keywords": [
+          "spring cloud sleuth",
+          "distributed tracing java",
+          "zipkin spring boot",
+          "jaeger spring boot",
+          "micrometer tracing"
+        ],
+        "metaDescription": "Add Spring Cloud Sleuth (or Micrometer Tracing in Boot 3) to auto-instrument HTTP, messaging, and database calls.",
+        "metaTitle": "Distributed Tracing with Spring Cloud Sleuth and Zipkin/Jaeger"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "Distributed tracing assigns a unique trace ID to each incoming request and propagates it across every service and database call — which means you can see the full timeline of one request and pinpoint exactly.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When a request takes 500ms but your service's own code runs in 10ms, the question becomes: which of the five downstream services is responsible for the other 490ms? Logs can tell you that each service processed the request, but not how long each one took or in what order they were called. Metrics can tell you that the overall P99 is high, but not which specific call chain is slow. Distributed tracing solves this by assigning a unique trace ID."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of trace propagation, span context, and the difference between Sleuth and OpenTelemetry-based tracing."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Trace ID propagated across service boundaries via HTTP headers — traceparent (W3C) or X-B3-TraceId (B3); every service that processes the request creates a child span under the same trace ID Spring Boot 3: micrometer-tracing replaces Spring Cloud Sleuth — use micrometer-tracing-bridge-otel for OpenTelemetry; micrometer-tracing-bridge-brave for Zipkin/Jaeger B3 format; Sleuth is not available in Spring Boot 3 Auto-instrumentation covers HTTP, Kafka, and Spring Data — outbound RestTemplate and WebClient calls, Kafka producer/consumer, and database queries appear as spans without manual instrumentation Sleuth/Micrometer Tracing populates traceId in MDC — every log line includes the trace ID; paste it into Jaeger to open the full trace; correlates logs with traces without manual MDC",
+              "put() calls Sampling rate controls collector load — 100% sampling is expensive; set spring",
+              "probability=0",
+              "1 for 10% sampling; always sample requests with errors regardless of probability"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When a request takes 500ms but your service's own code runs in 10ms, the question becomes: which of the five downstream services is responsible for the other 490ms? Logs can tell you that each service processed the request, but not how long each one took or in what order they were called. Metrics can tell you that the overall P99 is high, but not which specific call chain is slow. Distributed tracing solves this by assigning a unique trace ID to each incoming request and propagating it through every service boundary via HTTP headers. Each service creates spans — named time intervals representing its own work — that are children of the caller's span. The result is a tree of."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not setting spring",
+              "probability in production, resulting in 100% trace sampling that overwhelms the backend"
+            ]
+          }
+        ],
+        "cap": "How tracing works When a request arrives at the first service, the tracing library (Sleuth or Micrometer Tracing) generates a trace ID and a span ID; subsequent outbound calls to other services includ",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Sleuth"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a trace ID and a span ID?",
+          "How does B3 propagation differ from W3C Trace Context?",
+          "What sampling strategy would you use in a high-throughput service?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    },
+    {
+      "id": "obs-012",
+      "slug": "production-debugging-distributed-traces-latency-bottlenecks",
+      "question": "How do you use distributed traces to find latency bottlenecks in a production Java microservices system?",
+      "title": "Production Debugging with Distributed Traces — Finding Latency Bottlenecks",
+      "direct_answer": "Start from a Prometheus P99 alert to identify the slow service. Open Jaeger/Zipkin, filter traces for that service above the latency threshold. Examine the waterfall to find the widest span. Drill down to identify whether the bottleneck is a synchronous downstream call, an N+1 database query, or a missing async operation.",
+      "layout_type": "problem-detective",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Practical debugging workflow using traces, and the ability to identify common latency patterns from a trace waterfall.",
+        "common_mistake": "Looking only at the first service in the trace rather than following the critical path through the full span tree.",
+        "to_stand_out": "Describe N+1 query detection from traces (many narrow database spans), sequential vs parallel fan-out patterns, and adding custom span attributes to narrow down root cause faster."
+      },
+      "company_tags": [
+        "Uber",
+        "Airbnb",
+        "Stripe",
+        "PayPal",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "problem_statement",
+            "title": "The 2,800ms Checkout That Should Take 500ms",
+            "content": "The order checkout API has a P99 latency of 2,800ms — the SLO target is 500ms. Prometheus metrics show that the `order-service` is the slow endpoint, but the service itself runs only simple business logic: validate the request, check inventory, calculate price, charge payment, send notification. Each downstream call should take a few hundred milliseconds at most, yet the total exceeds two seconds.\n\nThe trap is that metrics only tell you *which* service is slow, not *why*. Looking at the `order-service` application logs shows normal-looking request-response pairs with no errors. Looking at downstream service metrics shows each individual service responding within its SLO. The problem is invisible to both metrics and logs because the root cause is not in any single service — it is in **how the services are called**.\n\nWithout distributed traces, you would be adding timing logs to every downstream call, redeploying, reproducing the problem, and hoping the timestamps align. With traces, you open Jaeger, filter for traces above 2,000ms, and the waterfall reveals the architecture bug in seconds."
+          },
+          {
+            "type": "before_code",
+            "title": "The Sequential Call Chain Hiding in Plain Sight",
+            "content": "The checkout handler makes four downstream calls. The code looks clean and readable — but every call blocks the thread until the response arrives, and the calls run in sequence even though some have no dependency on each other.\n\n```java\n@Service\npublic class CheckoutService {\n\n    public CheckoutResult checkout(CheckoutRequest req) {\n        InventoryResult inventory =\n            inventoryClient.checkAvailability(req.getItems());          // ~800ms\n        PricingResult pricing =\n            pricingClient.calculatePrice(req.getItems(), req.getUser()); // ~800ms\n        PaymentResult payment =\n            paymentClient.charge(req.getPaymentMethod(), pricing.getTotal()); // ~800ms\n        notificationClient.sendConfirmation(req.getUser());             // ~400ms\n        return new CheckoutResult(inventory, pricing, payment);\n    }\n}\n```\n\nThe latency is additive: 800 + 800 + 800 + 400 = 2,800ms. But inventory and pricing have no dependency on each other — they both need only the request items. The notification call does not affect the response at all, yet it blocks the thread for 400ms before the customer receives their checkout confirmation. These two architectural mistakes — sequential independent calls and synchronous fire-and-forget operations — are invisible in a code review but immediately obvious in a trace waterfall."
+          },
+          {
+            "type": "diagnosis",
+            "title": "Reading the Waterfall: How Span Alignment Reveals the Critical Path",
+            "content": "Open Jaeger, search for `service=order-service` with `minDuration=2000ms`. Click a slow trace. The waterfall immediately reveals the problem through **span alignment** — the visual pattern of when each child span starts relative to its siblings.\n\nThe checkout trace shows four child spans arranged sequentially: `inventory.checkAvailability` runs from 0-800ms, `pricing.calculatePrice` from 800-1600ms, `payment.charge` from 1600-2400ms, and `notification.sendConfirmation` from 2400-2800ms. Each span starts only after the previous one finishes. In a healthy architecture, independent spans would **overlap** — running in parallel — and the total duration would be the maximum of the independent calls, not their sum.\n\n**Finding 1:** Inventory and pricing spans are sequential but independent. They could run in parallel, reducing 1,600ms to ~800ms (the maximum of the two).\n\n**Finding 2:** The notification span blocks the response even though the customer does not need to wait for it. This should be asynchronous — publish an event to Kafka and return immediately.\n\n**Finding 3:** Watch for another common pattern in trace waterfalls: **N+1 queries**. If you see 50 narrow database spans under a single parent span, each lasting 5-10ms, the total is 250-500ms of sequential database round trips. The fix is a batch query that replaces 50 individual fetches with one. Traces make this pattern visually obvious in a way that application logs never reveal because each individual query looks fast.\n\nThe **critical path** through the trace — the longest sequence of dependent operations — determines the theoretical minimum latency. For this checkout, the critical path is: max(inventory, pricing) + payment = ~1,600ms. The 1,200ms difference between the actual 2,800ms and the theoretical 1,600ms is pure waste from sequential execution and a synchronous notification."
+          },
+          {
+            "type": "after_code",
+            "title": "Parallel Fan-Out and Async Events: A 43% Latency Reduction",
+            "content": "The fix addresses both findings from the trace analysis: parallel execution for independent calls and asynchronous publishing for the notification. Inventory and pricing have no data dependency between them — they both need only the original request items — so they can run concurrently. The notification has no effect on the checkout response, so it should be a fire-and-forget event rather than a blocking call.\n\n```java\n@Service\npublic class CheckoutService {\n    private final ExecutorService executor =\n        Executors.newVirtualThreadPerTaskExecutor();\n\n    public CheckoutResult checkout(CheckoutRequest req) {\n        CompletableFuture<InventoryResult> inventoryFuture =\n            CompletableFuture.supplyAsync(\n                () -> inventoryClient.checkAvailability(req.getItems()), executor);\n        CompletableFuture<PricingResult> pricingFuture =\n            CompletableFuture.supplyAsync(\n                () -> pricingClient.calculatePrice(req.getItems(), req.getUser()), executor);\n\n        InventoryResult inventory = inventoryFuture.join();\n        PricingResult pricing = pricingFuture.join();\n\n        PaymentResult payment =\n            paymentClient.charge(req.getPaymentMethod(), pricing.getTotal());\n\n        eventPublisher.publish(new OrderConfirmedEvent(req.getUser(), payment.getOrderId()));\n        return new CheckoutResult(inventory, pricing, payment);\n    }\n}\n```\n\nThe `supplyAsync` calls launch inventory and pricing checks concurrently on virtual threads, and `join()` waits for both results. Payment still runs sequentially because it depends on the pricing result. The notification publishes to Kafka and returns immediately — a consumer picks it up asynchronously without blocking the checkout response.\n\nThe new critical path is max(800, 800) + 800 = 1,600ms — a **43% reduction** from the original 2,800ms. The notification no longer appears in the response path at all. After deploying this fix, re-run the same Jaeger search for traces above 2,000ms. The new waterfall shows inventory and pricing spans overlapping in time, confirming that the parallelisation is working. This before-and-after comparison in the trace UI is the most convincing evidence you can present in a postmortem."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Start with P99 latency dashboard, not logs** — identify which service is slow from metrics first; opening logs across all services without knowing the source is time-consuming and often misleading\n- **Trace waterfall shows time breakdown per span** — a 600ms request with a 550ms database span means the bottleneck is the database query, not service logic; the span tags include the SQL query text for direct EXPLAIN ANALYZE\n- **Gap between spans indicates serialization or network overhead** — time between a service returning and the caller receiving the response; visible as whitespace in the trace waterfall; investigate serialization, GC pauses, or network configuration\n- **Correlate trace ID to log entries for request-specific context** — `traceId = \"abc123\"` in Elasticsearch returns all log entries across all services for that one request; full context without reading unrelated log lines\n- **Validate fixes with before-vs-after P99 comparison** — deploy the fix; compare the P99 latency chart before and after the deployment marker in Grafana; confirms the fix worked without waiting for another incident"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Debugging production latency follows a structured flow that moves from metrics (which service?) to traces (which span?) to logs (what happened in that request?). Skipping straight to logs is slower and misses the systemic view.\n\n**Step 1 — Identify the slow service from metrics**\n- Start with the P99 latency dashboard: which service's P99 exceeds the SLO? A Grafana dashboard with `histogram_quantile(0.99, rate(http_server_requests_seconds_bucket[5m]))` per service shows which service is the bottleneck\n- If the latency spike aligns with an increase in request rate: the service may be under-provisioned; if latency is high even at normal throughput, the bottleneck is internal (database, downstream service)\n\n**Step 2 — Find a representative slow trace**\n- Open Jaeger or Zipkin and filter by the slow service and time window; sort by duration; pick the slowest traces\n- The trace waterfall view shows every span and its duration — a long database span indicates a slow query; a long span in a downstream service indicates that service is the bottleneck; a gap between spans indicates network latency or serialization overhead\n\n**Step 3 — Drill into the problem span**\n- For a long database span: the span tags show the SQL query; run `EXPLAIN ANALYZE` on that query in a database client; the execution plan reveals missing indexes, sequential scans, or incorrect join strategies\n- For a long downstream service span: open the child trace for that service (trace ID is the same); apply the same flow recursively to find the bottleneck in the downstream service\n\n**Step 4 — Correlate with logs**\n- Copy the trace ID from the slow trace; search in Elasticsearch or CloudWatch Logs Insights: `traceId = \"abc123\"` returns all log entries from all services for that specific request\n- Log entries often contain context the trace doesn't: the exact payload that triggered a slow code path, a WARN that appeared before the ERROR, a retry that consumed the extra time\n\n**Fix and validate**\n- Apply the fix (add an index, increase timeout, optimize a query); monitor the P99 latency metric; deploy and compare before-vs-after to confirm improvement"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you identify an N+1 query problem from a distributed trace?",
+        "What is the critical path in a trace and how do you identify it?",
+        "How do you propagate OpenTelemetry trace context through CompletableFuture?"
+      ],
+      "seo": {
+        "title": "Finding Latency Bottlenecks with Distributed Traces in Java — Interview Answer",
+        "description": "Step-by-step production debugging workflow using Jaeger and distributed traces to find sequential calls, N+1 queries, and latency bottlenecks in Java microservices.",
+        "keywords": [
+          "distributed tracing latency java",
+          "jaeger debugging java",
+          "latency bottleneck microservices",
+          "production debugging java traces",
+          "N+1 query tracing"
+        ],
+        "metaDescription": "Start from a Prometheus P99 alert to identify the slow service. Open Jaeger/Zipkin, filter traces for that service above the latency threshold.",
+        "metaTitle": "Production Debugging with Distributed Traces — Finding Latency"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "Debugging production latency follows a structured flow that moves from metrics (which service?) to traces (which span?) to logs (what happened in that request?).",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Start from a Prometheus P99 alert to identify the slow service. Open Jaeger/Zipkin, filter traces for that service above the latency threshold. Examine the waterfall to find the widest span. Drill down to identify whether the bottleneck is a synchronous downstream call, an N+1 database query, or a missing async operation."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical debugging workflow using traces, and the ability to identify common latency patterns from a trace waterfall."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Start with P99 latency dashboard, not logs — identify which service is slow from metrics first",
+              "opening logs across all services without knowing the source is time-consuming and often misleading Trace waterfall shows time breakdown per span — a 600ms request with a 550ms database span means the bottleneck is the database query, not service logic",
+              "the span tags include the SQL query text for direct EXPLAIN ANALYZE Gap between spans indicates serialization or network overhead — time between a service returning and the caller receiving the response",
+              "visible as whitespace in the trace waterfall",
+              "investigate serialization, GC pauses, or network configuration Correlate trace ID to log entries for request-specific context — traceId = \"abc123\" in Elasticsearch returns all log entries across all services for that one request",
+              "full context without reading unrelated log lines Validate fixes with before-vs-after P99 comparison — deploy the fix",
+              "compare the P99 latency chart before and after the deployment marker in Grafana",
+              "confirms the fix worked without waiting for another incident"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The checkout handler makes four downstream calls. The code looks clean and readable — but every call blocks the thread until the response arrives, and the calls run in sequence even though some have no dependency on each other. ``java @Service public class CheckoutService { public CheckoutResult checkout(CheckoutRequest req) { InventoryResult inventory = inventoryClient.checkAvailability(req.getItems()); // ~800ms PricingResult pricing = pricingClient.calculatePrice(req.getItems(), req.getUser()); // ~800ms PaymentResult payment = paymentClient.charge(req.getPaymentMethod(), pricing.getTotal()); // ~800ms notificationClient.sendConfirmation(req.getUser()); // ~400ms return new CheckoutResult(inventory, pricing, payment); } } `` The latency is additive: 800 + 800 + 800 + 400 = 2,800ms. But inventory and pricing have no dependency on each other — they both need only the request items. The notification call does not affect the response."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Looking only at the first service in the trace rather than following the critical path through the full span tree"
+            ]
+          }
+        ],
+        "cap": "Step 1 — Identify the slow service from metrics Start with the P99 latency dashboard: which service's P99 exceeds the SLO? A Grafana dashboard with histogram_quantile(0.99, rate(http_server_requests_s",
+        "familiarity_anchors": [
+          "Start",
+          "Prometheus",
+          "Jaeger"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you identify an N+1 query problem from a distributed trace?",
+          "What is the critical path in a trace and how do you identify it?",
+          "How do you propagate OpenTelemetry trace context through CompletableFuture?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    },
+    {
+      "id": "obs-006",
+      "slug": "opentelemetry-vs-micrometer-vs-sleuth-comparison",
+      "question": "How do OpenTelemetry, Micrometer, and Spring Cloud Sleuth compare, and how do you choose between them?",
+      "title": "OpenTelemetry vs Micrometer vs Spring Sleuth — Choosing the Right Library",
+      "direct_answer": "Micrometer handles metrics, Sleuth (replaced by Micrometer Tracing in Boot 3) handles traces, and OpenTelemetry is the vendor-neutral standard that covers metrics, traces, and logs in one SDK. For new Spring Boot 3 projects, use Micrometer Tracing backed by the OTel SDK.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Awareness of the Java observability ecosystem and how the libraries relate to each other.",
+        "common_mistake": "Thinking OpenTelemetry replaces Micrometer for metrics — in Spring Boot 3, Micrometer integrates with OTel rather than being replaced by it.",
+        "to_stand_out": "Explain that Micrometer 1.10+ added a Tracing API that can be backed by either OTel or Brave (Zipkin), unifying metrics and tracing under one facade."
+      },
+      "company_tags": [
+        "Google",
+        "Microsoft",
+        "AWS",
+        "Datadog",
+        "Dynatrace"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Libraries, Three Layers: Why They Complement More Than They Compete",
+            "content": "The most common confusion in the Java observability ecosystem is thinking you must choose *one* of these three libraries. In reality, they operate at different layers and are mostly complementary. **Micrometer** is a metrics facade — it gives you counters, timers, and gauges with pluggable backends. **Spring Cloud Sleuth** was the tracing layer for Spring Boot 2, now deprecated. **OpenTelemetry** is the CNCF-backed vendor-neutral standard that covers metrics, traces, and logs in a single SDK.\n\nThe landscape has converged significantly since 2022. Micrometer 1.10 added a Tracing API called **Micrometer Tracing**, and Spring Boot 3 uses it as the official tracing solution — backed by either the OpenTelemetry SDK or Brave (Zipkin). This means Micrometer now covers both metrics and tracing under one facade, while OpenTelemetry provides the underlying instrumentation engine. Understanding which layer each library operates at is essential for making the right choice without over-engineering your observability stack.\n\nThe common mistake is thinking OpenTelemetry *replaces* Micrometer for metrics in Spring Boot. It does not — Micrometer remains the metrics API, and OTel provides the tracing backend that Micrometer Tracing delegates to."
+          },
+          {
+            "type": "comparison_table",
+            "title": "The Landscape at a Glance: Where Each Library Fits",
+            "content": "The table clarifies what each library provides and where it applies, so the decision becomes straightforward rather than a source of confusion.\n\n| Feature | OpenTelemetry | Micrometer | Spring Cloud Sleuth |\n|---|---|---|---|\n| **Signals** | Metrics + Traces + Logs | Metrics (+ Tracing facade in 1.10+) | Traces only |\n| **Spring Boot 3 support** | Via Micrometer bridge | Native | Deprecated |\n| **Auto-instrumentation** | Java agent (zero-code) | Spring-only auto-config | Spring-only |\n| **Vendor neutral** | CNCF standard | Multiple registries | Zipkin/Brave focused |\n| **Metric backends** | Prometheus, OTLP, + more | Prometheus, Datadog, + 20 more | N/A |\n| **Trace backends** | Zipkin, Jaeger, OTLP | Zipkin, Jaeger (via bridge) | Zipkin |\n| **Programming model** | OTel API | Micrometer API | Spring annotation/API |\n| **Best for** | New services, non-Spring JVM | Spring Boot metrics | Spring Boot 2 legacy |\n\nThe critical distinction is the **auto-instrumentation model**. OpenTelemetry's Java agent instruments bytecode at the JVM level — it can instrument any library in any JVM framework, not just Spring. This makes it the go-to choice for Vert.x, Quarkus, Micronaut, or plain Java services.\n\nMicrometer's auto-configuration is Spring-specific but **deeper within the Spring ecosystem**. It provides rich out-of-the-box metrics for Spring MVC request handling, WebFlux reactive streams, JDBC connection pools, Spring Cache hit rates, and Spring Security authentication events. For Spring Boot services, Micrometer delivers more granular metrics automatically than the OTel agent alone. The OTel agent sees HTTP requests and JDBC queries, but Micrometer sees Spring-specific concepts like `@Timed` annotations and Actuator health indicators.\n\nThe layering between them is clean in Spring Boot 3: Micrometer provides the **metric API** (counters, timers, gauges) and Micrometer Tracing provides the **tracing API** (spans, trace context). Under the hood, the tracing API delegates to either the OpenTelemetry SDK or Brave. Your application code never imports an OTel class directly — Micrometer provides the facade."
+          },
+          {
+            "type": "when_to_use",
+            "title": "The Decision Tree: Choosing the Right Combination for Your Stack",
+            "content": "**Spring Boot 3 service (the recommended default):** Use Micrometer for metrics and Micrometer Tracing with `micrometer-tracing-bridge-otel` for traces. This gives you the Spring ecosystem's rich auto-configuration (HTTP metrics, JDBC metrics, cache metrics) plus OpenTelemetry's vendor-neutral trace export. You get the best of both worlds without managing two separate instrumentation systems.\n\n**Non-Spring JVM services (Vert.x, Quarkus, plain Java):** Use the OpenTelemetry Java agent for zero-code instrumentation across all signals. The agent attaches at JVM startup and instruments HTTP clients, JDBC drivers, and messaging libraries without any dependency changes. This is the most flexible option for polyglot microservices platforms.\n\n**Spring Boot 2 legacy services:** Keep Spring Cloud Sleuth for tracing until you can upgrade to Boot 3. Sleuth's API is similar enough to Micrometer Tracing that the migration is low-risk once you do upgrade.\n\n**Multi-vendor export needs:** When you need to send telemetry to both Prometheus and Datadog, or fan out traces to multiple backends, deploy an **OpenTelemetry Collector**. Your application sends OTLP to the Collector, and the Collector routes to any number of backends. This decouples your application from vendor-specific exporters and lets you change backends without redeploying application code."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Micrometer for metrics; Micrometer Tracing (Boot 3) or Sleuth (Boot 2) for traces** — Micrometer handles only metrics; tracing is a separate concern; never mix Sleuth with Spring Boot 3\n- **Sleuth is deprecated — Spring Boot 3 uses `micrometer-tracing`** — `micrometer-tracing-bridge-brave` for Zipkin/Jaeger; `micrometer-tracing-bridge-otel` for OpenTelemetry backend; Spring Boot Sleuth artifacts are Boot 2 only\n- **OpenTelemetry Java agent instruments without code changes** — `-javaagent:opentelemetry-javaagent.jar`; auto-instruments Spring, JDBC, HTTP clients, Kafka; configured via env vars; heavier than Micrometer but more comprehensive\n- **OTel Collector as a backend-agnostic pipeline** — Spring Boot sends OTLP to the OTel Collector; the Collector exports to Jaeger, Prometheus, Datadog, or any other backend; switch backends by reconfiguring the Collector, not the application\n- **Micrometer + Micrometer Tracing is the Spring-idiomatic choice** — integrates with Spring Boot auto-configuration; application.properties for config; lighter than the OTel agent; the recommended starting point for Spring Boot 3 services"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Micrometer, Spring Cloud Sleuth, and OpenTelemetry operate at different layers — they're partly complementary and partly overlapping in scope. Understanding which handles what prevents duplicate instrumentation and configuration conflicts.\n\n**Micrometer — metrics**\n- Micrometer is the metrics facade for Spring Boot — it defines the `Counter`, `Timer`, and `Gauge` instruments and publishes to backends like Prometheus, CloudWatch, and Stackdriver\n- Micrometer has no tracing capability; it handles only metrics; in Spring Boot 2.x, Sleuth adds tracing separately; in Spring Boot 3, Micrometer expanded to include tracing via `micrometer-tracing`\n\n**Spring Cloud Sleuth — tracing for Spring Boot 2.x**\n- Sleuth auto-instruments HTTP, Kafka, and Spring Data calls and propagates trace context through Spring's infrastructure\n- Sleuth is deprecated and not available for Spring Boot 3 — for Spring Boot 3, use `micrometer-tracing-bridge-brave` (Zipkin/Jaeger Brave-format) or `micrometer-tracing-bridge-otel` (OpenTelemetry format)\n\n**OpenTelemetry — the vendor-neutral standard**\n- OpenTelemetry is a CNCF standard that defines APIs for traces, metrics, and logs — the goal is one instrumentation API that works with any backend (Jaeger, Zipkin, Prometheus, Datadog, Honeycomb) by swapping the exporter\n- The OpenTelemetry Java agent auto-instruments Java applications without any code changes — attach `-javaagent:opentelemetry-javaagent.jar` and configure the exporter; it instruments Spring, JDBC, HTTP clients, Kafka, and more\n- The trade-off: the OTel agent is heavier than Micrometer's lightweight registry approach; configuration is via environment variables rather than Spring's `application.properties`\n\n**In practice for Spring Boot**\n- Spring Boot 3: use Micrometer for metrics, `micrometer-tracing` for traces; these integrate with Spring's auto-configuration; use OTel agent when you need vendor-neutral instrumentation across non-Spring components in the same JVM"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the OpenTelemetry Collector and why would you use it?",
+        "How does Micrometer Tracing bridge to the OpenTelemetry SDK?",
+        "What are the trade-offs of using the OTel Java agent vs manual instrumentation?"
+      ],
+      "seo": {
+        "title": "OpenTelemetry vs Micrometer vs Spring Cloud Sleuth — Java Interview Answer",
+        "description": "Compare OpenTelemetry, Micrometer, and Spring Cloud Sleuth for Java observability and learn when to use each in Spring Boot 2 and 3.",
+        "keywords": [
+          "opentelemetry vs micrometer",
+          "spring cloud sleuth vs opentelemetry",
+          "java tracing libraries",
+          "micrometer tracing spring boot 3"
+        ],
+        "metaDescription": "Micrometer handles metrics, Sleuth (replaced by Micrometer Tracing in Boot 3) handles traces, and OpenTelemetry is the vendor-neutral standard that covers metr.",
+        "metaTitle": "OpenTelemetry vs Micrometer vs Spring Sleuth — Choosing the Right"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "Micrometer, Spring Cloud Sleuth, and OpenTelemetry operate at different layers — they're partly complementary and partly overlapping in scope.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common confusion in the Java observability ecosystem is thinking you must choose one of these three libraries. In reality, they operate at different layers and are mostly complementary. Micrometer is a metrics facade — it gives you counters, timers, and gauges with pluggable backends. Spring Cloud Sleuth was the tracing layer for Spring Boot 2, now deprecated. OpenTelemetry is the CNCF-backed vendor-neutral standard that covers metrics, traces, and logs in a single SDK. The landscape has converged significantly."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Awareness of the Java observability ecosystem and how the libraries relate to each other."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Micrometer for metrics; Micrometer Tracing (Boot 3) or Sleuth (Boot 2) for traces — Micrometer handles only metrics; tracing is a separate concern; never mix Sleuth with Spring Boot 3 Sleuth is deprecated — Spring Boot 3 uses micrometer-tracing — micrometer-tracing-bridge-brave for Zipkin/Jaeger; micrometer-tracing-bridge-otel for OpenTelemetry backend; Spring Boot Sleuth artifacts are Boot 2 only OpenTelemetry Java agent instruments without code changes — -javaagent:opentelemetry-javaagent",
+              "jar; auto-instruments Spring, JDBC, HTTP clients, Kafka; configured via env vars; heavier than Micrometer but more comprehensive OTel Collector as a backend-agnostic pipeline — Spring Boot sends OTLP to the OTel Collector; the Collector exports to Jaeger, Prometheus, Datadog, or any other backend; switch backends by reconfiguring the Collector, not the application Micrometer + Micrometer Tracing is the Spring-idiomatic choice — integrates with Spring Boot auto-configuration; application",
+              "properties for config; lighter than the OTel agent; the recommended starting point for Spring Boot 3 services"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common confusion in the Java observability ecosystem is thinking you must choose one of these three libraries. In reality, they operate at different layers and are mostly complementary. Micrometer is a metrics facade — it gives you counters, timers, and gauges with pluggable backends. Spring Cloud Sleuth was the tracing layer for Spring Boot 2, now deprecated. OpenTelemetry is the CNCF-backed vendor-neutral standard that covers metrics, traces, and logs in a single SDK. The landscape has converged significantly since 2022. Micrometer 1.10 added a Tracing API called Micrometer Tracing, and Spring Boot 3 uses it as the official tracing solution — backed by either the OpenTelemetry SDK or Brave (Zipkin). This means Micrometer now covers both metrics and."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking OpenTelemetry replaces Micrometer for metrics",
+              "in Spring Boot 3, Micrometer integrates with OTel rather than being replaced by it"
+            ]
+          }
+        ],
+        "cap": "Micrometer — metrics Micrometer is the metrics facade for Spring Boot — it defines the Counter, Timer, and Gauge instruments and publishes to backends like Prometheus, CloudWatch, and Stackdriver Micr",
+        "familiarity_anchors": [
+          "Micrometer",
+          "Sleuth",
+          "Tracing"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the OpenTelemetry Collector and why would you use it?",
+          "How does Micrometer Tracing bridge to the OpenTelemetry SDK?",
+          "What are the trade-offs of using the OTel Java agent vs manual instrumentation?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    }
+  ]
+}

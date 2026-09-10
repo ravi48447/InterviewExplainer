@@ -1,0 +1,132 @@
+{
+  "topic": "Migration Strategies",
+  "topicSlug": "migration-strategies",
+  "questions": [
+    {
+      "id": "ms-011",
+      "slug": "strangler-fig-pattern-monolith-migration",
+      "question": "How do you migrate a monolith to microservices using the Strangler Fig pattern?",
+      "title": "Strangler Fig Pattern — Monolith to Microservices Migration",
+      "direct_answer": "The **strangler fig** pattern incrementally replaces **monolith** functionality by routing requests to new microservices at the edge, while the monolith handles everything else. New code is written as services; old code is strangled service by service.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know safer migration strategies vs big-bang rewrites",
+        "common_mistake": "Recommending a full rewrite — the 'second system effect' is a well-documented failure mode",
+        "to_stand_out": "Mention the anti-corruption layer and the Branch by Abstraction pattern as companion techniques"
+      },
+      "company_tags": [
+        "Amazon",
+        "Netflix",
+        "Booking.com",
+        "Etsy",
+        "Uber",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Big-Bang Rewrites Fail — And What Works Instead",
+            "content": "The instinct when facing a messy monolith is to rewrite it from scratch.\n- Build the new microservices in parallel, feature-freeze the monolith, and switch over on launch day.\n- This approach has a documented failure rate above **70%** for production systems.\n- The most famous example is Netscape 6 — a complete rewrite that took three years, during which the old product couldn't be improved and competitors ate market share.\n\nThe Strangler Fig pattern, named by Martin Fowler after a tropical vine that grows around a tree and eventually replaces it, takes the opposite approach.\n- The monolith **keeps running**.\n- You place an API gateway in front of it.\n- New functionality is built as microservices.\n- Existing functionality is extracted one module at a time.\n- At each step, the gateway routes specific paths to the new service while everything else still goes to the monolith.\n- Users never notice the transition.\n\nThe reason this works where rewrites fail: there's **no feature-freeze**.\n- The monolith continues serving production traffic and receiving bug fixes throughout the migration.\n- Each extracted service is validated independently — if the user service extraction goes badly, you revert one routing rule at the gateway and users are back on the monolith's user module within seconds.\n- The blast radius of a failure is one service, not the entire system.\n\nThe prerequisite is a **well-understood domain**.\n- If you don't know where the boundaries are, you'll extract the wrong modules and end up with services that constantly call each other — a distributed monolith.\n- Spend 2–3 months identifying bounded contexts through Domain-Driven Design workshops before cutting any code.\n- The quality of the migration depends entirely on the quality of the boundary identification.\n\nAn analogy the pattern's name literally comes from: a **strangler fig vine** grows around an old tree, slowly sending its own roots into the ground and wrapping its trunk around the host.\n- Over years the host tree dies — but there is never a moment when the canopy is gone.\n- New growth replaces old incrementally; the forest keeps its shade the entire time."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Strangler Fig Progression — Legacy → Mixed → New",
+            "content": "```mermaid\nflowchart LR\n    subgraph P0[Phase 0: baseline]\n        C0[Client] --> M0[Monolith]\n        M0 --> DB0[(Shared DB)]\n    end\n    subgraph P1[Phase 1: facade up]\n        C1[Client] --> GW1[API Gateway]\n        GW1 -->|all paths| M1[Monolith]\n        M1 --> DB1[(Shared DB)]\n    end\n    subgraph P2[Phase 2: first extraction]\n        C2[Client] --> GW2[API Gateway]\n        GW2 -->|/users/*| US[user-service NEW]\n        GW2 -->|legacy paths| M2[Monolith]\n        US --> USDB[(users DB)]\n        M2 --> DB2[(Legacy DB)]\n        Debezium[(Debezium CDC)] --> USDB\n        M2 -. binlog .-> Debezium\n    end\n    subgraph P3[Phase 3: multiple extractions]\n        C3[Client] --> GW3[API Gateway]\n        GW3 --> US3[user-service]\n        GW3 --> OS3[order-service]\n        GW3 --> PS3[payment-service]\n        GW3 -->|remaining| M3[Monolith shrinking]\n        US3 --> USDB3[(users DB)]\n        OS3 --> ODB[(orders DB)]\n        PS3 --> PDB[(payments DB)]\n        M3 --> LegacyDB[(legacy DB, small)]\n    end\n    subgraph P4[Phase 4: monolith gone]\n        C4[Client] --> GW4[API Gateway]\n        GW4 --> Svc1[service 1]\n        GW4 --> Svc2[service 2]\n        GW4 --> SvcN[service N]\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Phase 1 — Gateway Routing and the First Extraction",
+            "content": "The first step is placing a reverse proxy or API gateway in front of the monolith. Initially, it passes everything through. This non-functional change establishes the routing layer you'll use for the entire migration.\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: monolith-catchall\n          uri: http://monolith:8080\n          predicates:\n            - Path=/**          # everything goes to monolith initially\n```\n\nFor the first extraction, pick a module that is **well-bounded, low-risk, and read-heavy**. User profile management and notification preferences are common first candidates — they have clear boundaries, don't touch revenue flows, and are mostly reads. Payments, checkout, and order management come later when the team has migration experience.\n\nExtract the module into a new service with its own database, API, and CI/CD pipeline. Then update the gateway to route the relevant paths.\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: user-service\n          uri: lb://USER-SERVICE\n          predicates:\n            - Path=/api/users/**    # extracted paths go to new service\n          order: 1                  # higher priority than catchall\n        - id: monolith-catchall\n          uri: http://monolith:8080\n          predicates:\n            - Path=/**              # everything else still goes to monolith\n          order: 100\n```\n\nThe `order` field matters — routes are evaluated in priority order, so the specific service route must take precedence over the monolith catchall. Without explicit ordering, a request to `/api/users/123` might still reach the monolith."
+          },
+          {
+            "type": "step",
+            "title": "The Anti-Corruption Layer — Translating Between Old and New Worlds",
+            "content": "The monolith's data model and the new service's domain model will differ. The monolith might have a `USERS` table with 47 columns, 15 of which are unused, using column names like `USR_ADDR_LN1` from 2008. The new service should have a clean domain model with modern naming. The **Anti-Corruption Layer (ACL)** sits at the boundary and translates between the two.\n\n```java\n@Component\npublic class LegacyUserAdapter {\n\n    public User fromLegacy(MonolithUserRecord legacy) {\n        return User.builder()\n            .id(legacy.getUsrId())              // USR_ID → id\n            .email(legacy.getUsrEmailAddr())     // USR_EMAIL_ADDR → email\n            .displayName(buildDisplayName(\n                legacy.getUsrFname(),\n                legacy.getUsrLname()))            // USR_FNAME + USR_LNAME → displayName\n            .address(Address.builder()\n                .line1(legacy.getUsrAddrLn1())   // legacy naming preserved at boundary\n                .city(legacy.getUsrCity())\n                .build())\n            .build();\n    }\n\n    public MonolithUserRecord toLegacy(User user) {\n        // reverse mapping for writes during transition period\n    }\n}\n```\n\nThe ACL prevents legacy naming conventions, data formats, and domain concepts from leaking into the new service's codebase. Without it, the new service inherits every historical design decision the monolith made — defeating the purpose of the extraction.\n\nDuring the transition period, the monolith and the new service may need to coexist and share data. The ACL handles this bidirectionally — converting legacy formats to new domain models on reads, and converting back on writes if the monolith still needs to access the data."
+          },
+          {
+            "type": "step",
+            "title": "Database Strangling — The Part That's Harder Than the Code",
+            "content": "Extracting HTTP routes is the easy part. The hard part is **migrating data ownership**. If the new user service still reads from the monolith's `USERS` table, it can't be independently deployed, scaled, or migrated to a different database. You've moved code but not ownership.\n\nThe database migration runs in parallel with code extraction. Set up **Change Data Capture** (Debezium) to replicate the monolith's user tables to the new service's database in near-real-time. The new service reads from its own database. Compare results against the monolith using shadow traffic to verify data consistency.\n\nOnce reads are verified consistent (run a reconciliation job for at least a week), switch writes.\n- The new service becomes the authoritative writer.\n- Debezium direction reverses — the new service publishes change events that the monolith consumes to keep its local copy in sync during the transition.\n- After all monolith code that referenced user data is removed, drop the monolith's user tables.\n\nThe shadow testing phase is critical. Run both code paths simultaneously and compare outputs. Log discrepancies without affecting user-facing responses. This surfaces edge cases that unit tests miss — timezone handling differences, null vs empty string semantics, character encoding issues, pagination ordering differences.\n\nMaintain a **rollback path** at every step. The gateway routing change is a one-line YAML update to revert traffic to the monolith. Keep the monolith's code for the extracted module intact but inactive for at least one full release cycle after cutover. Document the rollback procedure in a runbook and rehearse it during off-peak hours."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Big-bang rewrite failure rate >70%** — second system must achieve full feature parity before anyone benefits.\n- **Gateway routing = the migration lever** — one YAML change redirects traffic from monolith to new service; rollback is seconds.\n- **First extraction: low-risk, read-heavy** — user profiles and notifications before payments and checkout.\n- **Anti-corruption layer prevents legacy leakage** — translate `USR_ADDR_LN1` to `address.line1` at the boundary without inheriting 2008 naming.\n- **Database strangling via CDC** — Debezium replicates monolith tables; shadow-test for ≥1 week before switching writes."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Strangler Fig pattern is the opposite of a big-bang rewrite. You place an API gateway in front of the existing monolith, extract one module at a time into a new service, and route traffic to it at the gateway — the monolith keeps running throughout with no feature freeze, no launch day, and no all-or-nothing risk.\n\n**The migration sequence:**\n- Start with a low-risk, well-bounded module — user profiles or notifications, not payments; build the new service with its own database and API, then update the gateway to route the relevant path to the new service\n- If something breaks, one routing change sends traffic back to the monolith — rollback is seconds, not a deployment cycle\n- The monolith's code stays intact for at least one release cycle after cutover, so regression is always available\n\n**Database migration — the underestimated part:**\n- Redirecting HTTP routes to a new service that still reads from the monolith's database creates a distributed monolith — the service is independent in name only\n- Replicate data via CDC (Debezium), shadow-test reads for at least a week, then switch writes; the new service becomes the authoritative data owner\n- The anti-corruption layer translates between the monolith's legacy data model and the new service's clean domain model — without it, you inherit 15-year-old column names and business rules baked into database schema\n\n**The test of real independence:**\n- If you can't deploy the extracted service without coordinating with another team or service, you have a distributed monolith, not microservices\n\nI recommend Strangler Fig as the only safe migration approach — big-bang rewrites fail more than 70% of the time because the second system must achieve full feature parity before delivering any value."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you migrate the database when extracting a service from a monolith?",
+        "What is the Anti-Corruption Layer pattern?",
+        "How do you decide which bounded context to extract first?"
+      ],
+      "seo": {
+        "metaTitle": "Strangler Fig Pattern Monolith Migration — Java Microservices Interview",
+        "metaDescription": "Strangler Fig pattern for safe monolith to microservices migration. API gateway routing, anti-corruption layer, and database migration strategy."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The Strangler Fig pattern is the opposite of a big-bang rewrite.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The instinct when facing a messy monolith is to rewrite it from scratch. Build the new microservices in parallel, feature-freeze the monolith, and switch over on launch day. This approach has a documented failure rate above 70% for production systems. The most famous example is Netscape 6 — a complete rewrite that took three years, during which the old product couldn't be improved and competitors ate market share. The Strangler Fig pattern, named by Martin Fowler after a tropical vine."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know safer migration strategies vs big-bang rewrites"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Big-bang rewrite failure rate >70% — second system must achieve full feature parity before anyone benefits",
+              "Gateway routing = the migration lever — one YAML change redirects traffic from monolith to new service; rollback is seconds",
+              "First extraction: low-risk, read-heavy — user profiles and notifications before payments and checkout",
+              "Anti-corruption layer prevents legacy leakage — translate USR_ADDR_LN1 to address",
+              "line1 at the boundary without inheriting 2008 naming"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The instinct when facing a messy monolith is to rewrite it from scratch. Build the new microservices in parallel, feature-freeze the monolith, and switch over on launch day. This approach has a documented failure rate above 70% for production systems. The most famous example is Netscape 6 — a complete rewrite that took three years, during which the old product couldn't be improved and competitors ate market share. The Strangler Fig pattern, named by Martin Fowler after a tropical vine that grows around a tree and eventually replaces it, takes the opposite approach. The monolith keeps running. You place an API gateway in front of it. New functionality is built as microservices. Existing functionality is extracted one module at a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Recommending a full rewrite",
+              "the 'second system effect' is a well-documented failure mode"
+            ]
+          }
+        ],
+        "cap": "The migration sequence: Start with a low-risk, well-bounded module — user profiles or notifications, not payments; build the new service with its own database and API, then update the gateway to route",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you migrate the database when extracting a service from a monolith?",
+          "What is the Anti-Corruption Layer pattern?",
+          "How do you decide which bounded context to extract first?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

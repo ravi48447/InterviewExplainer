@@ -1,0 +1,120 @@
+{
+  "topic": "Database Design At Scale",
+  "topicSlug": "database-design-at-scale",
+  "questions": [
+    {
+      "id": "sdf-008",
+      "slug": "database-replication-strategies",
+      "question": "What are the main database replication strategies and when do you use each?",
+      "title": "Database Replication: Master-Slave, Master-Master, and Quorum Reads",
+      "direct_answer": "Use single-leader (master-slave) replication for most applications: all writes go to one primary, reads fan out to replicas. Use multi-leader when you need writes in multiple regions with sub-100ms latency. Use leaderless (quorum) replication when you need high write availability and can tolerate conflict resolution complexity. The choice hinges on your write topology and consistency requirements.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Understanding of replication lag, consistency guarantees, and failover mechanics",
+        "common_mistake": "Not accounting for replication lag \u2014 reading from a replica immediately after writing to the primary returns stale data",
+        "to_stand_out": "Discuss read-your-writes consistency pattern, quorum math (W + R > N), and how replication interacts with CAP theorem"
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Stripe",
+        "GitHub"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem: One Database Server Isn't Enough",
+            "content": "A single database server has two limitations that replication solves: **read throughput** (one server can only handle so many queries) and **availability** (one server failing means total downtime). Replication creates copies of your data on multiple servers \u2014 but the strategy you choose determines how you trade off between consistency, latency, and failure resilience.\n\nThe subtle trap that trips up most engineers isn't replication itself \u2014 it's **replication lag**. When you write to the primary and immediately read from a replica, the replica might not have the write yet. A user updates their profile, the page refreshes reading from a replica, and they see their old data. This isn't a bug \u2014 it's the fundamental consequence of asynchronous replication, and every team eventually encounters it.\n\nThe three main strategies \u2014 synchronous, asynchronous, and semi-synchronous \u2014 each make different trade-offs between write latency, read consistency, and failure tolerance. Understanding when each applies is what separates a textbook answer from a production-informed one."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Three Strategies and Their Real-World Trade-offs",
+            "content": "Each replication strategy answers one question differently: does the primary wait for replicas to confirm the write before acknowledging the client?\n\n| Strategy | Write Latency | Consistency | Failover Data Loss | Best For |\n|---|---|---|---|---|\n| **Asynchronous** | Lowest \u2014 primary acknowledges immediately | Eventual \u2014 replicas lag 10ms\u201310s | Possible \u2014 uncommitted writes lost on primary failure | Read scaling, analytics replicas, non-critical data |\n| **Synchronous** | Highest \u2014 waits for ALL replicas | Strong \u2014 replicas always current | Zero \u2014 every write confirmed on all replicas | Financial systems, compliance-required durability |\n| **Semi-synchronous** | Medium \u2014 waits for ONE replica | Strong on one replica, eventual on others | Minimal \u2014 at least one replica has every write | Most production systems \u2014 the pragmatic default |\n\n**Asynchronous** is the default for PostgreSQL and MySQL. The primary ships WAL (write-ahead log) records to replicas, but doesn't wait for confirmation. Write latency is unaffected, but replicas can fall behind \u2014 especially during write spikes. Typical lag is 10\u2013100ms under normal load, but can spike to seconds or minutes during heavy writes or network issues.\n\n**Synchronous** replication guarantees zero data loss on failover but dramatically increases write latency. Every write must propagate to all replicas and receive confirmation before the client gets a success response. If any replica is slow or unreachable, writes stall. This is why fully synchronous replication is rare \u2014 it makes the slowest replica your write bottleneck.\n\n**Semi-synchronous** is the practical middle ground. The primary waits for **one** replica to confirm, then acknowledges the client. This guarantees at least one replica has every write (enabling zero-loss failover to that replica) while keeping latency manageable. AWS RDS Multi-AZ uses this approach."
+          },
+          {
+            "type": "step",
+            "title": "The Read-Your-Writes Problem and How to Solve It",
+            "content": "Replication lag creates one specific user-visible bug that appears in every application using read replicas: a user writes data and immediately reads it back from a replica that hasn't received the write yet. The profile update example is classic \u2014 user changes their name, page refreshes, old name appears.\n\nThe pattern that fixes this is **read-your-writes consistency**. After a write, subsequent reads from the same user are routed to the primary (or a replica known to be up-to-date) for a short window. Several implementation approaches exist, ordered from simplest to most sophisticated.\n\nThe simplest is **time-based routing**: after any write, route that user's reads to the primary for the next 5 seconds. This covers most replication lag scenarios. The implementation stores the last-write timestamp per user in a fast store like Redis and checks it in the read path.\n\n```java\npublic DataSource routeRead(String userId) {\n    Long lastWrite = redis.get(\"last_write:\" + userId);\n    if (lastWrite != null && \n        System.currentTimeMillis() - lastWrite < 5000) {\n        return primaryDataSource;           // recent write, read from primary\n    }\n    return replicaDataSource;               // safe to read from replica\n}\n```\n\nThe follow-up approach uses **GTID (Global Transaction ID)**: after a write, record the transaction ID and only route to replicas that have replicated past that GTID. This is more precise than time-based routing but requires database-specific support.\n\nThe quorum approach generalizes this: if you write to W replicas and read from R replicas, and **W + R > N** (total replicas), at least one read server will have the latest write. This is the consistency model Cassandra and DynamoDB use. The trade-off is higher read latency because you're reading from multiple replicas and taking the latest."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Choosing the Right Strategy: A Production Decision Framework",
+            "content": "**Start with asynchronous replication** for read scaling. Add 1\u20132 read replicas behind a connection pooler (PgBouncer for PostgreSQL) and route read-heavy queries there. This handles 80% of scaling needs without any consistency complications for reads that can tolerate brief staleness.\n\n**Use semi-synchronous for your failover replica.** Designate one replica as semi-synchronous so that automatic failover (via Patroni, RDS Multi-AZ, or Cloud SQL HA) loses zero committed transactions. Other replicas can remain asynchronous for read scaling.\n\n**Use synchronous only when regulation demands it.** Financial systems, healthcare records, or audit-critical data where any transaction loss is unacceptable. Accept the write latency cost and engineer around it \u2014 batch writes, use async processing for non-critical operations.\n\n**The replication + sharding interaction** is a common follow-up question. Replication scales reads; sharding scales writes. They complement each other. A typical production setup: each shard has a primary + 2 async read replicas + 1 semi-sync failover replica. The shard handles the write throughput ceiling; the replicas handle the read throughput ceiling."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Synchronous replication = zero lag, higher write latency** \u2014 primary waits for at least one replica to confirm before acknowledging the client.\n- **Asynchronous replication = better write performance, data loss risk** \u2014 primary returns immediately after local write.\n- **Read replicas require read-your-own-writes handling** \u2014 a user updates their profile and immediately re-reads it.\n- **Replica lag monitoring is operational necessity** \u2014 measure replication lag continuously.\n- **Multi-primary risks split-brain conflicts** \u2014 two primaries accepting conflicting writes on the same key create a conflict that must be resolved."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Database replication creates copies of your data on multiple servers. It solves two distinct problems \u2014 read throughput (one server can't handle all reads) and availability (a single server failure loses all data access) \u2014 and the replication strategy you choose determines which of those problems you solve and at what cost.\n\n**Synchronous replication \u2014 zero data loss, higher write latency:**\n- The primary waits for at least one replica to confirm the write before acknowledging the client; if the primary crashes immediately after, the replica has all committed data\n- Adds 1\u201320ms to every write depending on network distance between primary and replica; acceptable for financial systems; too slow for high-throughput event processing\n- PostgreSQL's synchronous_commit and MySQL Group Replication implement this\n\n**Asynchronous replication \u2014 lower write latency, data loss risk:**\n- The primary returns immediately after writing locally; replicas catch up in background; if the primary crashes before replication completes, the in-flight writes are lost\n- The standard choice for read scaling: 10 async replicas can handle 10\u00d7 the read volume at the cost of replica lag\n- Replica lag must be monitored continuously; alert when lag exceeds your RPO; route reads that require strong consistency back to the primary\n\n**Practical operational details:**\n- Read-your-own-writes problem: a user updates their profile and immediately re-reads it; if the GET hits a lagging replica, they see the old data; fix by routing the user's own reads to the primary for a configurable window after a write\n- Multi-primary setups risk split-brain conflicts; most systems avoid this with a single authoritative primary and promote a replica to primary only on failure\n\nI recommend asynchronous read replicas as the default scaling strategy for read-heavy workloads, with careful replica lag monitoring and a clear promotion procedure for primary failure."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle failover when the primary database goes down?",
+        "What is the difference between synchronous and asynchronous replication?",
+        "How does read-your-writes consistency work in practice?"
+      ],
+      "seo": {
+        "metaTitle": "Database Replication Master-Slave Quorum \u2014 System Design Interview",
+        "metaDescription": "Database replication strategies: single-leader, multi-leader, leaderless quorum. Replication lag, failover, conflict resolution, and Spring Boot read routing."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Database replication creates copies of your data on multiple servers.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A single database server has two limitations that replication solves: read throughput (one server can only handle so many queries) and availability (one server failing means total downtime). Replication creates copies of your data on multiple servers \u2014 but the strategy you choose determines how you trade off between consistency, latency, and failure resilience. The subtle trap that trips up most engineers isn't replication itself \u2014 it's replication lag. When you write to the primary and immediately read from a."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of replication lag, consistency guarantees, and failover mechanics"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Synchronous replication = zero lag, higher write latency \u2014 primary waits for at least one replica to confirm before acknowledging the client",
+              "Asynchronous replication = better write performance, data loss risk \u2014 primary returns immediately after local write",
+              "Read replicas require read-your-own-writes handling \u2014 a user updates their profile and immediately re-reads it",
+              "Replica lag monitoring is operational necessity \u2014 measure replication lag continuously",
+              "Multi-primary risks split-brain conflicts \u2014 two primaries accepting conflicting writes on the same key create a conflict that must be resolved"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A single database server has two limitations that replication solves: read throughput (one server can only handle so many queries) and availability (one server failing means total downtime). Replication creates copies of your data on multiple servers \u2014 but the strategy you choose determines how you trade off between consistency, latency, and failure resilience. The subtle trap that trips up most engineers isn't replication itself \u2014 it's replication lag. When you write to the primary and immediately read from a replica, the replica might not have the write yet. A user updates their profile, the page refreshes reading from a replica, and they see their old data. This isn't a bug \u2014 it's the fundamental consequence of asynchronous replication, and."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not accounting for replication lag \u2014 reading from a replica immediately after writing to the primary returns stale data"
+            ]
+          }
+        ],
+        "cap": "Synchronous replication \u2014 zero data loss, higher write latency: The primary waits for at least one replica to confirm the write before acknowledging the client; if the primary crashes immediately afte",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle failover when the primary database goes down?",
+          "What is the difference between synchronous and asynchronous replication?",
+          "How does read-your-writes consistency work in practice?"
+        ]
+      }
+    }
+  ]
+}

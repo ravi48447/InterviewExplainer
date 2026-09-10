@@ -1,0 +1,127 @@
+{
+  "topic": "Ecs And Fargate",
+  "topicSlug": "ecs-and-fargate",
+  "questions": [
+    {
+      "id": "aws-002",
+      "slug": "deploy-spring-boot-ecs-fargate",
+      "question": "How do you deploy a Spring Boot application to AWS ECS Fargate?",
+      "title": "Deploying Spring Boot to AWS ECS Fargate",
+      "direct_answer": "You containerise the Spring Boot app with Docker, push the image to ECR (Elastic Container Registry), create an ECS task definition referencing the image, create a Fargate service inside a VPC, and front it with an Application Load Balancer. IAM roles control what AWS services the container can access.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Practical cloud deployment knowledge and Docker + AWS familiarity",
+        "common_mistake": "Hardcoding credentials in the Docker image or Dockerfile instead of using IAM task roles",
+        "to_stand_out": "Mention health check endpoints (/actuator/health), container resource sizing (CPU/memory), and blue/green deployments via CodeDeploy"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "lyft",
+        "doordash",
+        "twilio"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Fargate Eliminates the Hardest Part of Container Deployment",
+            "content": "Before Fargate, deploying containers on AWS meant managing an ECS cluster backed by EC2 instances \u2014 choosing instance types, tuning capacity providers, patching AMIs, and handling instance draining during deployments. Fargate removes all of that: you define **CPU and memory for your container**, and AWS places, scales, and patches the underlying infrastructure.\n\nThe deployment flow has five concrete steps, but the part that trips most developers up isn't the deployment itself \u2014 it's the **IAM role distinction** between what ECS needs to run your container (execution role) and what your Spring Boot code needs to access AWS services (task role). Confusing these two produces identical-looking permission errors that are hard to debug without understanding the model.\n\nThe other production concern unique to Java is **resource sizing**. A Spring Boot app with typical dependencies needs at least 512 MB of memory for the JVM heap plus container overhead. Under-sizing causes OOMKilled restarts that look like application bugs."
+          },
+          {
+            "type": "step",
+            "title": "Containerize With a Multi-Stage Build That Keeps Images Small",
+            "content": "A multi-stage Dockerfile separates the build environment (JDK, Maven, source code) from the runtime environment (JRE only, final JAR). This typically cuts the image from ~800 MB to ~200 MB, which directly reduces pull time during deployments and cold starts.\n\n```dockerfile\nFROM maven:3.9-eclipse-temurin-21 AS build\nWORKDIR /app\nCOPY pom.xml .\nRUN mvn dependency:go-offline  # cached layer unless pom changes\nCOPY src ./src\nRUN mvn package -DskipTests\n\nFROM eclipse-temurin:21-jre-alpine\nWORKDIR /app\nCOPY --from=build /app/target/*.jar app.jar\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-XX:MaxRAMPercentage=75.0\", \"-jar\", \"app.jar\"]\n```\n\nThe `-XX:MaxRAMPercentage=75.0` flag is critical for containers. Without it, the JVM calculates heap size based on the host machine's memory (potentially 64 GB on the underlying Fargate host), not the container's memory limit. With it, the JVM uses 75% of the container's allocated memory, leaving headroom for non-heap memory (metaspace, thread stacks, native buffers).\n\nAfter building, push to ECR \u2014 AWS's private container registry that integrates with ECS and IAM.\n\n```bash\naws ecr get-login-password --region us-east-1 | \\\n  docker login --username AWS --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com\ndocker build -t my-spring-app . && \\\ndocker tag my-spring-app:latest 123456789.dkr.ecr.us-east-1.amazonaws.com/my-spring-app:latest && \\\ndocker push 123456789.dkr.ecr.us-east-1.amazonaws.com/my-spring-app:latest\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Task Definition: Two Roles, Health Checks, and Secrets",
+            "content": "The task definition is the deployment descriptor \u2014 it specifies the container image, resource limits, IAM roles, secrets, and health check configuration. Getting the IAM roles right here prevents the most common Fargate permission errors.\n\nThe **execution role** is what ECS uses to pull your image from ECR and send container logs to CloudWatch. The **task role** is what your Spring Boot application assumes at runtime to access S3, SQS, Secrets Manager, and other services. These are separate IAM roles with separate policies.\n\n```json\n{\n  \"family\": \"order-service\",\n  \"networkMode\": \"awsvpc\",\n  \"requiresCompatibilities\": [\"FARGATE\"],\n  \"cpu\": \"512\",\n  \"memory\": \"1024\",\n  \"executionRoleArn\": \"arn:aws:iam::123456789:role/ecsTaskExecutionRole\",\n  \"taskRoleArn\": \"arn:aws:iam::123456789:role/order-service-task-role\",\n  \"containerDefinitions\": [{\n    \"name\": \"order-service\",\n    \"image\": \"123456789.dkr.ecr.us-east-1.amazonaws.com/order-service:v1.2\",\n    \"portMappings\": [{\"containerPort\": 8080}],\n    \"secrets\": [{\n      \"name\": \"DB_PASSWORD\",\n      \"valueFrom\": \"arn:aws:secretsmanager:us-east-1:123456789:secret:order-db-password\"\n    }],\n    \"healthCheck\": {\n      \"command\": [\"CMD-SHELL\", \"curl -f http://localhost:8080/actuator/health || exit 1\"],\n      \"interval\": 30,\n      \"retries\": 3,\n      \"startPeriod\": 60\n    }\n  }]\n}\n```\n\nThe `startPeriod: 60` gives Spring Boot 60 seconds to start before health checks begin \u2014 without this, a slow-starting JVM fails health checks during startup and ECS kills the task before it's ready. The `secrets` block pulls values from Secrets Manager at container start, injecting them as environment variables without exposing them in the task definition or image."
+          },
+          {
+            "type": "step",
+            "title": "Service Creation, ALB, and Auto Scaling for Production Traffic",
+            "content": "The ECS service maintains a desired count of running tasks, replaces unhealthy ones, and integrates with the Application Load Balancer for traffic routing. The ALB performs its own health checks against `/actuator/health` \u2014 only tasks that pass both the container health check and ALB health check receive traffic.\n\n```bash\naws ecs create-service \\\n  --cluster production \\\n  --service-name order-service \\\n  --task-definition order-service:3 \\\n  --desired-count 2 \\\n  --launch-type FARGATE \\\n  --network-configuration \"awsvpcConfiguration={\\\n    subnets=[subnet-private-1,subnet-private-2],\\\n    securityGroups=[sg-app],\\\n    assignPublicIp=DISABLED}\" \\\n  --load-balancers \"targetGroupArn=arn:aws:...,containerName=order-service,containerPort=8080\"\n```\n\nNotice `assignPublicIp=DISABLED` \u2014 the tasks run in private subnets and receive traffic only through the ALB. This is the standard production topology: ALB in public subnets, application tasks in private subnets, RDS in isolated subnets.\n\nFor auto-scaling, ECS Service Auto Scaling adjusts the task count based on CloudWatch metrics. Target tracking on CPU utilization is the simplest policy \u2014 it adds tasks when average CPU exceeds the target and removes them when it drops.\n\n```bash\naws application-autoscaling put-scaling-policy \\\n  --service-namespace ecs \\\n  --resource-id service/production/order-service \\\n  --scalable-dimension ecs:service:DesiredCount \\\n  --policy-name cpu-70-target \\\n  --policy-type TargetTrackingScaling \\\n  --target-tracking-scaling-policy-configuration \\\n    '{\"TargetValue\":70,\"PredefinedMetricSpecification\":{\"PredefinedMetricType\":\"ECSServiceAverageCPUUtilization\"}}'\n```\n\nFor zero-downtime deployments, configure the service with a **blue/green deployment** via CodeDeploy \u2014 it spins up new tasks with the new image, routes test traffic to them, then shifts production traffic only after the new tasks pass health checks."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Multi-stage Dockerfile keeps the image small** \u2014 build in a JDK stage, copy only the JAR to a JRE final stage; distroless or alpine base; smaller image = faster pulls and smaller attack surface\n- **ECR in the same region as ECS avoids transfer costs** \u2014 image pulls from ECR to ECS in the same region are free and fast; cross-region pulls incur data transfer charges\n- **Task definition: IAM task role, not instance role** \u2014 assign an IAM role to the task definition, not the EC2 instance; this scopes permissions to the specific service, not the entire host\n- **ALB health check on `/actuator/health`** \u2014 ECS deregisters tasks that fail health checks; configure the check path, interval, and unhealthy threshold before deploying\n- **Rolling deployment with `minimumHealthyPercent: 50`** \u2014 old tasks stay running until new tasks pass health checks; `maximumPercent: 200` allows running twice the desired count during the rollout"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Deploying a Spring Boot application to ECS Fargate follows four stages: containerize, push to a registry, define the task, and create the service. Each stage has one common mistake that causes deployment failures.\n\n**Containerize \u2014 multi-stage Dockerfile**\n- A multi-stage Dockerfile builds the JAR in a Maven or Gradle stage and copies only the JAR into the final image \u2014 which means the final container doesn't include the JDK build tools, keeping the image small and reducing the attack surface\n- Use a distroless or slim JRE base image for the final stage: `FROM eclipse-temurin:21-jre-alpine` gives a minimal runtime\n\n**Push to ECR**\n- Create an ECR repository with `aws ecr create-repository --repository-name my-service`; authenticate with `aws ecr get-login-password | docker login`; tag and push the image\n- ECR stores images in the same region as ECS, which means image pulls are fast and don't incur cross-region data transfer costs\n\n**Task definition \u2014 CPU, memory, environment**\n- The ECS task definition specifies the container image, CPU units, memory, port mappings, IAM task role, and environment variables \u2014 environment variables for database URLs and feature flags go here, secrets come from Secrets Manager via the `secrets` field\n- Set `essential: true` so ECS restarts the task if the container exits\n\n**Service \u2014 load balancing and health checks**\n- The ECS service maintains a desired count of running tasks, registers them with an ALB target group, and replaces unhealthy tasks automatically\n- Configure the ALB health check to call Spring Boot's `/actuator/health` endpoint \u2014 ECS marks tasks unhealthy if the health check fails, replacing them before taking traffic\n\nFor zero-downtime deployments: use the `ECS (Rolling update)` deployment type with `minimumHealthyPercent: 50` and `maximumPercent: 200` so old tasks remain until new ones pass health checks."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you do a blue/green deployment on ECS?",
+        "How do you configure Spring Boot to read secrets from AWS Secrets Manager at startup?",
+        "What IAM permissions does the ECS task role need versus the task execution role?"
+      ],
+      "seo": {
+        "meta_title": "Deploy Spring Boot to AWS ECS Fargate \u2014 Step by Step",
+        "meta_description": "Learn how to containerise a Spring Boot app, push to ECR, and deploy to ECS Fargate with an ALB, IAM roles, and auto scaling.",
+        "keywords": [
+          "spring boot ecs fargate",
+          "deploy java ecs",
+          "ecr spring boot",
+          "fargate spring boot deployment"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Deploying a Spring Boot application to ECS Fargate follows four stages: containerize, push to a registry, define the task, and create the service.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Before Fargate, deploying containers on AWS meant managing an ECS cluster backed by EC2 instances \u2014 choosing instance types, tuning capacity providers, patching AMIs, and handling instance draining during deployments. Fargate removes all of that: you define CPU and memory for your container, and AWS places, scales, and patches the underlying infrastructure. The deployment flow has five concrete steps, but the part that trips most developers up isn't the deployment itself \u2014 it's the IAM role distinction between what ECS needs to run your container (execution role) and what your."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "A multi-stage Dockerfile separates the build environment (JDK, Maven, source code) from the runtime environment (JRE only, final JAR).",
+              "This typically cuts the image from ~800 MB to ~200 MB, which directly reduces pull time during deployments and cold starts.",
+              "``dockerfile FROM maven:3.9-eclipse-temurin-21 AS build WORKDIR /app COPY pom.xml .",
+              "RUN mvn dependency:go-offline # cached layer unless pom changes COPY src ./src RUN mvn package -DskipTests FROM eclipse-temurin:21-jre-alpine WORKDIR /app COPY --from=build /app/target/*.jar app.jar EXPOSE 8080 ENTRYPOINT [\"java\", \"-XX:MaxRAMPercentage=75.0\", \"-jar\", \"app.jar\"] ` The -XX:MaxRAMPercentage=75.0 flag is critical for containers.",
+              "Without it, the JVM calculates heap size based on the host machine's memory (potentially 64 GB on the underlying Fargate host), not the container's memory limit.",
+              "With it, the JVM uses 75% of the container's allocated memory, leaving headroom for non-heap memory (metaspace, thread stacks, native buffers)."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Multi-stage Dockerfile keeps the image small \u2014 build in a JDK stage, copy only the JAR to a JRE final stage; distroless or alpine base; smaller image = faster pulls and smaller attack surface ECR in the same region as ECS avoids transfer costs \u2014 image pulls from ECR to ECS in the same region are free and fast; cross-region pulls incur data transfer charges Task definition: IAM task role, not instance role \u2014 assign an IAM role to the task definition, not the EC2 instance; this scopes permissions to the specific service, not the entire host ALB health check on /actuator/health \u2014 ECS deregisters tasks that fail health checks; configure the check path, interval, and unhealthy threshold before deploying Rolling deployment with minimumHealthyPercent: 50 \u2014 old tasks stay running until new tasks pass health checks; maximumPercent: 200 allows running twice the desired count during the rollout"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Hardcoding credentials in the Docker image or Dockerfile instead of using IAM task roles"
+          }
+        ],
+        "cap": "Containerize \u2014 multi-stage Dockerfile A multi-stage Dockerfile builds the JAR in a Maven or Gradle stage and copies only the JAR into the final image \u2014 which means the final container doesn't include",
+        "familiarity_anchors": [
+          "Spring",
+          "Docker",
+          "Elastic"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you do a blue/green deployment on ECS?",
+          "How do you configure Spring Boot to read secrets from AWS Secrets Manager at startup?",
+          "What IAM permissions does the ECS task role need versus the task execution role?"
+        ]
+      }
+    }
+  ]
+}

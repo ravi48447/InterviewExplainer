@@ -1,0 +1,140 @@
+{
+  "topic": "Caffeine Cache",
+  "topicSlug": "caffeine-cache",
+  "questions": [
+    {
+      "id": "rc-caf-001",
+      "slug": "caffeine-cache-spring-boot-configuration-policies",
+      "question": "How do you configure Caffeine cache properly in Spring Boot — sizing, eviction, refresh, stats?",
+      "title": "Caffeine Cache: Configuration, Policies, Stats",
+      "direct_answer": "Caffeine is the default in-process Java cache: it replaces Guava Cache, uses the Window TinyLFU admission policy (near-optimal hit rate), and integrates cleanly with Spring's `@Cacheable`. Production config needs four things: **(1) bound size** with `maximumSize` or `maximumWeight` — never unbounded; **(2) expiry** with `expireAfterWrite` or `expireAfterAccess` depending on freshness vs hit-rate priority; **(3) `refreshAfterWrite`** for async background refresh on hot keys; **(4) `recordStats()`** + Micrometer binding to monitor hit rate, eviction, load latency. Also set `softValues()` or heap weighting cautiously; prefer bounded eviction over GC pressure. Request coalescing (`CacheLoader`) prevents thundering herd for free.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "In-process caching with production-grade configuration",
+        "common_mistake": "Unbounded cache; no stats; expireAfterAccess when expireAfterWrite fits; missing request coalescing; ignoring heap pressure",
+        "to_stand_out": "Discuss Window TinyLFU, async refresh, weigher for variable-size entries, Caffeine + Spring Cache integration, metric export"
+      },
+      "company_tags": [
+        "github",
+        "netflix",
+        "uber",
+        "linkedin"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Caffeine Over Guava and ConcurrentHashMap",
+            "content": "Caffeine is the modern Java in-process cache. Written by Ben Manes (formerly Guava Cache), it's the successor Google recommends — faster, better hit rate, richer features. If you're using Guava Cache in 2026, migrate.\n\n**What Caffeine adds over `ConcurrentHashMap`:**\n- **Size-bound eviction** with Window TinyLFU (near-optimal hit rate; much better than LRU)\n- **Time-based expiry** (`expireAfterWrite`, `expireAfterAccess`, `expireAfter` custom)\n- **Async loading & refresh** (background refresh without blocking reads)\n- **Request coalescing** via `CacheLoader` (thundering herd free)\n- **Statistics** (`recordStats()`) for observability\n- **Weighted capacity** (different entries count differently)\n- **Weak / soft references** for GC-friendly caching\n- **Write-through** and **write-behind** options\n\n**Window TinyLFU** is the killer feature. LRU evicts the least-recently-used; in workloads with scans or one-hit-wonders, LRU thrashes. TinyLFU uses frequency sketches (count-min sketch) to admit only items likely to be re-accessed, protecting hot data. Near-optimal in most real workloads.\n\nCaffeine is the default Spring Cache provider when `spring-boot-starter-cache` + `caffeine` are on the classpath."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Caffeine Internals",
+            "content": "```mermaid\nflowchart TB\n    Req[Get key] --> Check{In cache?}\n    Check -->|hit| Ret[Return value]\n    Check -->|miss| Loader[CacheLoader.load]\n    Loader --> Put[Put in cache]\n    Put --> Adm{Window TinyLFU<br/>admission filter}\n    Adm -->|keep| Main[Main region<br/>Segmented LRU]\n    Adm -->|reject| Drop[Drop]\n    subgraph Expiry\n        TW[Time-based:<br/>expireAfterWrite / Access]\n        Size[Size-based:<br/>maximumSize / Weight]\n        Ref[refreshAfterWrite:<br/>async reload]\n    end\n    Main -.-> TW\n    Main -.-> Size\n    Main -.-> Ref\n    classDef hot fill:#90caf9\n    classDef cold fill:#ffe0b2\n    class Main hot\n    class Drop cold\n```"
+          },
+          {
+            "type": "step",
+            "title": "Spring Boot Configuration",
+            "content": "**Dependencies:**\n\n```xml\n<dependency>\n  <groupId>org.springframework.boot</groupId>\n  <artifactId>spring-boot-starter-cache</artifactId>\n</dependency>\n<dependency>\n  <groupId>com.github.ben-manes.caffeine</groupId>\n  <artifactId>caffeine</artifactId>\n</dependency>\n```\n\n**Enable caching** + programmatic Caffeine config (recommended over `application.yml` for fine control):\n\n```java\n@Configuration\n@EnableCaching\npublic class CacheConfig {\n\n    @Bean\n    public CacheManager cacheManager() {\n        CaffeineCacheManager mgr = new CaffeineCacheManager(\n            \"products\", \"userProfiles\", \"featureFlags\");\n        mgr.setCaffeine(Caffeine.newBuilder()\n            .maximumSize(10_000)\n            .expireAfterWrite(Duration.ofMinutes(10))\n            .refreshAfterWrite(Duration.ofMinutes(2))\n            .recordStats());\n        return mgr;\n    }\n}\n```\n\n**Per-cache custom config** (different sizes/TTLs per cache):\n\n```java\n@Bean\npublic CacheManager cacheManager() {\n    SimpleCacheManager mgr = new SimpleCacheManager();\n    mgr.setCaches(List.of(\n        caffeineCache(\"products\", 50_000, Duration.ofMinutes(30)),\n        caffeineCache(\"featureFlags\", 1_000, Duration.ofMinutes(5)),\n        caffeineCache(\"userProfiles\", 10_000, Duration.ofMinutes(15))\n    ));\n    return mgr;\n}\n\nprivate CaffeineCache caffeineCache(String name, long size, Duration ttl) {\n    return new CaffeineCache(name,\n        Caffeine.newBuilder()\n            .maximumSize(size)\n            .expireAfterWrite(ttl)\n            .recordStats()\n            .build());\n}\n```\n\n**Usage with `@Cacheable`:**\n\n```java\n@Service\npublic class ProductService {\n\n    @Cacheable(value = \"products\", key = \"#id\", sync = true)\n    public Product findById(String id) {\n        return repo.findById(id).orElseThrow();\n    }\n\n    @CacheEvict(value = \"products\", key = \"#p.id\")\n    public void update(Product p) { repo.save(p); }\n}\n```\n\n`sync = true` is important: it prevents thundering herd by coalescing concurrent requests for the same key.\n\n**Async refresh pattern** — hot data stays fresh without blocking reads:\n\n```java\nLoadingCache<String, Product> cache = Caffeine.newBuilder()\n    .maximumSize(10_000)\n    .expireAfterWrite(Duration.ofMinutes(10))\n    .refreshAfterWrite(Duration.ofMinutes(2))\n    .recordStats()\n    .build(key -> repo.findById(key).orElseThrow());\n```\n\nAfter 2 minutes, next read triggers async reload; old value still served until new value is ready.\n\n**Async loading** for I/O-bound loaders:\n\n```java\nAsyncLoadingCache<String, Product> cache = Caffeine.newBuilder()\n    .maximumSize(10_000)\n    .expireAfterWrite(Duration.ofMinutes(10))\n    .buildAsync((key, exec) ->\n        CompletableFuture.supplyAsync(() -> loadFromRemote(key), exec));\n```"
+          },
+          {
+            "type": "step",
+            "title": "Eviction Policies and Sizing",
+            "content": "**Size limits:**\n- `maximumSize(N)` — entry count (simplest)\n- `maximumWeight(N)` + `weigher((k,v) -> ...)` — when entries vary significantly in size (HTML fragments, serialized objects)\n\n**Expiry:**\n- `expireAfterWrite(d)` — entry expires d after write (freshness priority)\n- `expireAfterAccess(d)` — entry expires d after last access (hit-rate priority)\n- `expireAfter(Expiry)` — per-entry custom TTL (e.g., longer TTL for popular products)\n\n**Refresh:**\n- `refreshAfterWrite(d)` — async reload after d; old value served until reload\n- Stricter than `expireAfterWrite` — keep data flowing without user-visible misses\n\n**Reference types:**\n- `weakKeys()` / `weakValues()` — eligible for GC when no strong reference elsewhere\n- `softValues()` — evicted under memory pressure\n- Use sparingly — most production uses bounded sizes instead\n\n**Typical configurations by use case:**\n\n| Use Case | maximumSize | expireAfterWrite | refreshAfterWrite |\n|---|---|---|---|\n| Feature flags | 1,000 | 5 min | 1 min |\n| User profiles | 10,000 | 15 min | 5 min |\n| Product pages | 50,000 | 30 min | 10 min |\n| Hot config | 500 | 10 min | 2 min |\n| Computation results | 10,000 | 1 hour | — |\n| Session data | 50,000 | 30 min (access) | — |\n\n**Sizing heuristics:**\n- Size × avg entry bytes must fit comfortably in heap (leave 30–50% headroom)\n- Start at 10k entries; tune based on hit rate metrics\n- Monitor eviction rate; if very high, cache too small\n- Monitor hit rate; if very low, cache not useful or TTL too short\n\n**Heap pressure warning.**\nUnbounded cache or too-large `maximumSize` can cause long GC pauses. Always bound. For large objects, prefer `maximumWeight` + `weigher`. Heap monitoring (JVM GC logs, Prometheus heap metrics) is mandatory."
+          },
+          {
+            "type": "step",
+            "title": "Observability and Metrics",
+            "content": "**Enable stats:**\n\n```java\nCaffeine.newBuilder()\n    .maximumSize(10_000)\n    .expireAfterWrite(Duration.ofMinutes(10))\n    .recordStats();\n```\n\n**Expose to Micrometer:**\n\n```java\n@Bean\npublic MeterBinder cacheMetrics(CacheManager cm) {\n    return registry -> {\n        for (String name : cm.getCacheNames()) {\n            Cache<Object, Object> native = ((CaffeineCache) cm.getCache(name))\n                .getNativeCache();\n            CaffeineCacheMetrics.monitor(registry, native, name);\n        }\n    };\n}\n```\n\n**Key metrics:**\n- `cache.size` — current entries\n- `cache.gets` — total gets (hit + miss)\n- `cache.puts` — total puts\n- `cache.evictions` — evicted entries (size / expiry)\n- `cache.hit.ratio` — derived (`hits / (hits + misses)`)\n- `cache.load.duration` — load latency from `CacheLoader`\n- `cache.load.failure` — loader exceptions\n\n**Grafana alerts to set:**\n- Hit ratio drops below 80% (cache not doing its job)\n- Eviction rate spikes (too small or load burst)\n- Load duration > threshold (source slow)\n- Load failure rate > 0 (errors propagating)\n\n**Access stats programmatically:**\n\n```java\nCacheStats stats = cache.stats();\nlog.info(\"hit ratio: {}%, avg load: {}ms, evictions: {}\",\n    stats.hitRate() * 100,\n    stats.averageLoadPenalty() / 1_000_000,\n    stats.evictionCount());\n```\n\n**Actuator endpoint** (`/actuator/caches`) exposes cache names, statistics with Spring Boot 2.1+."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Gotchas",
+            "content": "**Per-instance state.** Caffeine cache is per-JVM. In a 10-instance cluster, same key loads 10 times and 10 independent copies exist. Don't use for counters, quotas, or anything requiring cluster-wide truth — those need Redis.\n\n**Invalidation across instances.** When one instance updates the DB, other instances' Caffeine caches are stale. Solutions:\n- Short TTL (accept stale for TTL window)\n- Redis pub/sub invalidation message\n- Event-driven invalidation (Kafka event when data changes)\n- CDC (Debezium) → invalidation events\n\n**GC impact.** Every Caffeine entry is a Java object holding references. 100k entries with 10KB each = ~1GB heap. Set bounds conservatively; monitor GC pause times.\n\n**`expireAfterAccess` can keep garbage hot.** If only scanned by background process, items stay 'accessed'. Usually `expireAfterWrite` is safer default.\n\n**`sync = true` on `@Cacheable` is often forgotten.** Without it, concurrent cache-miss requests all call the underlying loader (thundering herd). With `sync = true`, Caffeine coalesces.\n\n**`@CacheEvict(allEntries = true)` is expensive** and usually wrong. Clears entire cache; subsequent requests all miss. Prefer per-key eviction.\n\n**Key serialization.** Caffeine uses Java `.equals()`/`.hashCode()` on keys. Mutable keys break caching. Use immutable key objects (records, Strings, Longs).\n\n**Spring Cache abstraction limits.** `@Cacheable` only supports the lowest common denominator; Caffeine-specific features (async loading, refresh) need direct Caffeine usage. For complex cases, inject `Cache<K,V>` directly.\n\n**Spring Cache `null` values.** By default, Spring caches `null` as `NullValue.INSTANCE`. If you don't want to cache nulls: `@Cacheable(unless = \"#result == null\")`.\n\n**Caffeine is not for big entries.** 10MB entries belong on disk or in Redis — not in heap. Caffeine shines for millions of small entries.\n\n**Caffeine vs EhCache.** EhCache was dominant pre-2020; Caffeine is faster and simpler. EhCache 3 with Terracotta adds distribution but is rarely chosen over Redis in new systems.\n\n**Caffeine vs ConcurrentHashMap + scheduled cleanup.** You can build cache in CHM, but you'll reinvent TinyLFU, stats, expiry, async loading — poorly. Just use Caffeine.\n\n**Warm-up strategy.** Fresh JVM = empty cache. First minutes may hit DB hard. Options:\n- Warm cache at startup for hot keys (`@EventListener(ApplicationReadyEvent)`)\n- Gradual rollout (canary) with LB slow ramp\n- Replica 'reading' from old instance before cutover\n\n**Tiered caching.** Caffeine (L1) + Redis (L2) gives best of both. Pattern:\n1. Check Caffeine\n2. On miss, check Redis\n3. On miss, load from DB\n4. Populate both on the way up\n5. Publish invalidation event on writes\n\n**Single flight / request coalescing.** Caffeine's `LoadingCache` does this automatically — concurrent gets for the same absent key share one load. Hugely valuable.\n\n**Don't cache responses with security implications thoughtlessly.** A `@Cacheable` method returning user's data keyed by request params without tenant/user in the key = cross-tenant leak. Always include user/tenant in key or namespace the cache."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Caffeine is the 2026 default in-process cache** in Java; replaces Guava\n- **Window TinyLFU admission** gives near-optimal hit rate vs LRU\n- **Always bound**: `maximumSize` or `maximumWeight` + `weigher`\n- **Expiry options**: `expireAfterWrite` (freshness) vs `expireAfterAccess` (hit rate) vs `expireAfter` (custom)\n- **`refreshAfterWrite` for async refresh** on hot keys; users never see misses\n- **Request coalescing** (sync=true / LoadingCache) prevents thundering herd free\n- **`recordStats()` + Micrometer** for hit rate, eviction, load latency dashboards\n- **Per-instance only** — use Redis for cluster-wide state or invalidate via pub/sub\n- **Include tenant/user in key** to avoid cross-tenant leaks\n- **Spring `@Cacheable` with `sync=true`** is essential for hot keys"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Caffeine is the default in-process Java cache in 2026. It replaces Guava Cache (same author, Ben Manes) and uses Window TinyLFU admission policy for near-optimal hit rate.\n\n**What Caffeine adds over ConcurrentHashMap**\n- Size-bound eviction with Window TinyLFU\n- Time-based expiry (expireAfterWrite, expireAfterAccess)\n- Async loading and refresh\n- Request coalescing (thundering herd free)\n- Statistics for observability\n- Weighted capacity for variable-size entries\n\n**Why Window TinyLFU over LRU**\n- LRU evicts least-recently-used; in workloads with scans or one-hit-wonders, LRU thrashes\n- TinyLFU uses frequency sketches; admits only items likely to be re-accessed\n- Protects hot data; near-optimal in most real workloads\n\n**Spring Boot configuration**\n- Dependencies: spring-boot-starter-cache + caffeine\n- @EnableCaching plus CaffeineCacheManager with global Caffeine builder\n- Or per-cache config with SimpleCacheManager for different sizes and TTLs\n\n**Production config needs four things**\n\n*(1) Bound size*\n- maximumSize(N) by entry count\n- maximumWeight(N) + weigher for variable-size entries\n- Never unbounded\n\n*(2) Expiry*\n- expireAfterWrite: entry expires after d from write; freshness priority\n- expireAfterAccess: expires after d from last access; hit-rate priority\n- expireAfter(Expiry): per-entry custom TTL\n- expireAfterWrite is the safer default; expireAfterAccess can keep garbage hot\n\n*(3) refreshAfterWrite for async background refresh*\n- After d, next read triggers async reload\n- Old value served until reload completes\n- Users never see misses on hot keys\n- Stricter than expireAfterWrite\n\n*(4) recordStats() plus Micrometer binding*\n- Hit rate, eviction, load latency\n- CaffeineCacheMetrics.monitor() for each cache\n- Grafana alerts: hit ratio below 80%, eviction spike, load duration high\n\n**Usage with Spring @Cacheable**\n- @Cacheable(value = products, key = #id, sync = true)\n- sync = true is critical: prevents thundering herd; coalesces concurrent requests\n- @CacheEvict per key; avoid allEntries=true\n\n**Async patterns**\n- LoadingCache with refreshAfterWrite for hot data\n- AsyncLoadingCache returning CompletableFuture for I/O loaders\n\n**Typical configurations**\n- Feature flags: 1k entries, 5 min TTL, 1 min refresh\n- User profiles: 10k entries, 15 min TTL, 5 min refresh\n- Product pages: 50k entries, 30 min TTL, 10 min refresh\n- Session data: 50k entries, 30 min access-based\n\n**Sizing heuristics**\n- Size times avg entry bytes must fit comfortably in heap (30 to 50% headroom)\n- Start at 10k entries; tune via hit rate metrics\n- High eviction rate means cache too small\n- Low hit rate means cache not useful or TTL too short\n\n**Observability — key metrics**\n- cache.size\n- cache.gets (hit + miss)\n- cache.evictions\n- cache.hit.ratio\n- cache.load.duration\n- cache.load.failure\n\n**Trade-offs and gotchas**\n\n*Per-instance state*\n- Caffeine is per-JVM\n- 10-instance cluster means 10 independent copies\n- Don't use for counters, quotas, cluster-wide truth — use Redis\n\n*Invalidation across instances*\n- Short TTL (accept stale)\n- Redis pub/sub invalidation\n- Event-driven invalidation (Kafka)\n- CDC to invalidation events\n\n*GC impact*\n- Every entry is a Java object\n- 100k entries of 10KB each equals about 1GB heap\n- Bound conservatively; monitor GC pauses\n\n*Thundering herd without sync=true*\n- Concurrent cache-miss requests all call loader\n- Always use sync=true for hot keys\n- LoadingCache coalesces automatically\n\n*@CacheEvict(allEntries=true)*\n- Expensive; clears entire cache\n- Prefer per-key eviction\n\n*Mutable keys break caching*\n- Use immutable key objects (records, Strings, Longs)\n\n*Big entries don't belong here*\n- 10MB entries go on disk or Redis\n- Caffeine shines for millions of small entries\n\n*Cross-tenant cache leaks*\n- A @Cacheable method keyed by request params without tenant ID means cross-tenant leak\n- Always include user or tenant in key or namespace the cache\n\n**Tiered caching — Caffeine L1 plus Redis L2**\n- Check Caffeine; on miss check Redis; on miss load DB\n- Populate both on way up\n- Publish invalidation event on writes\n- Best of both worlds\n\n**Warm-up strategy**\n- Fresh JVM means empty cache; first minutes hit DB hard\n- Warm at startup with @EventListener(ApplicationReadyEvent)\n- Gradual rollout (canary) with LB slow ramp\n\n**Caffeine vs alternatives**\n- vs Guava Cache: Caffeine is faster, better hit rate, actively maintained\n- vs EhCache: Caffeine simpler and faster; EhCache with Terracotta rarely chosen over Redis\n- vs ConcurrentHashMap: just use Caffeine\n\n**The strategic answer**\n- Default in-process Java cache; superseded Guava\n- Always bound; prefer expireAfterWrite; add refreshAfterWrite for hot data\n- Enable recordStats and Micrometer binding\n- Use sync=true to avoid thundering herd\n- Per-instance only; use Redis for cluster-wide\n- Combine as L1 with Redis L2 for high-traffic apps\n- Watch heap pressure and GC"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Window TinyLFU differ from standard LRU and why is it better?",
+        "How do you coordinate cache invalidation between Caffeine L1 and Redis L2?",
+        "When would you use AsyncLoadingCache vs LoadingCache with sync=true?",
+        "How do you size Caffeine cache with Micrometer metrics in production?"
+      ],
+      "seo": {
+        "meta_title": "Caffeine Cache Configuration in Spring Boot: Sizing, Eviction, Stats",
+        "meta_description": "Production-grade Caffeine cache: Window TinyLFU, expireAfterWrite, refreshAfterWrite, recordStats, Micrometer metrics, Spring @Cacheable patterns.",
+        "keywords": [
+          "caffeine cache",
+          "spring boot cache",
+          "caffeine configuration",
+          "window tinylfu",
+          "in-process cache java"
+        ],
+        "metaDescription": "Caffeine is the default in-process Java cache: it replaces Guava Cache, uses the Window TinyLFU admission policy (near-optimal hit rate), and integrates cleanl.",
+        "metaTitle": "Caffeine Cache: Configuration, Policies, Stats"
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P03",
+        "hook": "Caffeine is the default in-process Java cache in 2026.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Caffeine is the modern Java in-process cache. Written by Ben Manes (formerly Guava Cache), it's the successor Google recommends — faster, better hit rate, richer features. If you're using Guava Cache in 2026, migrate. What Caffeine adds over ConcurrentHashMap: Size-bound eviction with Window TinyLFU (near-optimal hit rate; much better than LRU) Time-based expiry (expireAfterWrite, expireAfterAccess, expireAfter custom) Async loading & refresh (background refresh without blocking reads) Request coalescing via CacheLoader (thundering herd free) Statistics (recordStats()) for observability Weighted capacity (different entries count differently) Weak / soft references for GC-friendly caching."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Dependencies: ``xml <dependency> <groupId>org.springframework.boot</groupId> <artifactId>spring-boot-starter-cache</artifactId> </dependency> <dependency> <groupId>com.github.ben-manes.caffeine</groupId> <artifactId>caffeine</artifactId> </dependency> ` Enable caching + programmatic Caffeine config (recommended over application.yml for fine control): `java @Configuration @EnableCaching public class CacheConfig { @Bean public CacheManager cacheManager() { CaffeineCacheManager mgr = new CaffeineCacheManager( \"products\", \"userProfiles\", \"featureFlags\"); mgr.setCaffeine(Caffeine.newBuilder() .maximumSize(10_000) .expireAfterWrite(Duration.ofMinutes(10)) .refreshAfterWrite(Duration.ofMinutes(2)) .recordStats()); return mgr; } } ` Per-cache custom config (different sizes/TTLs per cache): `java @Bean public CacheManager cacheManager() { SimpleCacheManager mgr = new SimpleCacheManager(); mgr.setCaches(List.of( caffeineCache(\"products\", 50_000, Duration.ofMinutes(30)), caffeineCache(\"featureFlags\", 1_000, Duration.ofMinutes(5)), caffeineCache(\"userProfiles\", 10_000, Duration.ofMinutes(15)) )); return mgr; } private CaffeineCache caffeineCache(String name, long size, Duration ttl) { return new CaffeineCache(name, Caffeine.newBuilder() .maximumSize(size) .expireAfterWrite(ttl) .recordStats() .build()); } ` Usage with @Cacheable: `java @Service public class ProductService { @Cacheable(value = \"products\", key = \"#id\", sync = true) public Product findById(String id) { return repo.findById(id).orElseThrow(); } @CacheEvict(value = \"products\", key = \"#p.id\") public void update(Product p)."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Caffeine is the 2026 default in-process cache in Java",
+              "replaces Guava Window TinyLFU admission gives near-optimal hit rate vs LRU Always bound: maximumSize or maximumWeight + weigher Expiry options: expireAfterWrite (freshness) vs expireAfterAccess (hit rate) vs expireAfter (custom) refreshAfterWrite for async refresh on hot keys",
+              "users never see misses Request coalescing (sync=true / LoadingCache) prevents thundering herd free recordStats() + Micrometer for hit rate, eviction, load latency dashboards Per-instance only — use Redis for cluster-wide state or invalidate via pub/sub Include tenant/user in key to avoid cross-tenant leaks Spring @Cacheable with sync=true is essential for hot keys"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Unbounded cache; no stats; expireAfterAccess when expireAfterWrite fits; missing request coalescing; ignoring heap pressure"
+          }
+        ],
+        "cap": "What Caffeine adds over ConcurrentHashMap Size-bound eviction with Window TinyLFU Time-based expiry (expireAfterWrite, expireAfterAccess) Async loading and refresh Request coalescing (thundering herd",
+        "familiarity_anchors": [
+          "Caffeine",
+          "Guava",
+          "Cache"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Window TinyLFU differ from standard LRU and why is it better?",
+          "How do you coordinate cache invalidation between Caffeine L1 and Redis L2?",
+          "When would you use AsyncLoadingCache vs LoadingCache with sync=true?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app using Redis for session and cache"
+      }
+    }
+  ]
+}

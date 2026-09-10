@@ -1,0 +1,255 @@
+{
+  "topic": "Batch Fundamentals",
+  "topicSlug": "batch-fundamentals",
+  "questions": [
+    {
+      "id": "sb-001",
+      "slug": "spring-batch-core-concepts-job-step-chunk-tasklet",
+      "question": "What are the core concepts in Spring Batch — Job, Step, Chunk, and Tasklet — and how do they relate to each other?",
+      "title": "Spring Batch Core Concepts: Job, Step, Chunk, and Tasklet",
+      "direct_answer": "A **Job** is the top-level container representing an entire batch process, composed of one or more **Steps** executed in sequence or conditionally. Each Step follows either a **chunk-oriented model** (read-process-write in fixed-size chunks inside one transaction) or a **Tasklet model** (a single custom unit of work). The **JobRepository** persists every JobInstance, JobExecution, and StepExecution to a relational database, which is what enables restartability, audit trails, and skip/retry tracking — features that distinguish Spring Batch from a hand-rolled batch loop.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands Spring Batch's execution model and the JobRepository persistence layer before writing any code",
+        "common_mistake": "Confusing Tasklet with Chunk — candidates often think Tasklet is just a simpler Step, not realizing they are mutually exclusive execution strategies within a Step",
+        "to_stand_out": "Mention JobRepository, JobInstance vs JobExecution, and StepExecution as the persistence layer that enables restartability — most candidates skip this entirely"
+      },
+      "company_tags": [
+        "Amazon",
+        "Goldman Sachs",
+        "JP Morgan",
+        "Capgemini",
+        "Infosys"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch's Chunk Model Is a Specific Transaction Boundary Design — Not Just `Process in Groups`",
+            "content": "Spring Batch was designed for one problem: **processing millions of records reliably**, with the ability to recover from failures without reprocessing everything. The entire domain model — Job, Step, Chunk, Tasklet, JobRepository — exists to satisfy that constraint.\n\nA **Job** is the top-level unit of work — `process today's orders`, `generate monthly invoices`.\n- A Job is composed of **Steps**, each doing one discrete piece.\n- Each Step chooses one of two **mutually exclusive** execution strategies.\n- **Chunk-oriented processing** is the standard model: read N items → process each → write all N in a single transaction.\n- The chunk size is the commit interval.\n- If the job fails at item 7001 with chunk size 100, restart resumes at item 7001, not item 1.\n\n**Tasklet** is for everything that isn't record-by-record processing: downloading a file, sending an email, truncating a staging table, calling a stored procedure.\n- A Tasklet returns `RepeatStatus.FINISHED` from a single `execute()` method.\n- Spring Batch persists every execution to a **JobRepository** backed by a relational database.\n- Without JobRepository, you get no restart, no audit, no idempotency protection — which is why Spring Batch suits production financial and operational batch processing where a hand-rolled `for` loop with batch insert does not."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The Job → Step → (Chunk or Tasklet) Hierarchy",
+            "content": "```mermaid\nflowchart TB\n    job[\"Job (orderImportJob)\"]\n    job --> step1[\"Step 1: validateInput\"]\n    job --> step2[\"Step 2: importOrders\"]\n    job --> step3[\"Step 3: notifyResult\"]\n    step1 --> taskletA[\"Tasklet (single execute)\"]\n    step2 --> chunk[\"Chunk-Oriented\"]\n    step3 --> taskletB[\"Tasklet (single execute)\"]\n    chunk --> reader[\"ItemReader.read x N\"]\n    chunk --> processor[\"ItemProcessor.process\"]\n    chunk --> writer[\"ItemWriter.write (chunk)\"]\n    chunk --> commit[\"Transaction commit per chunk\"]\n    job -.persists.-> repo[(\"JobRepository (BATCH_* tables)\")]\n    step1 -.persists.-> repo\n    step2 -.persists.-> repo\n    step3 -.persists.-> repo\n    repo --> instance[\"JobInstance = Job name + JobParameters\"]\n    repo --> execution[\"JobExecution = one run attempt\"]\n    repo --> stepExec[\"StepExecution = per-step state + ExecutionContext\"]\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Chunk Transaction Boundary — Why Write Failures Are Different From Read Failures",
+            "content": "Understanding the chunk transaction boundary explains most Spring Batch debugging. Each chunk runs inside a **single transaction** spanning the entire read-process-write cycle for those N items.\n\n**Read phase mechanics**\n- `ItemReader.read()` is called repeatedly until chunk size is reached or `null` is returned\n- Read errors are handled per item via skip/retry policies\n- Read failures don't roll back the chunk transaction — they happen before commit scope\n\n**Process phase mechanics**\n- Each item passes through `ItemProcessor.process()` individually\n- Returning `null` filters the item out of the chunk silently\n- Throwing an exception triggers retry/skip evaluation\n\n**Write phase — the dangerous one**\n- The entire chunk's processed items are passed to `ItemWriter.write(Chunk<O> items)` in **one call**\n- A write failure rolls back the **entire chunk** — all N items are discarded and reprocessed on restart\n- This is why Spring Batch recommends idempotent writers\n\n**Tuning the commit interval**\n- Chunk size 1: one transaction per item — safe but slow due to commit overhead\n- Chunk size 10,000: failure partway through forces reprocessing thousands of items\n- 100-500 items per chunk balances throughput with restart granularity for most workloads\n\n**Why `@StepScope` matters for readers**\n- Without `@StepScope`, a singleton reader shared across job executions retains state between runs\n- `@StepScope` creates a fresh reader per Step execution — required for parameter injection via `@Value(\"#{jobParameters['key']}\")`\n\n```java\n@Bean\n@StepScope\npublic FlatFileItemReader<Order> reader(@Value(\"#{jobParameters['inputFile']}\") String file) {\n    return new FlatFileItemReaderBuilder<Order>()\n            .name(\"orderReader\")\n            .resource(new FileSystemResource(file))\n            .delimited()\n            .names(\"id\", \"customerId\", \"amount\")\n            .targetType(Order.class)\n            .build();\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "JobRepository — The Persistence Model That Enables Restart and Audit",
+            "content": "When a Job is launched, Spring Batch creates a **JobInstance** identified by `Job name + JobParameters`. If that combination has run before and failed, the existing instance restarts from the last checkpoint.\n\n**Tables Spring Batch ships and writes to**\n- `BATCH_JOB_INSTANCE` — one row per logical job run (Job name + parameters)\n- `BATCH_JOB_EXECUTION` — one row per attempt at a JobInstance (start time, end time, status)\n- `BATCH_JOB_EXECUTION_PARAMS` — parameter values for each execution\n- `BATCH_STEP_EXECUTION` — per-step state, including `read_count`, `write_count`, `commit_count`, `rollback_count`\n- `BATCH_STEP_EXECUTION_CONTEXT` — serialized ExecutionContext per step (reader position checkpoint)\n- `BATCH_JOB_EXECUTION_CONTEXT` — serialized ExecutionContext per job\n\n**Schema scripts ship with Spring Batch**\n- `schema-h2.sql`, `schema-mysql.sql`, `schema-postgresql.sql` etc.\n- For tests, in-memory H2 with the schema is convenient\n- Production must use a persistent database — never the deprecated `MapJobRepositoryFactoryBean`\n\n**Re-running protection**\n- If a JobInstance already completed successfully and you launch with the same parameters, Spring Batch throws `JobInstanceAlreadyCompleteException`\n- This is intentional — prevents accidental re-processing of completed business data\n- To force a fresh run, use `RunIdIncrementer` to add a technical `run.id` parameter\n\n```java\n@Bean\npublic Job orderImportJob(JobRepository repo, Step importStep) {\n    return new JobBuilder(\"orderImportJob\", repo)\n            .incrementer(new RunIdIncrementer())\n            .start(importStep)\n            .build();\n}\n```\n\n**Why this is interview-relevant**\n- Most candidates describe Spring Batch as 'processes records in batches' and stop\n- The JobRepository is the feature that differentiates Spring Batch from a `for` loop with batch insert\n- Without JobRepository persistence: no restart, no audit trail, no idempotency, no observability\n- Mentioning this signals you've used it in production rather than just read about it"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Chunk vs Tasklet — When to Use Each",
+            "content": "Chunk and Tasklet are mutually exclusive execution strategies for a Step. Pick based on whether the work is a stream of items or a single discrete operation.\n\n| Aspect | Chunk-Oriented Step | Tasklet Step |\n|---|---|---|\n| Use case | Read-process-write over a stream | Single discrete operation |\n| Transaction scope | One transaction per chunk of N items | One transaction for the whole `execute()` |\n| Restart semantics | Resumes at last committed chunk boundary | Re-runs from scratch |\n| Skip / retry | Built in via `faultTolerant().skip(...).retry(...)` | Manual — you write the logic |\n| Examples | Process 10M orders, import CSV to DB | Truncate staging table, send email, call stored procedure |\n| Exit signal | `ItemReader.read()` returns `null` | `RepeatStatus.FINISHED` |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Choose Chunk, When to Choose Tasklet",
+            "content": "**When chunk-oriented helps:**\n- The work is a stream of records that can be batched (rows from a table, lines from a file, messages from a queue)\n- You need restart from the last committed chunk boundary on failure\n- You want skip/retry policies for bad records or transient errors\n- Per-item observability matters — `read_count`, `write_count`, `skip_count` in StepExecution\n\n**When Tasklet helps:**\n- The work is a single discrete action — truncate a staging table, archive yesterday's files, call a stored procedure\n- The action has no natural 'item' to iterate over\n- You need full control over a single transaction boundary\n- Compensating actions between chunk steps (cleanup, audit row insert)\n\n**Watch for:**\n- **Forcing chunk model on non-streaming work** — using a synthetic single-item reader to wrap a procedure call costs you simplicity without benefit\n- **Forcing Tasklet on streaming work** — you lose restart, skip, retry, and per-item metrics; you re-implement them poorly by hand\n- **Long-running Tasklet without checkpoints** — if a 4-hour Tasklet fails at minute 230, the entire 4 hours re-runs; chunk would resume from the last commit\n- **Mixing models in the same Step** — Spring Batch enforces mutual exclusion; the builder API will not let you set both"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Job → Steps → Chunk or Tasklet** — `Job` is the complete batch process; `Step` is one phase; `Chunk` and `Tasklet` are the two execution models for a step.\n- **`JobRepository` persists every execution** — stores `JobInstance`, `JobExecution`, `StepExecution` in the database; without it, restart, skip, and retry do not work.\n- **Chunk processing is transactional per chunk, not per record** — chunk of 100 items is read, processed, and written inside one transaction; write failure rolls back only that chunk.\n- **Tasklet is for single operations** — file cleanup, API calls, DDL, stored procedures; implement `Tasklet` and return `RepeatStatus.FINISHED`.\n- **`JobInstance` = Job name + JobParameters; `JobExecution` = one run attempt** — re-running a failed job with the same parameters creates a new `JobExecution` for the existing `JobInstance`.\n- **`@StepScope` enables late binding of job parameters** — required for readers and writers that depend on `@Value(\"#{jobParameters['x']}\")`.\n- **Chunk and Tasklet are mutually exclusive within a Step** — pick one; the builder API enforces this."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch structures batch processing around a clear hierarchy: Job, Step, and either Chunk or Tasklet at the step level. Every layer is persisted to the JobRepository, which is what makes restart and audit possible.\n\n**The hierarchy**\n- **Job** — the overall batch process, like 'import monthly invoices'; composed of one or more Steps in sequence or conditionally\n- **Step** — one phase of the job; each Step has its own execution status and can be restarted independently\n- **Chunk** — the read-process-write model for a step; reads N items, processes each, writes the batch — all inside one transaction\n- **Tasklet** — a single operation for a step; not a read-process-write loop; `execute()` returns `RepeatStatus.FINISHED`\n\n**JobRepository — the persistence layer**\n- Stores `JobInstance` (logical job run identified by Job name + JobParameters)\n- Stores `JobExecution` (one physical attempt at the JobInstance)\n- Stores `StepExecution` (per-step state plus serialized ExecutionContext for restart)\n- Spring Boot auto-configures it from the application's `DataSource`\n\n**Chunk transaction model**\n- Chunk size 100 means: read 100 records, process each, write all 100 in one transaction\n- A write failure rolls back only that chunk — already committed chunks are not re-processed on restart\n- Larger chunks: fewer transactions, better throughput; smaller chunks: finer-grained checkpointing\n\n**Tasklet vs Chunk**\n- Chunk model is for streaming work — rows in a table, lines in a file\n- Tasklet is for one-shot work — truncating a table, sending a notification, calling a stored procedure\n- They are mutually exclusive within a single Step\n\nIn an interview, I'd emphasize the JobRepository — most candidates skip it, but it's what makes Spring Batch suitable for production rather than a hand-rolled loop."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Batch decide whether a failed job can be restarted versus re-run from scratch?",
+        "What happens if two instances of the same Job are launched simultaneously with the same parameters?",
+        "When would you choose a Tasklet over a chunk-oriented Step in production?",
+        "Which BATCH_* tables does Spring Batch read on restart to determine where to resume?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Core Concepts: Job, Step, Chunk, Tasklet Explained",
+        "metaDescription": "Understand Spring Batch's four pillars — Job, Step, Chunk processing, and Tasklet — plus the JobRepository persistence model that enables restartability, with Java code examples."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring Batch structures batch processing around a clear hierarchy: Job, Step, and either Chunk or Tasklet at the step level.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Spring Batch was designed for one problem: processing millions of records reliably, with the ability to recover from failures without reprocessing everything. The entire domain model — Job, Step, Chunk, Tasklet, JobRepository — exists to satisfy that constraint. A Job is the top-level unit of work — process today's orders, generate monthly invoices. A Job is composed of Steps, each doing one discrete piece. Each Step chooses one of two."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Chunk and Tasklet are mutually exclusive execution strategies for a Step",
+              "Pick based on whether the work is a stream of items or a single discrete operation",
+              "| Aspect | Chunk-Oriented Step | Tasklet Step | |---|---|---| | Use case | Read-process-write over a stream | Single discrete operation | | Transaction scope | One transaction per chunk of N items | One transaction for the whole execute() | | Restart semantics | Resumes at last committed chunk boundary | Re-runs from scratch | | Skip / retry | Built in via faultTolerant()",
+              ") | Manual — you write the logic | | Examples | Process 10M orders, import CSV to DB | Truncate staging table, send email, call stored procedure | | Exit signal | ItemReader",
+              "read() returns null | RepeatStatus"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When chunk-oriented helps: The work is a stream of records that can be batched (rows from a table, lines from a file, messages from a queue) You need restart from the last committed chunk boundary on failure You want skip/retry policies for bad records or transient errors Per-item observability matters — read_count, write_count, skip_count in StepExecution When Tasklet helps: The work is a single discrete action — truncate a staging table, archive yesterday's files, call a stored procedure The action has no natural 'item' to iterate over You need full."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Spring Batch was designed for one problem: processing millions of records reliably, with the ability to recover from failures without reprocessing everything. The entire domain model — Job, Step, Chunk, Tasklet, JobRepository — exists to satisfy that constraint. A Job is the top-level unit of work — process today's orders, generate monthly invoices. A Job is composed of Steps, each."
+          }
+        ],
+        "cap": "The hierarchy Job — the overall batch process, like 'import monthly invoices'; composed of one or more Steps in sequence or conditionally Step — one phase of the job; each Step has its own execution.",
+        "familiarity_anchors": [
+          "Steps",
+          "Tasklet",
+          "JobRepository"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Batch decide whether a failed job can be restarted versus re-run from scratch?",
+          "What happens if two instances of the same Job are launched simultaneously with the same parameters?",
+          "When would you choose a Tasklet over a chunk-oriented Step in production?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sb-001b",
+      "slug": "spring-batch-vs-plain-jdbc-batch-when-to-use",
+      "question": "When should you reach for Spring Batch versus plain JDBC batch updates with PreparedStatement.addBatch()? What does Spring Batch actually buy you?",
+      "title": "Spring Batch vs Plain JDBC Batch — When the Framework Earns Its Weight",
+      "direct_answer": "Plain **JDBC `PreparedStatement.addBatch()`** is the right tool when the job is a single SQL statement repeated N times inside one process and you don't need restart, audit, or skip/retry. Spring Batch earns its weight when you need **restartability from the last checkpoint**, a **JobRepository audit trail**, **skip and retry policies** for bad records and transient errors, **partitioning** for parallel scale, or composition of multiple steps with conditional flow. The rough rule: if your batch is under a few minutes, single-statement, and never fails — use plain JDBC. If it processes millions of records over hours and a midnight failure must resume at 7 AM rather than restart from zero — use Spring Batch.",
+      "layout_type": "comparison-arena",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can articulate the operational features Spring Batch provides beyond batched SQL, and when those features justify the complexity",
+        "common_mistake": "Reaching for Spring Batch for every batch task, including ones that are a single 30-second SQL statement — over-engineering",
+        "to_stand_out": "Frame the decision as restart-and-resume capability vs raw throughput — and mention that plain JDBC is often faster per-row because it avoids the JobRepository writes"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "JP Morgan",
+        "Citi",
+        "Wells Fargo",
+        "Capital One"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch Is Not Faster Than JDBC — It's More Recoverable",
+            "content": "A surprising number of teams adopt Spring Batch expecting performance gains and discover the framework is actually **slower per row** than `PreparedStatement.addBatch()`.\n- The framework adds JobRepository writes (a few SQL inserts per chunk for `BATCH_STEP_EXECUTION` updates), serialized ExecutionContext snapshots, and listener invocations.\n- For a one-shot 30-second `INSERT ... SELECT` to copy a table, plain JDBC will always win on raw speed.\n\n**The value Spring Batch delivers** is operational, not algorithmic.\n- **Restartability** lets a job that fails at 7 million of 10 million records resume at 7 million on the next launch.\n- **Skip and retry** policies handle bad rows and transient infrastructure errors without aborting the entire job.\n- **Partitioning** scales work across threads or worker JVMs with per-partition restart semantics.\n- **Audit metadata** in the BATCH tables shows exactly what ran, when, with which parameters, and how many records were processed — essential for compliance in regulated industries.\n\nThe interview-relevant framing: **plain JDBC for short, single-statement, low-stakes work; Spring Batch when the operational features pay for the overhead.** A 6-hour nightly ETL processing 50 million rows from a flat file into a partitioned warehouse table — Spring Batch every time. A 10-second `DELETE FROM staging WHERE created < NOW() - INTERVAL '7 days'` — `JdbcTemplate.execute()` is fine."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Plain JDBC Batch vs Spring Batch — Feature by Feature",
+            "content": "The decision comes down to which operational features you actually need.\n\n| Capability | Plain JDBC `addBatch()` | Spring Batch |\n|---|---|---|\n| Raw throughput per row | Highest (no framework overhead) | Slightly slower (JobRepository writes) |\n| Restart from last checkpoint | No — full re-run on failure | Yes — resumes at last committed chunk |\n| Skip bad records with limit | Manual try/catch per row | `faultTolerant().skip(X.class).skipLimit(N)` |\n| Retry transient errors | Manual loop with backoff | `retry(X.class).retryLimit(N).backOffPolicy(...)` |\n| Audit trail of every run | None unless you build it | BATCH_JOB_EXECUTION + BATCH_STEP_EXECUTION |\n| Parallel partitioning | Roll your own thread pool | `PartitionHandler` with grid size |\n| Conditional step flow | None | `JobBuilder.start(a).on(\"FAILED\").to(b).from(a).on(\"*\").to(c)` |\n| Idempotency protection | None | `JobInstanceAlreadyCompleteException` if same params |\n| Parameter management | Method arguments | `JobParameters` persisted with every execution |\n| Code lines for trivial job | 30 | 150 |\n| Code lines for complex job | 2000+ (re-implementing the framework) | 400 (using the framework) |"
+          },
+          {
+            "type": "step",
+            "title": "When Plain JDBC Batch Is the Right Answer — and What Good Code Looks Like",
+            "content": "For short, single-statement work where failure means 'just run it again', plain JDBC keeps the code surface tiny.\n\n**Signs plain JDBC is enough**\n- The work is a single SQL statement (INSERT, UPDATE, DELETE) repeated N times\n- Total runtime is under a few minutes\n- Failure handling = re-launch from scratch, no harm done\n- No need for skip/retry beyond a simple try/catch\n- No audit requirement beyond your application logs\n\n**Idiomatic plain JDBC batch with `JdbcTemplate.batchUpdate`**\n\n```java\n@Component\n@RequiredArgsConstructor\npublic class OrderArchiver {\n    private final JdbcTemplate jdbc;\n\n    public int archive(List<Order> orders) {\n        String sql = \"INSERT INTO orders_archive (id, customer_id, amount) VALUES (?, ?, ?)\";\n        int[] counts = jdbc.batchUpdate(sql, new BatchPreparedStatementSetter() {\n            public void setValues(PreparedStatement ps, int i) throws SQLException {\n                Order o = orders.get(i);\n                ps.setLong(1, o.getId());\n                ps.setLong(2, o.getCustomerId());\n                ps.setBigDecimal(3, o.getAmount());\n            }\n            public int getBatchSize() { return orders.size(); }\n        });\n        return Arrays.stream(counts).sum();\n    }\n}\n```\n\n**Performance settings that actually matter**\n- `rewriteBatchedStatements=true` on MySQL — collapses multiple INSERTs into a single multi-VALUES statement; 5-10x faster\n- `reWriteBatchedInserts=true` on PostgreSQL — similar batching optimization\n- Batch size 100-1000 rows per `executeBatch()` — the same tuning logic as Spring Batch chunk size\n- Disable autocommit and commit explicitly per batch\n\n**When to graduate to Spring Batch**\n- The job grew past 30 minutes and a midnight failure now means restart costs hours\n- You're hand-rolling skip-bad-row logic with counters and dead-letter files\n- You need an audit log of every run for compliance (SOX, GDPR, financial reporting)\n- The job needs to compose multiple discrete steps with conditional flow"
+          },
+          {
+            "type": "step",
+            "title": "When Spring Batch Earns Its Weight — Concrete Production Scenarios",
+            "content": "Spring Batch's value compounds with job duration, dataset size, and the cost of a partial failure. The five scenarios below are where the framework consistently pays back the learning curve.\n\n**Scenario 1: Multi-hour ETL with restart requirement**\n- Job runs 4 hours processing 50M rows from a flat file into a warehouse\n- Failure at hour 3 must resume at the last committed chunk, not restart from zero\n- Spring Batch saves 3 hours per failure; over a year of operations this is the dominant ROI\n\n**Scenario 2: Dirty data with skip-and-continue requirements**\n- Input contains malformed rows, validation failures, foreign-key violations\n- Business requirement: skip bad rows up to a tolerance, log them to a dead-letter file, continue\n- Spring Batch's `faultTolerant().skip(X.class).skipLimit(N).listener(skipListener)` is one builder chain\n- Hand-rolled equivalent: per-row try/catch, counter, dead-letter writer, single-item recovery loop after batch failures\n\n**Scenario 3: Audit and compliance requirements**\n- Regulators or internal compliance need to see exactly what ran when, with what parameters, and how many records were processed\n- BATCH_JOB_EXECUTION and BATCH_STEP_EXECUTION are the audit trail — query them, dashboard them\n- Plain JDBC requires you to build this audit infrastructure yourself\n\n**Scenario 4: Parallel partitioning for scale**\n- 100M rows must process in 30 minutes; single-threaded throughput is 2 hours\n- Spring Batch partitioner splits by `customer_id mod 16`; 16 worker steps run in parallel\n- Each worker has its own restart state — only failed partitions re-run\n- Hand-rolled equivalent is a thread pool, manual range splitting, manual checkpoint tracking\n\n**Scenario 5: Composed jobs with conditional flow**\n- Step 1 validates input; if it fails, Step 2 sends an alert and exits\n- If Step 1 succeeds, Step 2 imports; on success, Step 3 archives the input file\n- `JobBuilder.start(validate).on(\"FAILED\").to(alert).from(validate).on(\"*\").to(import).next(archive).end().build()`\n- The DSL captures the flow declaratively; hand-rolled equivalent is nested if/else with state tracking\n\n```java\n@Bean\npublic Job orderJob(JobRepository repo, Step validate, Step alert, Step doImport, Step archive) {\n    return new JobBuilder(\"orderJob\", repo)\n            .incrementer(new RunIdIncrementer())\n            .start(validate)\n                .on(\"FAILED\").to(alert)\n            .from(validate)\n                .on(\"*\").to(doImport)\n            .next(archive)\n            .end()\n            .build();\n}\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Plain JDBC vs Spring Batch — Honest Trade-Offs",
+            "content": "Neither approach dominates. Each is the right answer for a different shape of work.\n\n**When plain JDBC helps:**\n- The job is a single SQL statement (or a few) repeated over a known dataset\n- Failure cost is low — re-running from scratch is acceptable\n- Total runtime is short enough that restart-from-zero is cheap\n- You want absolute maximum throughput per row with no framework overhead\n- The team is small and Spring Batch's learning curve outweighs the operational features\n\n**When Spring Batch helps:**\n- Total runtime exceeds 30 minutes and partial failure must not waste the previous work\n- The job has multiple steps with conditional flow (validate → import → archive → notify)\n- Audit trail of every run is a regulatory or operational requirement\n- Skip-bad-records and retry-transient-errors logic would otherwise be hand-rolled per job\n- Parallel partitioning is needed and you don't want to write the orchestration yourself\n\n**Watch for:**\n- **Adopting Spring Batch for trivial work** — a 10-second cleanup tasklet wrapped in JobRepository overhead is over-engineering\n- **Sticking with plain JDBC past the inflection point** — every team that says 'we'll add restart later' ends up rebuilding 70% of Spring Batch poorly\n- **Forgetting the JobRepository database overhead** — Spring Batch writes to BATCH_* tables on every step boundary; size your DB accordingly\n- **Mixing both in the same codebase without convention** — pick one default per service so on-call doesn't have to learn two patterns"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Plain JDBC `PreparedStatement.addBatch()` is faster per row** — Spring Batch adds JobRepository overhead.\n- **Spring Batch wins on operational features** — restart, skip, retry, audit, partitioning, conditional flow.\n- **Restartability from the last committed chunk is the dominant ROI** — saves hours per failure on long-running jobs.\n- **Skip and retry policies are one builder chain in Spring Batch** — hand-rolled equivalents are 200+ lines per job.\n- **JobRepository BATCH_* tables are your audit trail** — query them for compliance, dashboard them for ops.\n- **Use `JdbcTemplate.batchUpdate` for short single-statement work** — 30 lines of code for jobs under a few minutes.\n- **Enable `rewriteBatchedStatements=true` (MySQL) or `reWriteBatchedInserts=true` (PostgreSQL)** — 5-10x throughput on insert-heavy batches.\n- **The decision rule** — under 30 minutes, single statement, low stakes = plain JDBC; multi-hour, multi-step, must-resume = Spring Batch."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Plain JDBC and Spring Batch solve different problems. Plain JDBC's `PreparedStatement.addBatch()` is the right tool when you have a single SQL statement to repeat N times and failure means 'just re-run it'. Spring Batch is what you reach for when restart, audit, and skip/retry are operational requirements.\n\n**Plain JDBC wins on:**\n- Raw throughput per row — no framework overhead\n- Code surface — 30 lines for a trivial batch task\n- Simplicity — no JobRepository tables, no JobLauncher, no scope annotations\n\n**Spring Batch wins on:**\n- **Restartability** — a job that fails at 7M of 10M records resumes at 7M, not 0\n- **Skip and retry policies** — `faultTolerant().skip(ParseException.class).skipLimit(100).retry(TransientDataAccessException.class).retryLimit(3)` is one builder chain; hand-rolled equivalent is hundreds of lines\n- **Audit trail** — BATCH_JOB_EXECUTION and BATCH_STEP_EXECUTION show every run, parameters, and counts\n- **Partitioning** — declarative parallel scale with per-partition restart\n- **Conditional flow** — `start(validate).on(\"FAILED\").to(alert).from(validate).on(\"*\").to(import)` is the DSL\n\n**Decision rule I use:**\n- Under 30 minutes, single statement, low stakes — plain JDBC with `JdbcTemplate.batchUpdate` plus the right DB driver flags\n- Multi-hour, multi-step, must resume on failure — Spring Batch every time\n- Adopting Spring Batch for trivial work is over-engineering; sticking with plain JDBC past the inflection point means rebuilding 70% of the framework poorly\n\nIn an interview, I'd lead with the framing that **Spring Batch is not faster — it's more recoverable**. Most candidates assume the framework brings performance; the real value is operational."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What MySQL/PostgreSQL JDBC driver flag is essential for batch insert performance, and why?",
+        "How would you migrate a hand-rolled JDBC batch job to Spring Batch incrementally?",
+        "What overhead does the JobRepository add per chunk, and how do you minimize it?",
+        "When would you reach for Spring Cloud Data Flow rather than plain Spring Batch?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch vs Plain JDBC Batch — When to Use Each",
+        "metaDescription": "When to use Spring Batch vs JDBC PreparedStatement.addBatch(). Restart, skip, retry, audit, and partitioning trade-offs with concrete decision rules."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Plain JDBC and Spring Batch solve different problems.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "A surprising number of teams adopt Spring Batch expecting performance gains and discover the framework is actually slower per row than PreparedStatement.addBatch(). The framework adds JobRepository writes (a few SQL inserts per chunk for BATCH_STEP_EXECUTION updates), serialized ExecutionContext snapshots, and listener invocations. For a one-shot 30-second INSERT ... SELECT to copy a table, plain JDBC will always win on raw speed. The value Spring Batch delivers is operational, not algorithmic."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The decision comes down to which operational features you actually need",
+              "| Capability | Plain JDBC addBatch() | Spring Batch | |---|---|---| | Raw throughput per row | Highest (no framework overhead) | Slightly slower (JobRepository writes) | | Restart from last checkpoint | No — full re-run on failure | Yes — resumes at last committed chunk | | Skip bad records with limit | Manual try/catch per row | faultTolerant()",
+              "skipLimit(N) | | Retry transient errors | Manual loop with backoff | retry(X",
+              "retryLimit(N)",
+              "backOffPolicy("
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Neither approach dominates. Each is the right answer for a different shape of work. When plain JDBC helps: The job is a single SQL statement (or a few) repeated over a known dataset Failure cost is low — re-running from scratch is acceptable Total runtime is short enough that restart-from-zero is cheap You want absolute maximum throughput per row with no framework overhead The team is small and Spring Batch's learning curve outweighs the operational features When Spring Batch helps: Total runtime exceeds 30 minutes and partial failure must not."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "A surprising number of teams adopt Spring Batch expecting performance gains and discover the framework is actually slower per row than PreparedStatement.addBatch(). The framework adds JobRepository writes (a few SQL inserts per chunk for BATCH_STEP_EXECUTION updates), serialized ExecutionContext snapshots, and listener invocations. For a one-shot 30-second INSERT ... SELECT to copy a table, plain JDBC will always win on raw."
+          }
+        ],
+        "cap": "Most candidates assume the framework brings performance; the real value is operational.",
+        "familiarity_anchors": [
+          "Plain",
+          "PreparedStatement",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What MySQL/PostgreSQL JDBC driver flag is essential for batch insert performance, and why?",
+          "How would you migrate a hand-rolled JDBC batch job to Spring Batch incrementally?",
+          "What overhead does the JobRepository add per chunk, and how do you minimize it?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

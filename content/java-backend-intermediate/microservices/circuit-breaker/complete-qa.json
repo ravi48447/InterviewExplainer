@@ -1,0 +1,265 @@
+{
+  "topic": "Circuit Breaker",
+  "topicSlug": "circuit-breaker",
+  "questions": [
+    {
+      "id": "ms-005",
+      "slug": "circuit-breaker-resilience4j",
+      "question": "How does the Circuit Breaker pattern work? How do you implement it with Resilience4j?",
+      "title": "Circuit Breaker Pattern with Resilience4j",
+      "direct_answer": "**circuit breaker** prevents cascading failures by stopping calls to a failing service after a threshold is crossed. It has three states: CLOSED (normal), OPEN (fail fast), and HALF_OPEN (testing recovery).",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of the three states and the problem it solves (cascading failures)",
+        "common_mistake": "Confusing circuit breaker with retry — they're complementary, not alternatives",
+        "to_stand_out": "Mention the bulkhead pattern as a companion and the difference between count-based and time-based sliding windows"
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Uber",
+        "Revolut",
+        "Airbnb",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Thread-Pool Drain That Takes Down Your Entire Fleet",
+            "content": "Picture this: the inventory service starts responding in 8 seconds instead of 200ms.\n- Without a circuit breaker, the order service keeps sending requests and each one occupies a thread for 8 seconds waiting for a response.\n- At 50 requests per second, you have 400 threads blocked within a minute.\n- The order service's thread pool is exhausted.\n- Now it can't handle any requests — not even ones that don't touch inventory.\n- Users see 503 errors on completely unrelated features.\n- That's a **cascading failure**.\n\nThe circuit breaker pattern borrows from electrical engineering.\n- When current exceeds a safe threshold, the breaker trips open and stops the flow — protecting the system from damage.\n- In software, the \"current\" is the failure rate of a downstream dependency.\n- When failures exceed a threshold, the breaker trips open and starts returning errors immediately (in microseconds, not seconds), giving the failing service time to recover while preventing the caller from drowning in blocked threads.\n\nThe pattern has three states that form a state machine.\n- **CLOSED** is normal operation — all calls go through and the breaker records success/failure metrics.\n- When the failure rate crosses a configured threshold (typically 50% over a sliding window), the breaker transitions to **OPEN** — all calls fail immediately without attempting the downstream call.\n- After a configured wait duration (typically 10–30 seconds), the breaker moves to **HALF_OPEN** — a small number of probe calls are allowed through.\n- If they succeed, the breaker returns to CLOSED.\n- If they fail, it returns to OPEN.\n\nThe critical insight: a circuit breaker is **not** a retry mechanism.\n- Retries amplify load on a struggling service.\n- A circuit breaker does the opposite — it sheds load so the failing service can recover.\n- In practice, you compose both: retry wraps the circuit breaker (outer), so the circuit breaker sees the aggregate result after retries, not each individual attempt."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Circuit Breaker State Machine — Closed, Open, Half-Open",
+            "content": "```mermaid\nstateDiagram-v2\n    [*] --> Closed\n    Closed: Closed<br/>fuse intact, calls pass\n    Open: Open<br/>fuse blown, fail fast\n    HalfOpen: HalfOpen<br/>probe a few calls\n    Closed --> Open: failure rate above threshold<br/>OR slow-call rate above threshold\n    Open --> HalfOpen: waitDurationInOpenState elapsed\n    HalfOpen --> Closed: permitted probes succeed\n    HalfOpen --> Open: any probe fails\n    Closed --> Closed: call success -> record\n    Open --> Open: call -> CallNotPermittedException<br/>fallback fires\n```"
+          },
+          {
+            "type": "step",
+            "title": "Implementing the Three-State Machine with Resilience4j",
+            "content": "Resilience4j is the standard resilience library for Spring Boot (replacing Netflix Hystrix, which is in maintenance mode). It uses AOP — annotate a method and Resilience4j wraps it with circuit breaker logic at runtime.\n\nThe configuration defines the breaker's sensitivity and recovery behavior. Every parameter maps to a real operational decision.\n\n```yaml\nresilience4j:\n  circuitbreaker:\n    instances:\n      inventoryService:\n        slidingWindowType: COUNT_BASED\n        slidingWindowSize: 20              # evaluate last 20 calls\n        failureRateThreshold: 50           # open at 50% failures\n        waitDurationInOpenState: 15s       # wait before probing\n        permittedNumberOfCallsInHalfOpenState: 5\n        slowCallDurationThreshold: 3s      # calls slower than 3s count as failures\n        slowCallRateThreshold: 80          # open if 80% of calls are slow\n        recordExceptions:\n          - java.io.IOException\n          - java.util.concurrent.TimeoutException\n        ignoreExceptions:\n          - com.example.BusinessValidationException\n```\n\nThe `recordExceptions` vs `ignoreExceptions` distinction is critical and often overlooked. A `BusinessValidationException` (\"invalid product ID\") is an expected response, not an infrastructure failure. If 100 users submit invalid product IDs in quick succession, that shouldn't trip the circuit breaker and block legitimate users. Only infrastructure failures — connection refused, timeout, 5xx responses — should count toward the failure rate.\n\nThe service method gets a single annotation with a fallback. The fallback must return a degraded response, not rethrow.\n\n```java\n@Service\npublic class OrderService {\n\n    @CircuitBreaker(name = \"inventoryService\",\n                    fallbackMethod = \"inventoryFallback\")\n    public StockResponse checkStock(String productId) {\n        return inventoryClient.getStock(productId);\n    }\n\n    private StockResponse inventoryFallback(String productId,\n                                            Throwable ex) {\n        log.warn(\"Inventory circuit open for product {}: {}\",\n                 productId, ex.getMessage());\n        return StockResponse.unknown(productId);\n    }\n}\n```\n\nThe fallback method must have the exact same parameter list plus a `Throwable` parameter. It should return stale cached data, a degraded response, or a default value — anything that lets the user continue rather than seeing a raw error."
+          },
+          {
+            "type": "step",
+            "title": "Count-Based vs Time-Based Windows — And Why It Matters",
+            "content": "The sliding window type changes how the breaker reacts to failure patterns. Choosing wrong means either false trips or missed outages.\n\n**Count-based** (e.g., last 20 calls) reacts quickly to consecutive failures but is sensitive to traffic volume. During a deployment at 3 AM when only 2 requests per minute hit the service, a count-based window of 20 takes 10 minutes to fill. Two legitimate timeout errors in that window give you a 10% failure rate — probably fine. But during peak at 500 RPS, those same 20 calls fill in 40ms, and a brief network blip that fails 10 out of 20 trips the breaker for thousands of users.\n\n**Time-based** (e.g., last 60 seconds) smooths out bursts by evaluating all calls within the time window. A 3-second network glitch that fails 50 out of 1000 calls shows a 5% failure rate — well below the threshold. The downside: a genuine outage where all calls fail takes the full window duration before the breaker trips. If your window is 60 seconds, users experience 60 seconds of failures before the breaker protects them.\n\nThe right choice depends on traffic patterns. **Count-based with a window of 10–20 calls** is the pragmatic default for most services because it reacts within a few hundred milliseconds of a real outage. Combine it with `slowCallDurationThreshold` to catch not just hard failures (exceptions) but also **degradation** — the inventory service responding in 5 seconds instead of 200ms is worse than a clean timeout because threads stay blocked longer.\n\nComposing with retries requires careful ordering. The retry should be the **outer** decorator so the circuit breaker sees the aggregate outcome after all retries, not each individual attempt.\n\n```java\n@Retry(name = \"inventoryService\", fallbackMethod = \"inventoryFallback\")\n@CircuitBreaker(name = \"inventoryService\")\npublic StockResponse checkStock(String productId) {\n    return inventoryClient.getStock(productId);\n}\n```\n\nIf you reverse the order — circuit breaker outer, retry inner — each retry attempt is counted independently, tripling the number of failures the breaker sees and causing premature trips."
+          },
+          {
+            "type": "step",
+            "title": "Production Monitoring — Alert on Transitions, Not Failure Rates",
+            "content": "The circuit breaker already handles transient failures — alerting on raw failure rates duplicates its job. Instead, monitor **state transitions**. A CLOSED→OPEN event means the breaker has tripped, which deserves an alert because users are getting degraded responses. A HALF_OPEN→OPEN event is more concerning — it means the downstream service attempted recovery and failed, suggesting a real outage rather than a transient blip.\n\nResilience4j exposes Micrometer metrics that integrate directly with Prometheus/Grafana.\n\n```java\n@Bean\npublic MeterRegistryCustomizer<MeterRegistry> circuitBreakerMetrics(\n        CircuitBreakerRegistry registry) {\n    return meterRegistry -> {\n        registry.getAllCircuitBreakers().forEach(cb ->\n            TaggedCircuitBreakerMetrics.ofCircuitBreaker(cb)\n                .bindTo(meterRegistry));\n    };\n}\n```\n\nThe key metrics to dashboard are `resilience4j_circuitbreaker_state` (current state per instance), `resilience4j_circuitbreaker_failure_rate` (percentage in the sliding window), and `resilience4j_circuitbreaker_slow_call_rate`. Set alerts on state=OPEN lasting more than 2 minutes and on HALF_OPEN→OPEN transitions.\n\nPair the circuit breaker with a **bulkhead** to isolate thread pools per dependency. Without a bulkhead, the order service uses a single thread pool for calls to inventory, payments, and shipping. If inventory exhausts the pool, payments and shipping calls also fail. A bulkhead gives each dependency its own thread pool with a fixed maximum, containing the blast radius to a single dependency."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Circuit breaker ≠ retry** — retries amplify load on struggling services; circuit breaker sheds load by failing fast.\n- **`recordExceptions` vs `ignoreExceptions`** — business validation errors should not count.\n- **Count-based window of 10–20 calls** — reacts within hundreds of milliseconds of a real outage; time-based adds seconds of delay.\n- **`slowCallDurationThreshold`** — catches degradation, not just hard failures; set to 2–3× expected p99 latency.\n- **Alert on state transitions** — CLOSED→OPEN means degraded responses; HALF_OPEN→OPEN means recovery failed."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The circuit breaker pattern prevents cascading failures in synchronous microservice chains. When a downstream service degrades, the circuit breaker detects the pattern and starts failing fast — protecting the caller from exhausting its thread pool waiting for responses that won't arrive in time.\n\n**How Resilience4j's three-state machine works:**\n- CLOSED is normal — calls go through and failure metrics are recorded against a sliding window of the last N calls\n- When failure rate exceeds the threshold (typically 50%), it transitions to OPEN — every call returns immediately with the fallback response, no downstream attempt is made\n- After a wait duration (10–30 seconds), it moves to HALF_OPEN and lets a few probe calls through; success closes the breaker, failure reopens it\n\n**Critical configuration decisions:**\n- The `recordExceptions` filter is what most people miss — business validation errors like \"invalid product ID\" should NOT count as infrastructure failures and trip the breaker; only timeouts, connection refused, and 5xx should\n- `slowCallDurationThreshold` catches degradation before hard failures appear — a service responding in 5 seconds ties up threads just as badly as a timeout; set it to 2–3× your expected p99 latency\n\n**Composing with other patterns:**\n- Always pair circuit breakers with bulkheads — separate thread pools per dependency so a failing inventory service can't exhaust the pool that payments and shipping also use\n- Compose with retry as the outer decorator so the circuit breaker sees the aggregate outcome, not each individual retry attempt\n\nI recommend alerting on state transitions (CLOSED→OPEN) rather than failure rates — a transition means users are getting degraded responses, which is a production incident."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a circuit breaker and a retry?",
+        "How does the bulkhead pattern complement the circuit breaker?",
+        "What is the difference between count-based and time-based sliding windows?"
+      ],
+      "seo": {
+        "metaTitle": "Circuit Breaker Resilience4j Spring Boot — Java Interview",
+        "metaDescription": "Circuit breaker pattern with Resilience4j. Three states, Spring Boot configuration, fallback methods, and combination with retry."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The circuit breaker pattern prevents cascading failures in synchronous microservice chains.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Picture this: the inventory service starts responding in 8 seconds instead of 200ms. Without a circuit breaker, the order service keeps sending requests and each one occupies a thread for 8 seconds waiting for a response. At 50 requests per second, you have 400 threads blocked within a minute. The order service's thread pool is exhausted. Now it can't handle any requests — not even ones that don't touch inventory. Users see 503 errors on completely unrelated features. That's a."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of the three states and the problem it solves (cascading failures)"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Circuit breaker ≠ retry — retries amplify load on struggling services; circuit breaker sheds load by failing fast",
+              "recordExceptions vs ignoreExceptions — business validation errors should not count",
+              "Count-based window of 10–20 calls — reacts within hundreds of milliseconds of a real outage; time-based adds seconds of delay",
+              "slowCallDurationThreshold — catches degradation, not just hard failures; set to 2–3× expected p99 latency",
+              "Alert on state transitions — CLOSED→OPEN means degraded responses; HALF_OPEN→OPEN means recovery failed"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Picture this: the inventory service starts responding in 8 seconds instead of 200ms. Without a circuit breaker, the order service keeps sending requests and each one occupies a thread for 8 seconds waiting for a response. At 50 requests per second, you have 400 threads blocked within a minute. The order service's thread pool is exhausted. Now it can't handle any requests — not even ones that don't touch inventory. Users see 503 errors on completely unrelated features. That's a cascading failure. The circuit breaker pattern borrows from electrical engineering. When current exceeds a safe threshold, the breaker trips open and stops the flow — protecting the system from damage. In software, the \"current\" is the failure rate of a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing circuit breaker with retry",
+              "they're complementary, not alternatives"
+            ]
+          }
+        ],
+        "cap": "How Resilience4j's three-state machine works: CLOSED is normal — calls go through and failure metrics are recorded against a sliding window of the last N calls When failure rate exceeds the threshold",
+        "familiarity_anchors": [
+          "CLOSED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a circuit breaker and a retry?",
+          "How does the bulkhead pattern complement the circuit breaker?",
+          "What is the difference between count-based and time-based sliding windows?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "scc-004",
+      "slug": "resilience4j-circuit-breaker-spring-cloud",
+      "question": "How do you add circuit breakers at the Spring Cloud Gateway layer — using the `CircuitBreaker` GatewayFilter with Resilience4j — and how does that differ from per-service annotation-based circuit breakers?",
+      "title": "Spring Cloud Gateway CircuitBreaker Filter — Edge-Layer Resilience4j Integration",
+      "direct_answer": "**Spring Cloud Gateway** ships a built-in `CircuitBreaker` **GatewayFilter** backed by **Spring Cloud Circuit Breaker** — a facade that by default uses **Resilience4j**. Declare it per-route in `application.yml` with `name` and optional `fallbackUri`; the filter wraps every routed request, tripping on 5xx/timeouts and routing to the fallback URI (another route or a `@Controller` endpoint) when OPEN. Unlike `@CircuitBreaker` annotations at the **service layer** (which protect each internal call site), the Gateway filter protects the **edge** — any downstream route, one policy per route, no service code changes required. Best combined: Gateway-level fuses for public-facing routes; service-level `@CircuitBreaker` for specific critical call sites inside services.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand that Spring Cloud Gateway's CircuitBreaker filter is a distinct integration point — an edge-layer fuse — not the same as the service-level @CircuitBreaker annotation covered elsewhere",
+        "common_mistake": "Confusing the GatewayFilter with the annotation; thinking both are needed for every service; not configuring fallbackUri so OPEN state bubbles up an ugly 5xx; forgetting that the filter's name maps to a CircuitBreakerRegistry bean",
+        "to_stand_out": "Walk through the layered defense model — edge fuses at the gateway, service-level fuses at call sites, with distinct failure domains; discuss the Spring Cloud Circuit Breaker abstraction (swap Resilience4j for Sentinel); show the fallback controller pattern; mention reactive flow specifics"
+      },
+      "company_tags": [
+        "Netflix",
+        "Pivotal",
+        "Spring",
+        "Amazon",
+        "Stripe",
+        "Square"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Placement Decisions for a Fuse — The Gateway and the Service",
+            "content": "A circuit breaker can live at two places in a Spring Cloud stack, and most interview confusion comes from treating them as interchangeable:\n\n**Service-level `@CircuitBreaker`.** An annotation on a method inside `payment-service` that wraps a specific outgoing call (e.g., to `fraud-service`).\n- Protects *that call site* from sinking *that service*.\n- Configured in the service's `application.yml`.\n- This is what the Q1 `circuit-breaker-resilience4j` question covers.\n\n**Gateway-level `CircuitBreaker` GatewayFilter.** A route-attached filter at the **edge** — the Spring Cloud Gateway node(s) that front the cluster.\n- Protects *every request routed to a given downstream service* without touching that service's code.\n- The fuse trips based on what the gateway observes: 5xx responses, timeouts, errors.\n\nThese solve different problems. Edge-layer fuses protect clients (users, external APIs) from a failing backend; they keep the gateway responsive and let the fallback URI serve a degraded experience. Service-layer fuses protect internal call graphs from cascading failures and thread exhaustion.\n\nThe Gateway filter is implemented on top of the **Spring Cloud Circuit Breaker** abstraction — a thin facade that lets you swap the underlying library.\n- Defaults to **Resilience4j** (`spring-cloud-starter-circuitbreaker-reactor-resilience4j`); **Alibaba Sentinel** is the other common binding.\n- The filter sees all reactive route traffic, so it uses the **reactive** Resilience4j operators under the hood.\n\nThe practical mental model: **gateway filter = fuse on the outside door of the building; service annotation = fuse on each appliance's plug**. You want both. A building with only appliance-level fuses still has unsafe wiring runs at the panel; a building with only a single panel fuse trips everything for any fault. Layered defense.\n\nThe Gateway filter's **fallback URI** is the payoff.\n- When OPEN, instead of surfacing a generic 503 to the client, the filter forwards the request to a fallback — another route (a cached static response) or a local `@Controller` that returns a degraded view.\n- The client sees a friendly 'service temporarily unavailable; showing cached orders' rather than a raw error."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Gateway CircuitBreaker Filter Flow",
+            "content": "```mermaid\nflowchart LR\n    Client[Client] --> GW[Spring Cloud Gateway]\n    GW -->|Path /api/orders/*| Route1[Route: orders]\n    Route1 --> CBFilter[CircuitBreaker filter<br/>name=ordersCB]\n    CBFilter --> CB{CircuitBreaker<br/>state?}\n    CB -->|CLOSED| OrderSvc[(order-service)]\n    CB -->|OPEN| Fallback[fallbackUri<br/>forward:/fallback/orders]\n    CB -->|HALF_OPEN| OrderSvc\n    OrderSvc -. 5xx / timeout .-> CBFilter\n    CBFilter -. records failure .-> CB\n    Fallback --> FallbackCtrl[Fallback @Controller<br/>returns cached or degraded]\n    FallbackCtrl --> Client\n    OrderSvc --> Client\n```"
+          },
+          {
+            "type": "step",
+            "title": "Configuring the CircuitBreaker GatewayFilter in application.yml",
+            "content": "**Gateway project dependencies:**\n\n```xml\n<dependency>\n  <groupId>org.springframework.cloud</groupId>\n  <artifactId>spring-cloud-starter-gateway</artifactId>\n</dependency>\n<dependency>\n  <groupId>org.springframework.cloud</groupId>\n  <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>\n</dependency>\n```\n\n**application.yml — declaring routes with CircuitBreaker filter:**\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: orders-route\n          uri: lb://order-service\n          predicates:\n            - Path=/api/orders/**\n          filters:\n            - name: CircuitBreaker\n              args:\n                name: ordersCB                     # maps to a CircuitBreakerRegistry bean\n                fallbackUri: forward:/fallback/orders\n                statusCodes:                        # which statuses count as failures\n                  - 500\n                  - 502\n                  - 503\n                  - BAD_GATEWAY\n\n        - id: payments-route\n          uri: lb://payment-service\n          predicates:\n            - Path=/api/payments/**\n          filters:\n            - name: CircuitBreaker\n              args:\n                name: paymentsCB\n                fallbackUri: forward:/fallback/payments\n\n        - id: catalog-route\n          uri: lb://catalog-service\n          predicates:\n            - Path=/api/catalog/**\n          filters:\n            - name: CircuitBreaker\n              args:\n                name: catalogCB\n                fallbackUri: forward:/fallback/catalog\n\nresilience4j:\n  circuitbreaker:\n    instances:\n      ordersCB:\n        slidingWindowType: TIME_BASED\n        slidingWindowSize: 10\n        failureRateThreshold: 50\n        slowCallDurationThreshold: 2s\n        slowCallRateThreshold: 80\n        waitDurationInOpenState: 20s\n        permittedNumberOfCallsInHalfOpenState: 3\n        minimumNumberOfCalls: 10\n\n      paymentsCB:\n        slidingWindowType: TIME_BASED\n        slidingWindowSize: 10\n        failureRateThreshold: 30                     # stricter for payments\n        waitDurationInOpenState: 30s\n        minimumNumberOfCalls: 8\n\n      catalogCB:\n        slidingWindowType: COUNT_BASED\n        slidingWindowSize: 20\n        failureRateThreshold: 60                     # lax; catalog is read-only, cached\n```\n\n**Key filter arguments:**\n- `name` — required; maps to the circuit-breaker instance in `resilience4j.circuitbreaker.instances.<name>`\n- `fallbackUri` — typically `forward:/path` (internal) or `http://backup.example.com/...` (external)\n- `statusCodes` — which HTTP status codes count as failures (defaults to 5xx)\n- Exception types counted as failures are controlled globally via the Resilience4j `recordExceptions`\n\nEach route gets its own circuit breaker instance. One backend's outage doesn't trip others."
+          },
+          {
+            "type": "step",
+            "title": "Fallback Controller and Programmatic Alternatives",
+            "content": "**The fallback `@Controller`** — where `forward:/fallback/orders` lands:\n\n```java\n@RestController\npublic class FallbackController {\n\n    private final OrderCache orderCache;   // local Redis or in-memory\n\n    @RequestMapping(\"/fallback/orders\")\n    public Mono<ResponseEntity<Map<String, Object>>> ordersFallback(ServerWebExchange exchange) {\n        // Optional: inspect the original request for context\n        String path = exchange.getRequest().getPath().value();\n\n        // Return cached or degraded response\n        return orderCache.mostRecentSummary()\n            .map(summary -> ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)\n                .header(\"X-Fallback\", \"cached\")\n                .<Map<String, Object>>body(Map.of(\n                    \"status\", \"degraded\",\n                    \"message\", \"Orders service is temporarily unavailable; showing recent orders\",\n                    \"recent\", summary)))\n            .defaultIfEmpty(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)\n                .body(Map.of(\n                    \"status\", \"unavailable\",\n                    \"message\", \"Please try again in a moment\")));\n    }\n\n    @RequestMapping(\"/fallback/payments\")\n    public ResponseEntity<Map<String, Object>> paymentsFallback() {\n        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)\n            .body(Map.of(\n                \"status\", \"queued\",\n                \"message\", \"Payment will be retried shortly\"));\n    }\n}\n```\n\nNote: the gateway is **reactive** (Netty/WebFlux), so fallback controllers must return `Mono`/`Flux` or `ResponseEntity` — not blocking calls. A fallback that calls another blocking service can itself fail or block the event loop; keep fallbacks simple (cache, static response, lightweight Redis lookup).\n\n**Programmatic route definition (Java DSL) — equivalent to YAML:**\n\n```java\n@Configuration\npublic class GatewayRouteConfig {\n\n    @Bean\n    public RouteLocator routes(RouteLocatorBuilder builder) {\n        return builder.routes()\n            .route(\"orders-route\", r -> r\n                .path(\"/api/orders/**\")\n                .filters(f -> f.circuitBreaker(c -> c\n                    .setName(\"ordersCB\")\n                    .setFallbackUri(\"forward:/fallback/orders\")\n                    .setStatusCodes(Set.of(\"500\", \"502\", \"503\"))))\n                .uri(\"lb://order-service\"))\n            .route(\"payments-route\", r -> r\n                .path(\"/api/payments/**\")\n                .filters(f -> f.circuitBreaker(c -> c\n                    .setName(\"paymentsCB\")\n                    .setFallbackUri(\"forward:/fallback/payments\")))\n                .uri(\"lb://payment-service\"))\n            .build();\n    }\n}\n```\n\n**Customizing the underlying Resilience4j config programmatically:**\n\n```java\n@Bean\npublic Customizer<ReactiveResilience4JCircuitBreakerFactory> defaultCustomizer() {\n    return factory -> {\n        factory.configureDefault(id -> new Resilience4JConfigBuilder(id)\n            .circuitBreakerConfig(CircuitBreakerConfig.custom()\n                .slidingWindowType(TIME_BASED)\n                .slidingWindowSize(10)\n                .failureRateThreshold(50)\n                .slowCallDurationThreshold(Duration.ofSeconds(2))\n                .build())\n            .timeLimiterConfig(TimeLimiterConfig.custom()\n                .timeoutDuration(Duration.ofSeconds(3))\n                .build())\n            .build());\n    };\n}\n```\n\nThis customizer applies to every gateway circuit breaker unless overridden per-route. Note the `timeLimiterConfig` — the Spring Cloud Circuit Breaker integration packages a TimeLimiter with each breaker; the `timeoutDuration` is enforced at the reactive layer, cancelling the downstream Mono/Flux on deadline.\n\n**Metrics exposure (Prometheus via Actuator):**\n\n```yaml\nmanagement:\n  endpoints.web.exposure.include: health,info,metrics,prometheus,circuitbreakers\n  health.circuitbreakers.enabled: true\n```\n\n`/actuator/circuitbreakers` lists all instances and their state. Grafana dashboard on `resilience4j_circuitbreaker_state{name='ordersCB'}` reveals flapping or stuck-OPEN conditions."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Edge vs Service Layer, Common Pitfalls, and the Layered Defense Pattern",
+            "content": "**Edge-layer circuit breaker has a distinct failure domain.** It sees every request to a route, across all client types (mobile, web, external partners). A trip affects everyone talking to that backend through the gateway — which is usually what you want at the edge: protect all consumers from a failing backend.\n\n**Service-layer circuit breaker has a narrow failure domain.** Only the calls from that specific service to a specific downstream. One service trips its breaker; others may still call the same downstream successfully. Useful when one service can tolerate degraded downstream better than another.\n\n**Both together = layered defense.** A real outage trips both: gateway fuse at the edge (protecting clients), service-level fuses inside (protecting internal call chains). A transient issue may only trip one. The two layers have different statistical windows — gateway sees aggregate traffic; service sees its own calls — so they detect different patterns.\n\n**The fallback URI is not a free lunch.** A `forward:/fallback/orders` endpoint must exist and return quickly. A slow fallback (e.g., calls another service that is also struggling) makes the circuit breaker's fail-fast property irrelevant — you're back to slow responses, just from a different source. Keep fallbacks **local** and **fast**: Redis cache, static JSON, a simple degradation message. Never call another backend from a fallback.\n\n**Exception vs status code policies.** By default, the Gateway CircuitBreaker filter counts: request timeouts, connect failures, and any `statusCodes` you list (defaults to 5xx). A `400 Bad Request` is the client's fault, not the downstream's, and should NOT trip the breaker — which is the default. Override with caution.\n\n**Name collisions across routes.** Each route's `name` must be unique. Reusing a name across routes means two routes share a single circuit breaker instance — one route's failures trip the other route's calls. Usually a bug; sometimes an intentional grouping (e.g., all 'orders-*' routes share one breaker).\n\n**Reactive-only.** Spring Cloud Gateway is reactive (Netty/Reactor). Blocking code in fallbacks or filters blocks the event loop. Test fallbacks under concurrent load; catch event-loop blocks with BlockHound or Reactor's `checkpoint()`.\n\n**Integration with rate limiter and retry.** Gateway filters are chainable. Common chain: `RequestRateLimiter` → `Retry` → `CircuitBreaker` → route. Order matters: rate limiter outermost (reject over-quota before anything else), retry inside circuit breaker (retries contribute to breaker stats), circuit breaker innermost-before-route (short-circuits on open).\n\n```yaml\nfilters:\n  - name: RequestRateLimiter\n    args:\n      redis-rate-limiter.replenishRate: 100\n      redis-rate-limiter.burstCapacity: 200\n  - name: Retry\n    args:\n      retries: 2\n      statuses: BAD_GATEWAY\n  - name: CircuitBreaker\n    args:\n      name: ordersCB\n      fallbackUri: forward:/fallback/orders\n```\n\n**Spring Cloud Circuit Breaker abstraction.** The same `CircuitBreaker` filter works with **Sentinel** via `spring-cloud-starter-circuitbreaker-reactor-sentinel`. Swap the starter, keep the YAML. Useful when running on Alibaba Cloud or wanting Sentinel's real-time rule updates via Nacos.\n\n**Don't rely on gateway breaker for deep internal paths.** If service A calls B calls C calls D, the gateway fuse only protects the A hop. Internal failures between B-C-D need service-level breakers. The gateway is the outer ring; not a substitute for depth.\n\n**Observability.** Dashboard gateway breaker states alongside service-level ones. State = OPEN at the gateway is a clearer signal than 5xx rate (which may include transient blips). Alert on:\n- Any gateway circuit breaker OPEN > 2 minutes (user-visible outage)\n- HALF_OPEN → OPEN transition (recovery attempt failed)\n- Fallback invocation rate (sustained fallback = degraded experience)\n\n**Testing.** Spring Cloud Contract or WireMock to simulate downstream 5xx; verify gateway trips as expected. Integration tests with embedded gateway (`@SpringBootTest`) and a test downstream controller that can be toggled into failure modes.\n\n**Config reload.** Gateway routes can reload at runtime via `/actuator/gateway/refresh` (requires `spring.cloud.gateway.discovery.locator.enabled`). Circuit breaker threshold changes via Spring Cloud Config refresh apply without restart.\n\n**Use cases where gateway breaker is clearly the right layer:**\n- Public API consumers (web, mobile) must get fast 5xx or cached fallback, not hang\n- An entire downstream service is flapping — trip at the edge, no internal change\n- SLO gating by route — different thresholds for payment vs catalog without service code changes\n- Quick toggle: remove a route during incident by flipping the `CircuitBreaker` filter to always-OPEN (via config update)\n\n**Use cases where service-level annotation is clearly the right layer:**\n- Internal service-to-service calls invisible to the gateway\n- Per-call-site fallbacks with business logic (enrich from cache, replace with default model)\n- Programmatic control over retry + circuit breaker composition\n- Services that make many calls to multiple downstreams — one breaker per downstream at call site\n\n**Both patterns belong together in a mature deployment.**"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring Cloud Gateway's `CircuitBreaker` GatewayFilter** is a route-level fuse at the edge, distinct from service-layer `@CircuitBreaker` annotations\n- **Backed by Spring Cloud Circuit Breaker abstraction** — Resilience4j default; swap for Sentinel without YAML change\n- **Each route has its own CircuitBreaker instance** — one outage doesn't trip others\n- **`fallbackUri: forward:/fallback/...`** routes OPEN-state requests to a local `@Controller` for degraded response\n- **Reactive stack** — fallbacks must return Mono/Flux; blocking is an event-loop bug\n- **`statusCodes` filter arg** determines which HTTP statuses count as failures (defaults to 5xx); 4xx doesn't trip\n- **Chain with RateLimiter and Retry** for full edge-layer resilience; order: RateLimiter → Retry → CircuitBreaker → route\n- **Layered defense** — gateway fuses protect clients; service annotations protect internal call chains\n- **Fallbacks must be fast and local** — never call another backend\n- **Monitor `resilience4j_circuitbreaker_state{name='...'}`** for gateway instances; alert on sustained OPEN"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The core distinction**\n- Spring Cloud Gateway's CircuitBreaker GatewayFilter is a route-level fuse at the edge\n- Service-level @CircuitBreaker annotations protect specific call sites inside services\n- Both exist; they solve different problems\n- Edge fuse protects external clients from a failing backend; service annotation protects internal call graphs\n- Mature deployments have both — layered defense\n\n**The Spring Cloud Circuit Breaker abstraction**\n- Thin facade above Resilience4j (default) or Sentinel\n- The Gateway filter uses the reactive variant\n- Dependency: spring-cloud-starter-circuitbreaker-reactor-resilience4j\n- Swap starters to move between Resilience4j and Sentinel without changing YAML\n\n**YAML-based route configuration**\n- Each route under spring.cloud.gateway.routes\n- Filter name = CircuitBreaker\n- Args: name (maps to CircuitBreakerRegistry instance), fallbackUri, statusCodes\n- Resilience4j config under resilience4j.circuitbreaker.instances.<name> tunes the behaviour\n- Each route gets its own breaker instance — one outage doesn't trip others\n\n**Key arguments explained**\n- name is required — maps to the circuit-breaker bean\n- fallbackUri is typically forward:/fallback/... pointing at a local controller\n- statusCodes controls which HTTP statuses count as failure — defaults to 5xx; 4xx is the client's fault and does not trip\n- Exception matching controlled globally via Resilience4j recordExceptions\n\n**Fallback controller pattern**\n- Annotated with @RestController, mapped to the fallbackUri path\n- Returns Mono or ResponseEntity (reactive stack)\n- Must be fast and local — Redis cache, static JSON, simple degraded message\n- Never call another backend from a fallback; it can fail too\n\n**Programmatic RouteLocator alternative**\n- Same semantics as YAML in Java DSL\n- RouteLocatorBuilder with .filters(f -> f.circuitBreaker(c -> c.setName...setFallbackUri...))\n- Customizer<ReactiveResilience4JCircuitBreakerFactory> bean to tune defaults\n\n**TimeLimiter is packaged with the breaker**\n- Spring Cloud Circuit Breaker attaches a TimeLimiter alongside each CircuitBreaker\n- timeoutDuration bounds the reactive call; cancels the downstream Mono on deadline\n- Configured via Resilience4JConfigBuilder.timeLimiterConfig\n\n**Filter chaining for full edge resilience**\n- Order matters: RequestRateLimiter first, then Retry, then CircuitBreaker, then route\n- RateLimiter rejects over-quota before anything else\n- Retry's attempts contribute to CircuitBreaker stats\n- CircuitBreaker short-circuits on OPEN\n\n**When gateway-level is the right layer**\n- Public API consumers need fast 5xx or cached fallback, not hanging\n- Entire downstream service flapping — trip at the edge without touching service code\n- SLO differentiation per route — stricter for payment, lax for catalog\n- Quick toggle: flip filter to always-open during incident via config update\n\n**When service-level annotation is the right layer**\n- Internal service-to-service calls invisible to the gateway\n- Per-call-site fallbacks with business logic\n- Programmatic control over retry + circuit breaker composition\n- Services with many downstream dependencies — one breaker per downstream at call site\n\n**Common pitfalls**\n- Name collisions across routes — sharing a breaker unintentionally\n- Fallback that calls another backend — re-creates the fail-slow problem\n- Blocking code in fallbacks on reactive stack — event loop block\n- statusCodes overridden to include 4xx — client errors trip the breaker\n- Not monitoring gateway breaker state — invisible outages\n\n**Observability**\n- /actuator/circuitbreakers exposes all instances and states\n- Prometheus metric resilience4j_circuitbreaker_state tagged per instance\n- Alert on OPEN sustained beyond 2 minutes\n- Alert on HALF_OPEN to OPEN transitions — recovery attempt failed\n- Alert on sustained fallback invocation rate — degraded experience\n\n**The layered defense model**\n- Gateway filter = fuse on the outside door of the building\n- Service annotation = fuse on each appliance's plug\n- Panel-only means one fault trips everything\n- Appliance-only means unsafe panel wiring remains\n- Both together is what mature deployments run\n\n**The strategic answer**\n- Gateway CircuitBreaker filter is the edge-layer fuse; service annotation is the call-site fuse\n- Backed by the Spring Cloud Circuit Breaker abstraction; default Resilience4j reactive\n- Per-route instance, declared in YAML or programmatic DSL\n- Fallback URI must be local and fast; forward:/fallback/... to a controller\n- Chain with RateLimiter and Retry for full edge resilience\n- Monitor state; alert on sustained OPEN; use layered defense with service-level breakers"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does the Spring Cloud Gateway CircuitBreaker filter chain with RequestRateLimiter and Retry filters, and what's the correct order?",
+        "What's the right content for a fallback controller on the reactive Gateway stack — what must you avoid?",
+        "How do you swap Resilience4j for Alibaba Sentinel under the Spring Cloud Circuit Breaker abstraction?",
+        "Why must the Gateway's CircuitBreaker filter's `name` map to a unique Resilience4j instance per route, and what breaks if two routes share a name?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Cloud Gateway CircuitBreaker Filter — Resilience4j Edge-Layer Integration",
+        "metaDescription": "Add circuit breakers at Spring Cloud Gateway via CircuitBreaker GatewayFilter, Resilience4j reactive, fallbackUri, layered defense with service annotations."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The core distinction Spring Cloud Gateway's CircuitBreaker GatewayFilter is a route-level fuse at the edge Service-level @CircuitBreaker annotations protect specific call sites inside services Both exist; they solve different problems Edge fuse protects external clients.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A circuit breaker can live at two places in a Spring Cloud stack, and most interview confusion comes from treating them as interchangeable: Service-level @CircuitBreaker. An annotation on a method inside payment-service that wraps a specific outgoing call (e.g., to fraud-service). Protects that call site from sinking that service. Configured in the service's application.yml. This is what the Q1 circuit-breaker-resilience4j question covers. Gateway-level CircuitBreaker GatewayFilter. A route-attached filter at the edge — the Spring Cloud Gateway node(s) that front the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand that Spring Cloud Gateway's CircuitBreaker filter is a distinct integration point — an edge-layer fuse — not the same as the service-level @CircuitBreaker annotation covered elsewhere"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Spring Cloud Gateway's CircuitBreaker GatewayFilter is a route-level fuse at the edge, distinct from service-layer @CircuitBreaker annotations Backed by Spring Cloud Circuit Breaker abstraction — Resilience4j default; swap for Sentinel without YAML change Each route has its own CircuitBreaker instance — one outage doesn't trip others fallbackUri: forward:/fallback/",
+              "routes OPEN-state requests to a local @Controller for degraded response Reactive stack — fallbacks must return Mono/Flux; blocking is an event-loop bug statusCodes filter arg determines which HTTP statuses count as failures (defaults to 5xx); 4xx doesn't trip Chain with RateLimiter and Retry for full edge-layer resilience; order: RateLimiter → Retry → CircuitBreaker → route Layered defense — gateway fuses protect clients; service annotations protect internal call chains Fallbacks must be fast and local — never call another backend Monitor resilience4j_circuitbreaker_state{name='",
+              "'} for gateway instances; alert on sustained OPEN"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A circuit breaker can live at two places in a Spring Cloud stack, and most interview confusion comes from treating them as interchangeable: Service-level @CircuitBreaker. An annotation on a method inside payment-service that wraps a specific outgoing call (e.g., to fraud-service). Protects that call site from sinking that service. Configured in the service's application.yml. This is what the Q1 circuit-breaker-resilience4j question covers. Gateway-level CircuitBreaker GatewayFilter. A route-attached filter at the edge — the Spring Cloud Gateway node(s) that front the cluster. Protects every request routed to a given downstream service without touching that service's code. The fuse trips based on what the gateway observes: 5xx responses, timeouts, errors. These solve different problems. Edge-layer fuses protect clients (users, external APIs) from."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing the GatewayFilter with the annotation",
+              "thinking both are needed for every service",
+              "not configuring fallbackUri so OPEN state bubbles up an ugly 5xx",
+              "forgetting that the filter's name maps to a CircuitBreakerRegistry bean"
+            ]
+          }
+        ],
+        "cap": "to a controller Chain with RateLimiter and Retry for full edge resilience Monitor state; alert on sustained OPEN; use layered defense with service-level breakers",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Gateway"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does the Spring Cloud Gateway CircuitBreaker filter chain with RequestRateLimiter and Retry filters, and what's the correct order?",
+          "What's the right content for a fallback controller on the reactive Gateway stack — what must you avoid?",
+          "How do you swap Resilience4j for Alibaba Sentinel under the Spring Cloud Circuit Breaker abstraction?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

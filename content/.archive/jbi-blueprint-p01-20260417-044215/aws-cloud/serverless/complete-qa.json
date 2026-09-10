@@ -1,0 +1,126 @@
+{
+  "topic": "Serverless",
+  "topicSlug": "serverless",
+  "questions": [
+    {
+      "id": "aws-003",
+      "slug": "lambda-spring-cloud-function",
+      "question": "How do you deploy a Spring Boot application as an AWS Lambda function using Spring Cloud Function?",
+      "title": "AWS Lambda with Spring Cloud Function",
+      "direct_answer": "Spring Cloud Function lets you write a plain Java Function<I,O> bean, and Spring Cloud Function AWS adapter wraps it as a Lambda handler. You package the app as a fat JAR or native image, deploy it to Lambda, and configure triggers (API Gateway, SQS, etc.) without changing business logic.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Serverless patterns in Java and understanding of cold start trade-offs",
+        "common_mistake": "Not accounting for Lambda cold starts with the Spring context initialisation \u2014 and not mentioning SnapStart or GraalVM native as mitigations",
+        "to_stand_out": "Mention AWS Lambda SnapStart for Java 21+ which checkpoints the JVM after initialisation for near-zero cold starts"
+      },
+      "company_tags": [
+        "amazon",
+        "capital-one",
+        "intuit",
+        "new-relic"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Cold Start Problem That Made Java on Lambda Impractical \u2014 and What Fixed It",
+            "content": "Java on Lambda had a reputation problem: cold starts took **8-15 seconds** for a typical Spring Boot application because Lambda had to initialize the JVM, load all classes, and create the full Spring application context on every cold invocation. For HTTP APIs behind API Gateway, this meant the first request after an idle period took 10+ seconds \u2014 unacceptable for user-facing services.\n\nTwo technologies fundamentally changed this equation. **AWS Lambda SnapStart** (available for Java 11, 17, and 21) takes a snapshot of the initialized JVM after the Spring context is fully loaded and restores it on cold start \u2014 reducing initialization from seconds to **~200ms**. **GraalVM native images** compiled with Spring Native eliminate the JVM entirely, starting in **<100ms** with a fraction of the memory.\n\nSpring Cloud Function provides the abstraction layer: you write a standard `Function<I, O>` bean, and the `spring-cloud-function-adapter-aws` module wraps it as a Lambda handler. Your business logic stays portable \u2014 the same function can run on Lambda, on ECS as an HTTP endpoint, or as a Pub/Sub consumer, without code changes."
+          },
+          {
+            "type": "step",
+            "title": "Writing the Function Bean: Business Logic That Doesn't Know About Lambda",
+            "content": "The power of Spring Cloud Function is that your function bean is a standard Spring component. It has access to dependency injection, `@ConfigurationProperties`, Spring Data repositories \u2014 everything you'd use in a normal Spring Boot application. The Lambda-specific adapter is a deployment concern, not a code concern.\n\nThe function signature determines the Lambda input/output mapping. For an API Gateway HTTP trigger, the input is the request body; for SQS, it's the message payload.\n\n```java\n@SpringBootApplication\npublic class OrderProcessorApp {\n    public static void main(String[] args) {\n        SpringApplication.run(OrderProcessorApp.class, args);\n    }\n\n    @Bean\n    public Function<OrderEvent, OrderResult> processOrder(OrderService orderService) {\n        return event -> {\n            var order = orderService.validate(event);\n            orderService.save(order);\n            return new OrderResult(order.id(), \"PROCESSED\");\n        };\n    }\n}\n```\n\nThe adapter dependency and the handler class name are the only Lambda-specific configuration. The `FunctionInvoker` class from the adapter bridges Lambda's handler interface to your Spring function bean.\n\n```xml\n<dependency>\n  <groupId>org.springframework.cloud</groupId>\n  <artifactId>spring-cloud-function-adapter-aws</artifactId>\n</dependency>\n```\n\nIn the Lambda configuration, set the handler to `org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest`. Spring Cloud Function discovers your function bean by name \u2014 if you have exactly one `Function` bean, it's used automatically."
+          },
+          {
+            "type": "step",
+            "title": "SnapStart: How JVM Checkpointing Eliminates Cold Starts",
+            "content": "SnapStart works by running your Lambda function's initialization code **once during deployment**, taking a memory snapshot (using the CRaC \u2014 Coordinated Restore at Checkpoint \u2014 framework), and storing it encrypted. On cold start, Lambda restores the snapshot instead of re-initializing, cutting startup from ~10 seconds to ~200ms.\n\nEnabling SnapStart requires one configuration change \u2014 no code modifications. In your SAM template or CloudFormation:\n\n```yaml\nResources:\n  OrderProcessorFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest\n      Runtime: java21\n      SnapStart:\n        ApplyOn: PublishedVersions  # enables snapshot on publish\n      MemorySize: 512\n      Timeout: 30\n      Environment:\n        Variables:\n          SPRING_CLOUD_FUNCTION_DEFINITION: processOrder\n```\n\nThe critical detail is that SnapStart snapshots happen at **publish time**, not at every deployment. You must publish a new version (`aws lambda publish-version`) for the snapshot to be created. Using `$LATEST` bypasses SnapStart entirely \u2014 a common mistake that leaves cold starts unimproved.\n\nThere's one catch with SnapStart: any state that's unique per invocation \u2014 database connections, random number generators, temporary credentials \u2014 must be refreshed after restore. Spring Cloud Function handles most of this automatically, but if you have custom initialization code that opens connections or generates UUIDs during startup, wrap it in a `@PostConstruct` with CRaC lifecycle awareness.\n\nFor teams that can't use SnapStart (older runtimes, or needing even faster starts), GraalVM native compilation with `spring-boot-maven-plugin` and the `native` profile produces a standalone binary that starts in <100ms with ~50 MB of memory \u2014 versus 200-500 MB for a JVM Lambda."
+          },
+          {
+            "type": "step",
+            "title": "SQS Batch Processing: The Pattern That Makes Lambda Cost-Effective",
+            "content": "The most cost-effective Lambda pattern for Spring Boot isn't API Gateway HTTP triggers \u2014 it's **SQS batch processing**. Lambda polls the SQS queue, batches up to 10 messages per invocation, and processes them in a single function call. This amortizes the invocation cost and initialization overhead across multiple messages.\n\nSpring Cloud Function handles SQS batch events with a `Function<List<SQSEvent.SQSMessage>, Void>` signature. The adapter deserializes the batch automatically.\n\n```java\n@Bean\npublic Function<List<OrderEvent>, Void> processBatch(OrderService orderService) {\n    return events -> {\n        events.forEach(event -> {\n            try {\n                orderService.process(event);\n            } catch (Exception e) {\n                log.error(\"Failed to process order {}\", event.orderId(), e);\n                throw e; // failed messages return to queue for retry\n            }\n        });\n        return null;\n    };\n}\n```\n\nConfigure the SQS event source mapping with `batchSize` and `maxBatchingWindowSeconds` to control throughput vs latency. A batch size of 10 with a 5-second window means Lambda waits up to 5 seconds to collect up to 10 messages before invoking \u2014 maximizing batch efficiency during high-traffic periods while keeping latency bounded during low-traffic.\n\nThe cost comparison with ECS Fargate is the decision point. Lambda charges per invocation ($0.20/million) plus per-GB-second of memory. For bursty workloads with idle periods, Lambda with SnapStart is dramatically cheaper because you pay nothing during idle. For sustained high-throughput (>1000 messages/second continuously), Fargate's flat per-second pricing becomes cheaper because you avoid per-invocation charges."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Function<I, O>` bean is Lambda-agnostic** \u2014 Spring Cloud Function wraps it with the Lambda adapter; the function itself has no AWS SDK imports or Lambda-specific types\n- **Cold start is the primary Java Lambda challenge** \u2014 3-10s JVM + Spring startup; mitigate with SnapStart (snapshot the initialized JVM), provisioned concurrency (pre-warm instances), or GraalVM native image\n- **Memory setting controls CPU allocation** \u2014 Lambda allocates CPU proportionally; a CPU-bound function at 256MB runs 4x slower than at 1024MB; profile first to find the memory/cost optimum\n- **SnapStart reduces Java cold start to under 1 second** \u2014 available for Java 11+ on Corretto runtime; AWS takes a snapshot after initialization and restores it on invocation; no code changes required\n- **Use Lambda for event-driven, infrequent work; Fargate for sustained traffic** \u2014 at constant high volume, Fargate's fixed cost beats per-invocation Lambda pricing; Lambda excels when traffic is bursty or zero at times"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Cloud Function lets you write a standard Java `Function<I, O>` bean and deploy it to AWS Lambda with minimal Lambda-specific code. The framework handles the adapter layer between Lambda's handler interface and your function.\n\n**Writing the function**\n- Define a `@Bean` of type `Function<InputType, OutputType>` \u2014 Spring Cloud Function discovers it by name and routes Lambda invocations to it; the function knows nothing about Lambda's event envelope\n- For HTTP API Gateway events: the `aws-serverless-java-container` adapter or the Spring Cloud Function AWS adapter converts the API Gateway request into an `HttpServletRequest` before calling your function\n\n**Cold starts \u2014 the Java Lambda problem**\n- The JVM's class loading and Spring's ApplicationContext startup cause cold starts of 3-10 seconds on the first invocation, which means the first request after a period of inactivity is slow for users\n- Two mitigations: Lambda SnapStart (available for Java 11+ on Corretto) snapshots the initialized JVM and restores it, reducing cold start to under 1 second; provisioned concurrency pre-warms a fixed number of instances at all times (costs money even when idle)\n- GraalVM native image compiled with Spring Native eliminates JVM startup entirely \u2014 cold starts under 100ms, but compilation takes longer and some reflection-heavy libraries need configuration\n\n**Memory and performance**\n- Lambda CPU is allocated proportionally to memory \u2014 1024MB gives roughly 0.5 vCPU; 3008MB gives approximately 1.5 vCPU; which means CPU-bound functions benefit from higher memory settings even if they don't use the extra RAM\n- Profile the function with `AWS X-Ray` to see where initialization time is spent \u2014 often Spring auto-configuration for features the function doesn't need\n\nUse Lambda for: event-driven processing (S3 events, SQS triggers, scheduled jobs), lightweight API endpoints behind API Gateway. Avoid Lambda for: long-running batch jobs, anything requiring stateful connections, or services that receive constant traffic where ECS/Fargate is more cost-effective."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between Lambda cold start and warm invocation, and how do you minimise cold starts?",
+        "How would you handle SQS batch events in a Spring Cloud Function Lambda?",
+        "When would you choose Lambda over ECS Fargate for a Spring Boot workload?"
+      ],
+      "seo": {
+        "meta_title": "AWS Lambda with Spring Cloud Function \u2014 Java Guide",
+        "meta_description": "Deploy Spring Boot as an AWS Lambda using Spring Cloud Function adapter. Covers function beans, handler configuration, SnapStart, and cold start mitigation.",
+        "keywords": [
+          "spring cloud function lambda",
+          "java lambda spring boot",
+          "aws lambda java cold start",
+          "snapstart spring boot"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Spring Cloud Function lets you write a standard Java Function<I, O> bean and deploy it to AWS Lambda with minimal Lambda-specific code.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Java on Lambda had a reputation problem: cold starts took 8-15 seconds for a typical Spring Boot application because Lambda had to initialize the JVM, load all classes, and create the full Spring application context on every cold invocation. For HTTP APIs behind API Gateway, this meant the first request after an idle period took 10+ seconds \u2014 unacceptable for user-facing services. Two technologies fundamentally changed this equation. AWS Lambda SnapStart (available for Java 11, 17, and 21) takes a snapshot of the initialized JVM after the Spring context is."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The power of Spring Cloud Function is that your function bean is a standard Spring component.",
+              "It has access to dependency injection, @ConfigurationProperties, Spring Data repositories \u2014 everything you'd use in a normal Spring Boot application.",
+              "The Lambda-specific adapter is a deployment concern, not a code concern.",
+              "The function signature determines the Lambda input/output mapping.",
+              "For an API Gateway HTTP trigger, the input is the request body; for SQS, it's the message payload.",
+              "``java @SpringBootApplication public class OrderProcessorApp { public static void main(String[] args) { SpringApplication.run(OrderProcessorApp.class, args); } @Bean public Function<OrderEvent, OrderResult> processOrder(OrderService orderService) { return event -> { var order = orderService.validate(event); orderService.save(order); return new OrderResult(order.id(), \"PROCESSED\"); }; } } ` The adapter dependency and the handler class name are the only Lambda-specific configuration."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Function<I, O> bean is Lambda-agnostic \u2014 Spring Cloud Function wraps it with the Lambda adapter; the function itself has no AWS SDK imports or Lambda-specific types Cold start is the primary Java Lambda challenge \u2014 3-10s JVM + Spring startup; mitigate with SnapStart (snapshot the initialized JVM), provisioned concurrency (pre-warm instances), or GraalVM native image Memory setting controls CPU allocation \u2014 Lambda allocates CPU proportionally; a CPU-bound function at 256MB runs 4x slower than at 1024MB; profile first to find the memory/cost optimum SnapStart reduces Java cold start to under 1 second \u2014 available for Java 11+ on Corretto runtime; AWS takes a snapshot after initialization and restores it on invocation; no code changes required Use Lambda for event-driven, infrequent work; Fargate for sustained traffic \u2014 at constant high volume, Fargate's fixed cost beats per-invocation Lambda pricing; Lambda excels when traffic is bursty or zero at times"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Not accounting for Lambda cold starts with the Spring context initialisation \u2014 and not mentioning SnapStart or GraalVM native as mitigations"
+          }
+        ],
+        "cap": "Avoid Lambda for: long-running batch jobs, anything requiring stateful connections, or services that receive constant traffic where ECS/Fargate is more cost-effective.",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Function"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between Lambda cold start and warm invocation, and how do you minimise cold starts?",
+          "How would you handle SQS batch events in a Spring Cloud Function Lambda?",
+          "When would you choose Lambda over ECS Fargate for a Spring Boot workload?"
+        ]
+      }
+    }
+  ]
+}

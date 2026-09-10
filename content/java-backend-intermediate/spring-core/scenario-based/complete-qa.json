@@ -1,0 +1,265 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "sc-007",
+      "slug": "transactional-propagation-types",
+      "question": "What are the @Transactional propagation types and when would you use each?",
+      "title": "@Transactional — Propagation Types",
+      "direct_answer": "**`@Transactional` propagation** controls how a method behaves when a transaction already exists. **`REQUIRED`** (the default) joins an existing transaction or creates one — failure rolls back the entire outer transaction. **`REQUIRES_NEW`** suspends the existing transaction and creates an independent one on a separate connection — use it for audit logs and notifications that must persist regardless of business outcome. **`NESTED`** uses a savepoint within the same connection — inner failure can be caught while outer continues. **`MANDATORY`**, **`NEVER`**, **`NOT_SUPPORTED`**, and **`SUPPORTS`** cover specialized scenarios where you want to assert or change the transactional context without creating a new one.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Ability to reason about transaction boundaries and choose the right propagation for audit logs, batch jobs, or compensating transactions.",
+        "common_mistake": "Using REQUIRED everywhere without understanding that an exception in a nested REQUIRED call will roll back the entire outer transaction.",
+        "to_stand_out": "Explain NESTED (uses a savepoint so the inner work can be rolled back independently while the outer transaction commits) and contrast it with REQUIRES_NEW (fully separate transaction, separate connection)."
+      },
+      "company_tags": [
+        "JPMorgan",
+        "Stripe",
+        "Square",
+        "Adyen",
+        "Goldman Sachs",
+        "Capital One"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why REQUIRED Is the Default — and Why It Causes the Most Subtle Bugs",
+            "content": "**Propagation defines how the transactional context is shared** between caller and callee. Getting this wrong is a common source of data-consistency bugs — either over-sharing a transaction so an unrelated failure causes a global rollback, or creating too many independent transactions and losing atomicity.\n\n`@Transactional` propagation types control what happens when a transactional method calls another transactional method. **The seven propagation levels** handle three key scenarios: whether to **join** an existing transaction, **create a new one**, or **refuse to participate**.\n\nThe most important distinction in practice is **`REQUIRED` rolls back together**. If an inner `REQUIRED` method throws, the entire outer transaction rolls back. Developers who add an audit log call inside a business transaction and use `REQUIRED` find their audit log disappears whenever the business transaction fails. The fix is `REQUIRES_NEW`."
+          },
+          {
+            "type": "step",
+            "title": "The Seven Propagation Types — What Each One Does",
+            "content": "Each propagation type answers a single question: **what should happen to the transaction context when this method is called?**\n\n**`REQUIRED` (default)**\n- Join the existing transaction if one exists; otherwise create a new one\n- Correct for most service methods\n- If the inner method throws, the entire transaction rolls back — both methods share the same physical transaction\n\n**`REQUIRES_NEW`**\n- Always create a new physical transaction, suspending the outer one\n- Inner transaction commits or rolls back independently on a separate connection\n- Use for operations that must succeed regardless of the outer transaction's outcome — audit logging, notification sending, idempotency token recording\n\n**`NESTED`**\n- Create a savepoint within the existing transaction\n- If the inner method fails, only the work since the savepoint is rolled back\n- The outer transaction can catch the exception and continue\n- Requires JDBC savepoint support; not supported by all JPA providers\n\n**`SUPPORTS`**\n- Run in the existing transaction if one exists; otherwise run non-transactionally\n- Useful for read methods that benefit from transaction consistency when called from a transactional context but work fine without one\n\n**`MANDATORY`**\n- Requires an existing transaction; throws `IllegalTransactionStateException` if none exists\n- Enforces that a method is never called standalone — must always be part of a larger unit of work\n\n**`NOT_SUPPORTED`**\n- Suspend any existing transaction and run non-transactionally\n- Useful for cache warmup, external API calls that should not participate in the caller's transaction\n\n**`NEVER`**\n- Throw an exception if a transaction exists\n- Inverse of `MANDATORY` — enforces that the method is never called within a transaction context"
+          },
+          {
+            "type": "comparison_table",
+            "title": "All Seven Propagation Types — Decision at a Glance",
+            "content": "The seven propagation types differ in what they do when called with or without an existing transaction. The table below makes the decision visible in one view.\n\n| Propagation | Existing Tx | Behavior | Classic Use Case |\n|---|---|---|---|\n| `REQUIRED` (default) | Yes | Join it | Service layer methods |\n| `REQUIRED` | No | Create new | Service layer methods |\n| `REQUIRES_NEW` | Yes | Suspend + create new | Audit logging, notifications |\n| `REQUIRES_NEW` | No | Create new | Audit logging, notifications |\n| `NESTED` | Yes | Savepoint + continue | Optional sub-operations in batch |\n| `NESTED` | No | Create new | Optional sub-operations |\n| `SUPPORTS` | Yes | Join it | Read-only reporting queries |\n| `SUPPORTS` | No | Run non-transactionally | Read-only reporting queries |\n| `NOT_SUPPORTED` | Yes | Suspend + run non-tx | Legacy code, long-running reports |\n| `MANDATORY` | Yes | Join it | Internal methods always called within tx |\n| `MANDATORY` | No | Throw exception | Internal methods always called within tx |\n| `NEVER` | Yes | Throw exception | Batch exports that must not hold locks |\n| `NEVER` | No | Run non-transactionally | Batch exports |\n\nThe high-frequency mistake: using `REQUIRED` for an audit log inside a business transaction. When the business transaction fails, the audit log disappears with it. The fix is `REQUIRES_NEW`."
+          },
+          {
+            "type": "step",
+            "title": "REQUIRES_NEW vs NESTED — Two Isolation Mechanisms",
+            "content": "`REQUIRES_NEW` and `NESTED` both provide rollback isolation from the outer transaction, but they work through fundamentally different mechanisms with different failure characteristics.\n\n**`REQUIRES_NEW` — separate connection**\n- Suspends the outer transaction entirely\n- Opens a new database connection (or borrows from the pool)\n- Inner transaction commits or rolls back on its own connection\n- If the inner transaction commits before the outer fails, the inner commit is **permanent** — the database cannot undo it when the outer transaction rolls back on a different connection\n- Exactly what audit logging needs: the log entry persists even if the business operation fails\n\n**`NESTED` — savepoint on same connection**\n- Uses a savepoint within the same physical connection\n- When the inner method begins, Spring (via JDBC) issues `SAVEPOINT inner_tx`\n- If the inner method throws, Spring rolls back to the savepoint — undoing only the inner work\n- The outer transaction can catch the exception and continue\n- If the outer transaction fails, the rollback undoes everything back to the start — including work done within the nested transaction, since it's all on the same connection\n\n**Code example**\n\n```java\n@Transactional(propagation = Propagation.REQUIRES_NEW)\npublic void writeAuditLog(AuditEntry entry) {\n    auditRepo.save(entry);\n}\n\n@Transactional(propagation = Propagation.NESTED)\npublic void enrichWithExternalData(Order order) {\n    ExternalData data = externalApiClient.fetch(order.getId());\n    order.setExternalMetadata(data);\n}\n```\n\n**The resource cost of `REQUIRES_NEW`**\n- Each `REQUIRES_NEW` call borrows a connection from the pool for the duration of the inner transaction\n- The outer transaction still holds its connection\n- For a service that processes 100 requests/sec with 5 `REQUIRES_NEW` audit calls each, you're using 6× the connections you'd expect\n- **Connection pool exhaustion under load is the failure mode**\n- `NESTED` avoids this: one connection, one transaction, multiple savepoints"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`REQUIRED` rolls back together** — an exception in an inner `REQUIRED` call rolls back the entire outer transaction; an audit log inside a `REQUIRED` call disappears if the business transaction fails.\n- **`REQUIRES_NEW` uses a separate physical connection** — suspends the outer transaction and borrows a new connection from the pool; the inner commit is permanent even if the outer transaction later rolls back; doubles connection usage under load.\n- **`NESTED` uses a savepoint on the same connection** — inner failure rolls back to the savepoint; outer can catch and continue; outer failure rolls back everything including the nested work.\n- **Self-invocation bypasses `@Transactional` entirely** — regardless of propagation type, calling a `@Transactional` method via `this` goes through the original object, not the proxy; no transaction management.\n- **`REQUIRES_NEW` connection exhaustion at scale** — each `REQUIRES_NEW` call borrows a connection while the outer still holds one; in a high-throughput service with multiple audit calls per request, connection pool exhaustion becomes the failure mode.\n- **`NESTED` requires JDBC savepoint support** — works with most relational databases but not with all JPA providers; check `JpaTransactionManager` documentation for compatibility.\n- **`MANDATORY` and `NEVER` enforce contracts** — use `MANDATORY` to assert that internal methods are only called within an existing transaction; use `NEVER` to ensure batch exports don't hold locks."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@Transactional` propagation controls what happens to the transaction context when one transactional method calls another. Getting it wrong produces data-consistency bugs — audit logs that vanish, operations that should be independent sharing a rollback boundary.\n\n**`REQUIRED` (the default)**\n- Joins the existing transaction if one is active; creates a new one if not\n- Inner and outer method share the same physical transaction — an exception anywhere rolls back everything\n- The audit log trap: write an audit log inside a `REQUIRED` call and the outer transaction fails — the audit log disappears with it\n\n**`REQUIRES_NEW`**\n- Always creates a new, independent transaction, suspending the outer one\n- Uses a separate database connection — the inner commit is permanent even if the outer transaction later rolls back\n- The right choice for audit logging and notifications that must persist regardless of the business outcome\n- The cost: two open connections simultaneously; under high load with many `REQUIRES_NEW` calls per request, connection pool exhaustion becomes the failure mode\n\n**`NESTED`**\n- Creates a savepoint within the same physical connection\n- Inner failure rolls back to the savepoint; the outer transaction can catch the exception and continue\n- Outer failure rolls back everything — all work on the same connection\n- Lower resource cost than `REQUIRES_NEW` but requires JDBC savepoint support\n\nRegardless of propagation type: calling a `@Transactional` method via `this` bypasses the proxy — no transaction management at all. The propagation setting has no effect on self-invocation."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between REQUIRES_NEW and NESTED in terms of database connections and savepoints?",
+        "If an exception bubbles out of a REQUIRED method into its caller's transaction, what happens?",
+        "Can you use @Transactional on private methods? Why or why not?",
+        "How does @Transactional rollback behavior differ between checked and unchecked exceptions?"
+      ],
+      "seo": {
+        "metaTitle": "@Transactional Propagation Types in Spring | REQUIRED vs REQUIRES_NEW vs NESTED",
+        "metaDescription": "Complete guide to Spring @Transactional propagation types — REQUIRED, REQUIRES_NEW, NESTED, MANDATORY, NEVER, SUPPORTS, NOT_SUPPORTED — with code examples and use cases."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P02",
+        "hook": "@Transactional propagation controls what happens to the transaction context when one transactional method calls another.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Propagation defines how the transactional context is shared between caller and callee. Getting this wrong is a common source of data-consistency bugs — either over-sharing a transaction so an unrelated failure causes a global rollback, or creating too many independent transactions and losing atomicity. @Transactional propagation types control what happens."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Ability to reason about transaction boundaries and choose the right propagation for audit logs, batch jobs, or compensating transactions."
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Each propagation type answers a single question: what should happen to the transaction context when this method is called?",
+              "REQUIRED (default) Join the existing transaction if one exists; otherwise create a new one Correct for most service methods If the inner method throws, the entire transaction rolls back — both methods share the same physical transaction REQUIRES_NEW Always create a new physical transaction, suspending the outer one Inner transaction commits or rolls back independently on a separate connection Use for operations that must succeed regardless of the outer transaction's outcome — audit logging, notification sending, idempotency token recording NESTED Create a savepoint within the existing transaction If the inner method fails, only the work since the savepoint is rolled back The outer transaction can catch the exception and continue Requires JDBC savepoint support; not supported by all JPA providers SUPPORTS Run in the existing transaction if one exists; otherwise run non-transactionally Useful for read methods that benefit from transaction consistency when called from a transactional context but work fine without."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "REQUIRED rolls back together — an exception in an inner REQUIRED call rolls back the entire outer transaction; an audit log inside a REQUIRED call disappears if the business transaction fails",
+              "REQUIRES_NEW uses a separate physical connection — suspends the outer transaction and borrows a new connection from the pool; the inner commit is permanent even if the outer transaction later rolls back; doubles connection usage under load",
+              "NESTED uses a savepoint on the same connection — inner failure rolls back to the savepoint; outer can catch and continue; outer failure rolls back everything including the nested work",
+              "Self-invocation bypasses @Transactional entirely — regardless of propagation type, calling a @Transactional method via this goes through the original object, not the proxy; no transaction management",
+              "REQUIRES_NEW connection exhaustion at scale — each REQUIRES_NEW call borrows a connection while the outer still holds one; in a high-throughput service with multiple audit calls per request, connection pool exhaustion becomes the failure mode"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "Using REQUIRED everywhere without understanding that an exception in a nested REQUIRED call will roll back the entire outer transaction."
+          }
+        ],
+        "cap": "The propagation setting has no effect on self-invocation.",
+        "familiarity_anchors": [
+          "Transactional",
+          "REQUIRED",
+          "NESTED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between REQUIRES_NEW and NESTED in terms of database connections and savepoints?",
+          "If an exception bubbles out of a REQUIRED method into its caller's transaction, what happens?",
+          "Can you use @Transactional on private methods? Why or why not?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-012",
+      "slug": "spring-profiles-profile-annotation",
+      "question": "How do Spring profiles work? Explain @Profile and spring.profiles.active.",
+      "title": "Spring Profiles (@Profile, spring.profiles.active)",
+      "direct_answer": "**Spring profiles** let you register beans and load configuration conditionally based on the active environment (dev, staging, prod, test). A bean annotated with **`@Profile(\"prod\")`** is only created when the `prod` profile is active. Profiles are activated via **`spring.profiles.active`** in `application.properties`, an environment variable (`SPRING_PROFILES_ACTIVE`), a JVM/CLI argument (`--spring.profiles.active=prod`), or programmatically. Multiple profiles can be active simultaneously. Spring Boot also loads **profile-specific property files** (`application-{profile}.yml`) automatically, and **profile groups** (Spring Boot 2.4+) let you activate a composite profile with one name.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical ability to configure environment-specific beans (datasources, mocks, feature flags) and understanding of profile inheritance.",
+        "common_mistake": "Hardcoding environment-specific values in beans instead of using profiles, or not knowing that multiple profiles can be active simultaneously.",
+        "to_stand_out": "Explain profile groups (spring.profiles.group.production=prod,monitoring) introduced in Spring Boot 2.4, and the difference between default profile and fallback profile behavior."
+      },
+      "company_tags": [
+        "Salesforce",
+        "ServiceNow",
+        "Workday",
+        "Twilio",
+        "Atlassian",
+        "Slack"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Profiles Exist — Environment-Specific Configuration Without Code Changes",
+            "content": "**Profiles provide a first-class mechanism** for separating environment-specific configuration.\n- Rather than using if/else logic or property placeholders throughout your beans, you declare entire bean graphs that are only wired in specific environments.\n- Spring Boot extends this to property files (`application-prod.properties`) and profile groups.\n\n**The same JAR behaves differently** in dev, staging, and production based on which profiles are active. This is the core deployment principle that makes immutable artifacts possible — one binary, many environments.\n\n**Profiles are also test infrastructure**. `@ActiveProfiles(\"test\")` on integration test classes loads `application-test.yml` with in-memory databases, mock service URLs, and debug logging. This isolation ensures tests never accidentally hit production resources."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Define Profile-Specific Beans",
+            "content": "**The `@Profile` annotation** controls which beans exist in which environment. When placed on a `@Component`, `@Configuration`, or `@Bean` method, Spring only registers that bean if the named profile is active.\n\n**Common patterns**\n- Single profile: `@Profile(\"prod\")`\n- Multiple profiles: `@Profile({\"dev\", \"test\"})` — registered if any is active\n- Negation: `@Profile(\"!prod\")` — registered in every profile except production\n- Useful for debug tooling and mock services that should exist everywhere except production\n\n**The most common pattern: environment-specific data sources**\n- In development: embedded H2 database with fast startup\n- In production: PostgreSQL with connection pooling and specific timeout settings\n\n```java\n@Profile(\"prod\")\n@Configuration\npublic class ProdDataSourceConfig {\n    @Bean\n    public DataSource dataSource() {\n        return new HikariDataSource(prodConfig());\n    }\n}\n\n@Profile({\"dev\", \"test\"})\n@Bean\npublic DataSource embeddedDataSource() {\n    return new EmbeddedDatabaseBuilder()\n        .setType(EmbeddedDatabaseType.H2)\n        .build();\n}\n\n@Profile(\"!prod\")\n@Bean\npublic MockPaymentGateway mockGateway() { return new MockPaymentGateway(); }\n```\n\n**Both DataSource beans have the same type** — but only one will exist in the container based on the active profile. No code change is needed when promoting from dev to prod; the artifact is identical."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Activate Profiles (Priority Order Matters)",
+            "content": "Spring profiles can be activated through multiple mechanisms. They follow a **priority order** that matters when the same property is set in different places — the highest-priority source wins.\n\n**Command-line arguments — highest priority**\n- `--spring.profiles.active=prod` overrides everything else\n- Standard for containerized deployments where the orchestrator (Kubernetes, ECS) passes config at launch\n\n**Environment variables — second priority**\n- `SPRING_PROFILES_ACTIVE=prod`\n- The Docker-friendly approach — set in the Dockerfile or container spec\n\n**`application.properties` — lowest priority**\n- `spring.profiles.active=dev`\n- Typically the developer default — local development runs with `dev` unless overridden\n\n**Programmatic activation**\n- `SpringApplication.setAdditionalProfiles(\"prod\")` before `app.run(args)`\n- Useful for embedded scenarios where the activation logic is dynamic\n\n**Test activation**\n- `@ActiveProfiles(\"test\")` on test classes — activates the test profile for that test\n\n```properties\n# application.properties\nspring.profiles.active=prod,monitoring\n```\n\n```bash\n-Dspring.profiles.active=prod\nexport SPRING_PROFILES_ACTIVE=prod\n```\n\n```java\nSpringApplication app = new SpringApplication(App.class);\napp.setAdditionalProfiles(\"prod\");\napp.run(args);\n\n@SpringBootTest\n@ActiveProfiles(\"test\")\nclass OrderServiceTest { ... }\n```\n\n**Multiple profiles active simultaneously**\n- `spring.profiles.active=prod,monitoring` activates both\n- Beans annotated with either `@Profile(\"prod\")` or `@Profile(\"monitoring\")` will be registered"
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Profile-Specific Property Files",
+            "content": "**Beyond beans**, profiles control which property files Spring loads. The naming convention is `application-{profile}.properties` (or `.yml`).\n\n**Loading rules**\n- Base file `application.properties` is always loaded\n- Profile-specific file `application-{profile}.properties` is loaded when that profile is active\n- **Profile-specific properties take precedence** over base properties for any key present in both\n\n**Common pattern — vary by environment**\n\n```properties\napp.cache.ttl=60s\nlogging.level.root=INFO\n\nlogging.level.root=DEBUG\nspring.jpa.show-sql=true\n\napp.cache.ttl=3600s\nlogging.level.root=WARN\n```\n\n**The base file defines defaults**; the profile file overrides what's different. This is how you vary database URLs, logging levels, and feature flags without touching code.\n\n**Common security mistake**\n- Putting production secrets directly in `application-prod.properties` and committing them to version control\n- Profile-specific files should contain non-sensitive overrides only\n- Secrets belong in environment variables, Vault, or AWS Secrets Manager — injected at runtime, never stored in the repository"
+          },
+          {
+            "type": "step",
+            "title": "Step 4 — Profile Groups (Spring Boot 2.4+)",
+            "content": "**Spring Boot 2.4 introduced profile groups**, which solve the problem of activating multiple related profiles together.\n\n**The problem before groups**\n- Deploying to production meant setting `spring.profiles.active=prod,monitoring,security`\n- A list that grows with every new concern\n- Easy to get wrong; every deployment script needed to know all the sub-profiles\n\n**Groups solution**\n- Define composite profiles in `application.properties`\n- Activate just the group name and all member profiles activate automatically\n\n```properties\nspring.profiles.group.production=prod,monitoring,security-hardened\nspring.profiles.group.local=dev,mockservices\n\nspring.profiles.active=production\n```\n\n**Equivalent to**: `spring.profiles.active=prod,monitoring,security-hardened`\n\n**Benefits**\n- Keeps environment configuration manageable as the number of concerns grows\n- Adding a new monitoring profile means editing the group definition in one place, not updating every deployment pipeline\n- Deployment scripts activate a single semantic group, not a long comma-separated list"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Profile(\"!prod\")` registers in all profiles except production** — negation syntax enables beans that exist in every environment except one; common for debug tooling and test data seeders.\n- **Multiple profiles can be active simultaneously** — `spring.profiles.active=prod,monitoring` activates both; beans annotated with either profile are registered.\n- **Profile-specific property files override the base** — `application-prod.properties` overrides `application.properties` for any key present in both; the base file provides defaults.\n- **Profile groups (Spring Boot 2.4+)** — `spring.profiles.group.production=prod,monitoring,security` lets you activate a composite with a single name; keeps deployment scripts from growing long profile lists.\n- **Activation priority: command-line > env var > `application.properties`** — `--spring.profiles.active=prod` on the command line overrides `SPRING_PROFILES_ACTIVE` env var, which overrides the property file.\n- **`@ActiveProfiles(\"test\")` in tests** — activates the `test` profile for `@SpringBootTest`, loading `application-test.properties` with H2, mock service URLs, and debug logging.\n- **Profiles enable immutable artifacts** — the same JAR runs in every environment; profile activation at launch determines configuration."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring profiles let you register different bean graphs and load different property files based on the active environment — without changing code or rebuilding the artifact. The same JAR behaves differently in dev, staging, and production based on which profiles are active.\n\n**Profile-specific beans**\n- `@Profile(\"prod\")` on a `@Bean` or `@Configuration` class — only registered when `prod` is active\n- `@Profile(\"!prod\")` — registered in every profile except production; common for debug tooling and mock services\n- Multiple active profiles at once: `spring.profiles.active=prod,monitoring` — beans from both profiles are registered\n\n**Activating profiles — priority order**\n- Command-line `--spring.profiles.active=prod` — highest priority, overrides everything else\n- Environment variable `SPRING_PROFILES_ACTIVE=prod` — Docker and Kubernetes standard\n- `spring.profiles.active=dev` in `application.properties` — developer default, lowest priority\n\n**Profile-specific property files**\n- `application-prod.properties` loads automatically when `prod` is active and overrides the base `application.properties` for any key present in both\n- Base file sets defaults; profile files override what is environment-specific\n\n**Profile groups (Spring Boot 2.4+)**\n- `spring.profiles.group.production=prod,monitoring,security` — activate `production` and all three sub-profiles activate automatically\n\nIn tests, `@ActiveProfiles(\"test\")` loads `application-test.properties` — typically with an H2 in-memory database, mock service URLs, and verbose logging. Tests never accidentally hit production resources."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the 'default' profile in Spring and when is it active?",
+        "How do you write a test that verifies prod-profile beans are correctly configured without running against a real database?",
+        "What is the difference between @Profile and @ConditionalOnProperty for environment-specific beans?",
+        "How does Spring resolve property precedence when both application-prod.properties and an env var set the same key?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Profiles Explained: @Profile and spring.profiles.active | Java Guide",
+        "metaDescription": "Master Spring profiles — @Profile annotation, activating profiles via properties/JVM args/env vars, profile-specific property files, and Spring Boot profile groups."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P02",
+        "hook": "Spring profiles let you register different bean graphs and load different property files based on the active environment — without changing code or rebuilding the artifact.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Profiles provide a first-class mechanism for separating environment-specific configuration. Rather than using if/else logic or property placeholders throughout your beans, you declare entire bean graphs that are only wired in specific environments. Spring Boot extends this to property files (application-prod.properties) and profile groups. The same JAR behaves differently in dev."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Practical ability to configure environment-specific beans (datasources, mocks, feature flags) and understanding of profile inheritance."
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "The @Profile annotation controls which beans exist in which environment.",
+              "When placed on a @Component, @Configuration, or @Bean method, Spring only registers that bean if the named profile is active.",
+              "Common patterns Single profile: @Profile(\"prod\") Multiple profiles: @Profile({\"dev\", \"test\"}) — registered if any is active Negation: @Profile(\"!prod\") — registered in every profile except production Useful for debug tooling and mock services that should exist everywhere except production The most common pattern: environment-specific data sources In development: embedded H2 database with fast startup In production: PostgreSQL with connection pooling and specific timeout settings ``java @Profile(\"prod\") @Configuration public class ProdDataSourceConfig { @Bean public DataSource dataSource() { return new HikariDataSource(prodConfig()); } } @Profile({\"dev\", \"test\"}) @Bean public DataSource embeddedDataSource() { return new EmbeddedDatabaseBuilder() .setType(EmbeddedDatabaseType.H2) .build(); } @Profile(\"!prod\") @Bean public MockPaymentGateway mockGateway() { return new MockPaymentGateway(); } `` Both DataSource beans have the same type — but only one will exist in the container based on the active profile.",
+              "No code change is needed when promoting from dev to prod; the artifact is identical."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "@Profile(\"!prod\") registers in all profiles except production — negation syntax enables beans that exist in every environment except one; common for debug tooling and test data seeders",
+              "Multiple profiles can be active simultaneously — spring",
+              "active=prod,monitoring activates both; beans annotated with either profile are registered",
+              "Profile-specific property files override the base — application-prod",
+              "properties overrides application"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "Hardcoding environment-specific values in beans instead of using profiles, or not knowing that multiple profiles can be active simultaneously."
+          }
+        ],
+        "cap": "Tests never accidentally hit production resources.",
+        "familiarity_anchors": [
+          "Spring",
+          "Profile",
+          "Profiles"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the 'default' profile in Spring and when is it active?",
+          "How do you write a test that verifies prod-profile beans are correctly configured without running against a real database?",
+          "What is the difference between @Profile and @ConditionalOnProperty for environment-specific beans?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    }
+  ]
+}

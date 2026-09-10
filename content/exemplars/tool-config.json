@@ -1,0 +1,101 @@
+{
+  "archetype": "tool-config",
+  "exemplars": [
+    {
+      "name": "Spring Boot Actuator",
+      "complexity": 3,
+      "question": "What is Spring Boot Actuator and how do you secure its endpoints in production?",
+      "slug": "spring-boot-actuator-endpoints-security",
+      "difficulty": "intermediate",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows that Actuator endpoints are a security risk if left open and can describe a layered defence strategy.",
+        "common_mistake": "Exposing management.endpoints.web.exposure.include=* in production without any authentication, leaking environment variables, heap dumps, and internal metrics.",
+        "to_stand_out": "Describe using a separate management.server.port with a firewall rule so only internal services reach Actuator, plus /actuator/health groups for liveness and readiness probes in Kubernetes."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "key_points",
+            "content": "- One dependency — `spring-boot-starter-actuator` — gives you `/health`, `/metrics`, `/env`, `/loggers`, `/threaddump`, `/heapdump`. Only `/health` and `/info` are exposed over HTTP by default\n- **Best security**: separate management port — `management.server.port: 8081` — then firewall/NetworkPolicy blocks external access. Application traffic on 8080, ops traffic on 8081\n- **If same port**: use a `SecurityFilterChain` with `EndpointRequest.toAnyEndpoint()` — permit `/health` and `/info` (K8s probes), require `ACTUATOR_ADMIN` role for `/env`, `/heapdump`\n- **Never** `include=*` without auth — `/env` leaks DB passwords, `/heapdump` leaks the entire heap including secrets in memory\n- **K8s health groups**: separate liveness (`/actuator/health/liveness`) from readiness (`/actuator/health/readiness`) — slow DB fails readiness (stops traffic) but keeps liveness healthy (no pod restart)"
+          },
+          {
+            "type": "overview",
+            "content": "Spring Boot Actuator (spring-boot-starter-actuator) adds production-ready features to your application. Key built-in endpoints include /actuator/health (health status), /actuator/metrics (Micrometer metrics), /actuator/env (property sources), /actuator/loggers (dynamic log-level changes), /actuator/threaddump, /actuator/heapdump, and /actuator/info. Because some of these expose sensitive data, securing them is mandatory in production environments."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Add the Dependency",
+            "content": "Add spring-boot-starter-actuator to your pom.xml or build.gradle. This alone exposes only /actuator/health and /actuator/info by default over HTTP."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Selectively Expose Endpoints",
+            "content": "Instead of exposing all endpoints blindly, explicitly list only what you need. The `show-details: when-authorized` setting ensures health detail (DB status, disk space) is only shown to authenticated users, while the basic UP/DOWN status remains public for probes:\n\n```yaml\nmanagement:\n  endpoints:\n    web:\n      exposure:\n        # Only expose these 4 endpoints over HTTP — everything else stays hidden\n        include: health,info,metrics,loggers\n  endpoint:\n    health:\n      # Show full health details only to authenticated users\n      show-details: when-authorized\n      # Enable K8s liveness/readiness probe endpoints\n      probes:\n        enabled: true\n```\n\n**Never use `include: '*'` in production** without authentication — it exposes `/env` (property sources with passwords), `/heapdump` (full JVM memory), and `/configprops` (all configuration including secrets)."
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Bind Actuator to an Internal Management Port",
+            "content": "The most secure approach is **port isolation** — Actuator runs on a separate port that is only accessible from your internal network. This way, even if you misconfigure Spring Security, the endpoints are still unreachable from the public internet:\n\n```yaml\nmanagement:\n  server:\n    # Actuator endpoints listen on 8081, separate from app traffic on 8080\n    # Block 8081 in AWS security groups / K8s NetworkPolicy from public access\n    port: 8081\n```\n\nIn Kubernetes, you'd define a NetworkPolicy that only allows traffic to port 8081 from pods in the monitoring namespace (Prometheus, Grafana) and from the kubelet (for health probes). Your Ingress controller only routes external traffic to port 8080."
+          },
+          {
+            "type": "step",
+            "title": "Step 4 — Secure with Spring Security (if same port)",
+            "content": "When port isolation isn't possible (some PaaS environments only support one port), use **Spring Security** to restrict access at the application level. The key is creating a separate `SecurityFilterChain` that only applies to Actuator endpoints, leaving your application's main security configuration untouched:\n\n```java\n@Bean\n@Order(1) // Higher priority than the main app security chain\npublic SecurityFilterChain actuatorSecurity(HttpSecurity http) throws Exception {\n    http\n      // This filter chain ONLY applies to /actuator/** endpoints\n      .requestMatcher(EndpointRequest.toAnyEndpoint())\n      .authorizeRequests()\n        // /health and /info are public — K8s probes need them without auth\n        .requestMatchers(EndpointRequest.to(\n            HealthEndpoint.class, InfoEndpoint.class)).permitAll()\n        // Everything else (/env, /heapdump, /loggers) requires ACTUATOR_ADMIN role\n        .anyRequest().hasRole(\"ACTUATOR_ADMIN\")\n      .and()\n      // Use HTTP Basic auth for simplicity — Prometheus can send basic auth headers\n      .httpBasic();\n    return http.build();\n}\n```\n\nThis pattern ensures Kubernetes health probes work without credentials, while sensitive endpoints like `/env` and `/heapdump` require authentication."
+          },
+          {
+            "type": "speakable_answer",
+            "content": "Spring Boot Actuator adds a set of **production-ready management endpoints** to your application. Out of the box you get `/health` for liveness and readiness checks, `/metrics` for JVM and HTTP metrics (backed by Micrometer), `/env` for viewing resolved configuration, `/loggers` for changing log levels at runtime, and `/heapdump` for getting a heap dump without SSH-ing into the server.\n\nThe critical security aspect: **by default, only `/health` and `/info` are exposed over HTTP** — everything else requires explicit opt-in. This is intentional, because endpoints like `/env` can leak database passwords and `/heapdump` exposes a full memory snapshot. My recommended security approach is to **put actuator on a separate management port** (`management.server.port: 8081`) and block that port at the firewall level from external traffic. If you can't use a separate port, configure a `SecurityFilterChain` specifically for actuator using `EndpointRequest.toAnyEndpoint()` — permit `/health` and `/info` publicly, require an `ACTUATOR_ADMIN` role for everything else.\n\nFor **Kubernetes deployments**, the most important configuration is separating **liveness** from **readiness** probes. Spring Boot supports this with `/actuator/health/liveness` and `/actuator/health/readiness`. The key insight: if a downstream database becomes slow, readiness should fail (stop sending traffic to this pod) but liveness should stay healthy (don't restart the pod). Without this separation, a slow database causes cascading pod restarts across the cluster, which makes the problem far worse."
+          }
+        ]
+      }
+    },
+    {
+      "name": "Maven Lifecycle",
+      "complexity": 3,
+      "question": "What are Maven lifecycle phases (validate, compile, test, package, install, deploy)?",
+      "slug": "maven-lifecycle-phases",
+      "difficulty": "intermediate",
+      "interviewer_intent": {
+        "testing": "Whether you understand Maven's opinionated build model and can predict what happens when you run a specific phase.",
+        "common_mistake": "Thinking `mvn test` only runs tests — it also runs validate, initialize, generate-sources, process-sources, generate-resources, process-resources, and compile before reaching the test phase.",
+        "to_stand_out": "Mention the three built-in lifecycles (default, clean, site), that plugin goals bind to specific phases, and that `mvn install -DskipTests` skips test execution but not compilation of test sources."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "key_points",
+            "content": "- **Cascading execution**: `mvn package` doesn't just package — it runs validate → compile → test → package (all prior phases). This is why `mvn test` also compiles your code first\n- **Three lifecycles**: `default` (23 phases: build → deploy), `clean` (remove `target/`), `site` (generate docs). They're independent — `mvn package` does NOT clean, hence the habit: `mvn clean package`\n- **Phases are slots, plugins do the work** — `maven-compiler-plugin:compile` binds to compile phase, `maven-surefire-plugin:test` binds to test. Custom plugins bind to any phase in your POM's `<build>` section\n- **Key phases**: `test` (Surefire runs unit tests), `verify` (Failsafe runs integration tests / `@SpringBootTest`), `install` (copies JAR to `~/.m2/repository`), `deploy` (pushes to Nexus/Artifactory — CI only)\n- **Skip tests**: `-DskipTests` skips execution but compiles test classes (catches compile errors). `-Dmaven.test.skip=true` skips both — use `-DskipTests` in CI for safety"
+          },
+          {
+            "type": "overview",
+            "content": "Maven's build model is **opinionated by design** — instead of writing custom build scripts like Ant, you declare your project structure and Maven applies conventions. The build process follows a fixed sequence of **phases** organized into **lifecycles**.\n\nMaven has three built-in lifecycles: `default` (build and deploy — the main one with 23 phases), `clean` (remove `target/` directory), and `site` (generate project documentation). Running any phase executes all preceding phases in that lifecycle. Phases don't do work directly — **plugin goals** are bound to phases, and when a phase executes, all bound goals execute in declaration order.\n\nThis is why `mvn clean install` is actually running two lifecycles: `clean` (remove old artifacts) followed by `default` up through `install` (compile → test → package → install to local repo)."
+          },
+          {
+            "type": "step",
+            "title": "The Cascading Execution Model",
+            "content": "The default lifecycle has 23 phases in a fixed sequence. Running any phase executes **all preceding phases**. This is Maven's most important rule:\n\n`validate → initialize → generate-sources → process-sources → generate-resources → process-resources → compile → process-classes → generate-test-sources → process-test-sources → generate-test-resources → process-test-resources → test-compile → process-test-classes → test → prepare-package → package → pre-integration-test → integration-test → post-integration-test → verify → install → deploy`\n\nSo `mvn package` actually runs: validate → compile → test → package. And `mvn test` also compiles your code. This is why you sometimes see builds fail at `mvn test` with a compile error — test naturally includes compile.\n\n**Three lifecycles are independent**: `default` (the 23 phases above), `clean` (remove `target/`), and `site` (generate docs). Running `mvn package` does NOT clean — hence the muscle memory: `mvn clean package`. Running `mvn clean install` executes two lifecycles: clean first, then default up through install."
+          },
+          {
+            "type": "step",
+            "title": "Plugin-Goal Binding: How Work Actually Gets Done",
+            "content": "Phases are empty slots. **Plugin goals** are bound to phases, and that's where actual work happens. Maven binds default goals based on your `<packaging>` type:\n\n```xml\n<!-- For <packaging>jar</packaging>, Maven auto-binds: -->\ncompile        → maven-compiler-plugin:compile\ntest           → maven-surefire-plugin:test\npackage        → maven-jar-plugin:jar\ninstall        → maven-install-plugin:install\ndeploy         → maven-deploy-plugin:deploy\n```\n\nYou add custom plugin bindings in `<build><plugins>`. For example, JaCoCo coverage:\n\n```xml\n<plugin>\n  <groupId>org.jacoco</groupId>\n  <artifactId>jacoco-maven-plugin</artifactId>\n  <executions>\n    <execution>\n      <phase>initialize</phase>           <!-- instrument before compile -->\n      <goals><goal>prepare-agent</goal></goals>\n    </execution>\n    <execution>\n      <phase>verify</phase>               <!-- report after integration tests -->\n      <goals><goal>report</goal></goals>\n    </execution>\n  </executions>\n</plugin>\n```\n\nMultiple goals can bind to the same phase — they execute in declaration order within the POM."
+          },
+          {
+            "type": "step",
+            "title": "Test vs Verify: Unit Tests vs Integration Tests",
+            "content": "One of the most confused areas. Maven has **two test phases** served by **two different plugins**:\n\n- **test** phase → `maven-surefire-plugin` → runs classes matching `*Test.java`, `Test*.java` — these are unit tests\n- **verify** phase → `maven-failsafe-plugin` → runs classes matching `*IT.java`, `IT*.java` — these are integration tests\n\nFailsafe is designed so that integration test failures happen at `verify`, not during `integration-test`. This gives `post-integration-test` a chance to run cleanup (shut down containers, stop embedded servers) even when tests fail.\n\nPractical pattern for Spring Boot:\n```xml\n<plugin>\n  <groupId>org.apache.maven.plugins</groupId>\n  <artifactId>maven-failsafe-plugin</artifactId>\n  <executions>\n    <execution>\n      <goals>\n        <goal>integration-test</goal>    <!-- runs ITs, doesn't fail yet -->\n        <goal>verify</goal>              <!-- fails here if ITs failed -->\n      </goals>\n    </execution>\n  </executions>\n</plugin>\n```\n\n`@SpringBootTest` classes should be named `*IT.java` and run by Failsafe during `verify`, not by Surefire during `test` — they're slow and need the full context."
+          },
+          {
+            "type": "step",
+            "title": "Practical CI/CD Phase Usage",
+            "content": "Different commands for different contexts:\n\n- **Developer fast loop**: `mvn compile` — just compile, check for errors, ~5 seconds\n- **Before push**: `mvn clean verify` — full test suite including integration tests\n- **CI pipeline**: `mvn clean deploy -DdeployAtEnd=true` — build, test, publish to Nexus\n- **Build specific module**: `mvn install -pl :service -am` — only build `service` and its dependencies\n- **Skip tests wisely**: `-DskipTests` skips execution but **still compiles** test classes (catches compile errors). `-Dmaven.test.skip=true` skips both — use `-DskipTests` in CI for safety\n- **Resume failed build**: `mvn install -rf :web` — skip already-built modules\n\nThe `install` phase copies the artifact to `~/.m2/repository` so sibling modules in a multi-module build can find it as a dependency. `deploy` uploads to Nexus/Artifactory — this should **only** happen in CI, never from a developer machine (avoids publishing untested code)."
+          },
+          {
+            "type": "speakable_answer",
+            "content": "Maven has **three independent lifecycles**: `default` (the main build, 23 phases from `validate` to `deploy`), `clean` (removes the `target/` directory), and `site` (generates project documentation). They're independent — running `mvn package` does NOT automatically clean, which is why you commonly see `mvn clean package`.\n\nThe key insight is **cascading execution**. When you run `mvn package`, Maven executes every phase before `package` in order: `validate` → `compile` → `test` → `package`. Running `mvn test` also compiles your code first. Each phase is bound to a plugin goal — `compile` runs `maven-compiler-plugin:compile`, `test` runs `maven-surefire-plugin:test`, `package` runs `maven-jar-plugin:jar`.\n\nThe phases I use most: **test** runs unit tests via Surefire. **verify** runs integration tests via Failsafe — this is where your `@SpringBootTest` classes should run, not during the `test` phase. **install** copies the artifact to `~/.m2/repository` so sibling modules can find it during a multi-module build. **deploy** pushes the artifact to a remote repository like Nexus — this should only happen in CI.\n\nA practical distinction: `-DskipTests` skips test execution but still **compiles** tests (catches compile errors). `-Dmaven.test.skip=true` skips both compilation and execution — use it when you need maximum speed and are confident in the tests."
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,267 @@
+{
+  "topic": "Scheduled Tasks",
+  "topicSlug": "scheduled-tasks",
+  "questions": [
+    {
+      "id": "sbt-sch-001",
+      "slug": "spring-scheduled-tasks-fixed-rate-cron-distributed",
+      "question": "How does Spring's @Scheduled work, what are the differences between fixedRate, fixedDelay, cron, and how do you make it safe in clustered deployments?",
+      "title": "Spring @Scheduled — fixedRate vs fixedDelay vs cron, plus Clustered Patterns",
+      "direct_answer": "Enable with **`@EnableScheduling`**; annotate methods with **`@Scheduled`** specifying one of: **`fixedRate`** (time between start times — overlap possible if task is slow), **`fixedDelay`** (time between end-of-last and next start — never overlaps), or **`cron`** (time-of-day expressions). The default thread pool is **single-threaded**; configure a `TaskScheduler` with adequate threads or tasks block each other. In **clustered deployments** `@Scheduled` fires on every replica — use **ShedLock**, **Quartz clustered**, or **Kubernetes CronJob** for single execution. Keep tasks **idempotent**, short, and observable.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Thorough understanding of `@Scheduled` timing semantics, thread-pool config, and clustered-safety patterns",
+        "common_mistake": "Using `fixedRate` for a slow task (overlaps pile up) or forgetting distributed locking in a cluster",
+        "to_stand_out": "Discuss `TaskScheduler` sizing, async + scheduled, error handlers, ShedLock vs Quartz tradeoffs, cron pitfalls (timezones, DST, Spring 6-field vs Unix 5-field)"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "JP Morgan",
+        "Capital One",
+        "American Express",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What @Scheduled Is — and What It Isn't",
+            "content": "**`@Scheduled`** is Spring's built-in lightweight scheduler. It's **not** a distributed scheduler and **not** a batch framework — it runs a method on a timer inside a single JVM.\n\n**Enable and use:**\n- `@EnableScheduling` on a configuration class\n- `@Scheduled` on a method (must be void, no args)\n- Choose `fixedRate`, `fixedDelay`, or `cron`\n\n```java\n@SpringBootApplication\n@EnableScheduling\npublic class Application { }\n\n@Component\npublic class Reports {\n    @Scheduled(cron = \"0 0 2 * * *\", zone = \"UTC\")\n    public void dailyReport() { }\n\n    @Scheduled(fixedDelay = 30_000)\n    public void heartbeat() { }\n\n    @Scheduled(fixedRate = 5000, initialDelay = 10_000)\n    public void poll() { }\n}\n```\n\n**Supported variants:**\n- `fixedRate` / `fixedRateString`\n- `fixedDelay` / `fixedDelayString`\n- `cron(String)` with optional `zone`\n- `initialDelay` / `initialDelayString`\n- SpEL and property placeholders supported via `*String` variants\n\n**The two limits to know up front:**\n- Default thread pool is **single-threaded** — multiple `@Scheduled` methods queue up\n- In a multi-replica deployment, **every replica fires** — duplicate runs unless you add coordination"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "fixedRate vs fixedDelay vs cron Timing",
+            "content": "```mermaid\nflowchart TB\n    note[\"Each row shows successive runs of one @Scheduled method\"]\n    fr1[\"fixedRate=5s | Run 1 at 0s\"]\n    fr1 --> fr2[\"Run 2 at 5s (even if Run 1 still running with multi-thread pool)\"]\n    fr2 --> fr3[\"Run 3 at 10s (overlap risk)\"]\n    fd1[\"fixedDelay=5s | Run 1 starts 0s, ends 3s\"]\n    fd1 --> fd2[\"Run 2 starts at 8s (3s + 5s)\"]\n    fd2 --> fd3[\"Run 3 starts after Run 2 ends + 5s\"]\n    cron1[\"cron=0 0 2 * * * | Day 1 at 02:00\"]\n    cron1 --> cron2[\"Day 2 at 02:00\"]\n    cron2 --> cron3[\"Day 3 at 02:00\"]\n```"
+          },
+          {
+            "type": "step",
+            "title": "fixedRate vs fixedDelay vs cron — Picking the Right One",
+            "content": "Each timing mode has distinct semantics. Pick by what should happen when the task takes longer than the interval.\n\n**`fixedRate` — clock-based, start-to-start**\n- Next run starts `N ms` after the previous run **start**\n- If task takes longer than `N`, the next run is queued; **may overlap** with multi-thread pool\n- Good for steady-cadence sampling, polling, heartbeats\n- Default single-thread pool serializes tasks — drift, not true overlap\n\n**`fixedDelay` — end-to-next-start**\n- Next run starts `N ms` after the previous run **ends**\n- **Never overlaps**\n- Good for tasks of unpredictable duration; avoids piling up on slow external services\n- Safer default than `fixedRate` for most use cases\n\n**`cron` — time-of-day expressions**\n- Spring's cron format is **6 fields**: `second minute hour day-of-month month day-of-week`\n- Set `zone` explicitly — defaults to JVM local time\n\n**Cron examples:**\n- `0 0 2 * * *` — every day at 02:00\n- `0 */15 * * * *` — every 15 minutes\n- `0 0 12 * * MON-FRI` — noon on weekdays\n- `0 30 9 15 * *` — 15th of each month at 09:30\n\n**Macros (Spring 5.3+):**\n- `@yearly`, `@monthly`, `@weekly`, `@daily`, `@hourly`\n\n**Externalize schedules for non-redeploy changes**\n\n```java\n@Scheduled(cron = \"${jobs.reporting.cron}\")\npublic void report() { }\n```\n\n```yaml\njobs:\n  reporting:\n    cron: \"0 0 2 * * *\"\n```\n\nUse `cron = \"-\"` to disable a task via config.\n\n**Cron pitfalls**\n- **Spring 6-field vs Unix 5-field** — leading seconds field; common migration bug\n- **Timezone** — `zone = \"America/New_York\"` is DST-aware; UTC is stable; prefer UTC for infra schedules\n- **`*` in day-of-month and day-of-week** — both `*` means 'every day' (no AND); one `*` and one specific can surprise\n- **Feb 29** — `0 0 0 29 2 *` runs every four years; use `0 0 0 L 2 *` for last day of February"
+          },
+          {
+            "type": "step",
+            "title": "TaskScheduler Configuration — Do This Early",
+            "content": "**The default is one thread.** Multiple `@Scheduled` methods queue on the same thread; one slow task delays every other.\n\n**Configure a proper scheduler**\n\n```java\n@Configuration\npublic class SchedulingConfig implements SchedulingConfigurer {\n    @Override\n    public void configureTasks(ScheduledTaskRegistrar registrar) {\n        registrar.setTaskScheduler(taskScheduler());\n    }\n\n    @Bean\n    public TaskScheduler taskScheduler() {\n        ThreadPoolTaskScheduler ts = new ThreadPoolTaskScheduler();\n        ts.setPoolSize(10);\n        ts.setThreadNamePrefix(\"sched-\");\n        ts.setErrorHandler(t -> log.error(\"Scheduled task failed\", t));\n        ts.setWaitForTasksToCompleteOnShutdown(true);\n        ts.setAwaitTerminationSeconds(60);\n        return ts;\n    }\n}\n```\n\n**Or via Spring Boot 3.2+ properties**\n\n```yaml\nspring:\n  task:\n    scheduling:\n      pool:\n        size: 10\n      thread-name-prefix: sched-\n      shutdown:\n        await-termination: true\n        await-termination-period: 60s\n```\n\n**Sizing the pool**\n- Count your scheduled methods\n- Add headroom for long-running tasks that might overlap\n- Don't size on CPU cores — most scheduled work is I/O-bound\n- Typical: 5-20 threads\n\n**Error handling**\n- Uncaught exception is logged via the `ErrorHandler`; the task continues firing on schedule\n- Wrap the body in try/catch, log context (MDC), emit a metric on failure\n- For `fixedDelay`: the delay starts from the exception time\n\n**Graceful shutdown**\n- `setWaitForTasksToCompleteOnShutdown(true)` plus `setAwaitTerminationSeconds(N)` ensures running tasks finish before JVM exits\n- Without it, K8s SIGTERM kills mid-task — potentially leaving things inconsistent\n\n**Conditional scheduling**\n\n```java\n@Scheduled(cron = \"0 0 3 * * *\")\n@ConditionalOnProperty(value = \"jobs.nightly.enabled\", havingValue = \"true\")\npublic void nightly() { }\n```\n\nLets you disable a scheduled task per environment (run in prod, disable in staging)."
+          },
+          {
+            "type": "step",
+            "title": "Making @Scheduled Safe in a Cluster",
+            "content": "With N replicas running the same code, every `@Scheduled` method fires N times. For 'send nightly report' that means N emails.\n\n**Option 1 — ShedLock (lightweight DB lock)**\n\n```xml\n<dependency>\n    <groupId>net.javacrumbs.shedlock</groupId>\n    <artifactId>shedlock-spring</artifactId>\n</dependency>\n<dependency>\n    <groupId>net.javacrumbs.shedlock</groupId>\n    <artifactId>shedlock-provider-jdbc-template</artifactId>\n</dependency>\n```\n\n```java\n@EnableScheduling\n@EnableSchedulerLock(defaultLockAtMostFor = \"10m\")\n@Configuration\npublic class SchedConfig {\n    @Bean\n    public LockProvider lockProvider(DataSource ds) {\n        return new JdbcTemplateLockProvider(ds);\n    }\n}\n\n@Component\npublic class Reports {\n    @Scheduled(cron = \"0 0 2 * * *\", zone = \"UTC\")\n    @SchedulerLock(name = \"nightlyReport\", lockAtLeastFor = \"1m\", lockAtMostFor = \"30m\")\n    public void send() { }\n}\n```\n\n- First replica grabs the named lock; others see it taken and skip\n- `lockAtMostFor` is a safety net if the holder crashes\n- Providers: JDBC, Mongo, Redis, Hazelcast, DynamoDB, ZooKeeper\n\n**Option 2 — Quartz clustered mode**\n- DB-backed JobStore with `isClustered=true`\n- Heavier setup; richer cron semantics, misfire policies, recovery\n- Standard for complex multi-job scheduling\n\n**Option 3 — Kubernetes CronJob**\n\n```yaml\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: nightly-report\nspec:\n  schedule: \"0 2 * * *\"\n  concurrencyPolicy: Forbid\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n            - name: report\n              image: acme/report:1.2.3\n          restartPolicy: OnFailure\n```\n\n- K8s creates a Pod at each tick; Pod runs and exits\n- No `@Scheduled` in the application\n- Best for K8s-native stacks with operational separation\n\n**Decision rule:**\n- Single replica → plain `@Scheduled`\n- Multiple replicas, simple job → `@Scheduled` plus ShedLock\n- Complex scheduling, dynamic schedules → Quartz clustered\n- K8s-native, operational separation → Kubernetes CronJob\n\n**Don't stack solutions** — running Quartz and `@Scheduled` doing the same thing produces duplicates. Pick one scheduler."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When @Scheduled Helps, When It Hurts",
+            "content": "**When `@Scheduled` helps:**\n- Single-instance deployments\n- Simple periodic tasks (heartbeat, cache refresh, polling)\n- 80% of 'run something every 5 minutes' needs\n- Zero extra infrastructure\n\n**When `@Scheduled` hurts:**\n- Multi-replica deployments without distributed locking\n- Dynamic schedules (user-configurable)\n- Long-running tasks that hold scheduler threads\n- Workloads needing misfire handling, recovery, or dynamic management\n\n**When `fixedRate` helps vs hurts:**\n- Helps: steady cadence regardless of duration (sampling, polling)\n- Hurts: slow tasks pile up under multi-thread pool — load amplification\n- Default to `fixedDelay` unless steady cadence is the requirement\n\n**Watch for:**\n- **Default single-thread pool** — one slow task blocks all others; configure `ThreadPoolTaskScheduler` early\n- **Default timezone** — JVM TZ is environment-dependent; always specify `zone`\n- **`fixedRate` with slow task** — drift (single thread) or overlap (multi-thread)\n- **Cluster duplicates** — forgetting ShedLock/Quartz/K8s CronJob\n- **Swallowed exceptions** — default `ErrorHandler` just logs; add metric/alert\n- **Long tasks blocking** — delegate to async executor\n- **Self-invocation pitfall** — `@Async` plus `@Scheduled` on the same bean: AOP proxy may bypass `@Async`; split across beans\n- **Spring vs Unix cron** — Spring is 6 fields with leading seconds; common migration bug\n- **`@EnableScheduling` in test slices** — disabled by default; test methods directly\n\n**Keep scheduled tasks short** — a `@Scheduled` method should be a trigger, not the worker. Delegate heavy work to a queue or `Executor` and return quickly. This caps the blast radius of failure and avoids holding scheduler threads.\n\n**Idempotency** — design every scheduled task to be safe to run twice. You'll inevitably get a failure mid-task, an accidental duplicate config, or a rolling deploy where two replicas briefly hold the lock. Idempotency keys, UPSERTs, and deduping make these survivable."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Scheduled`** triggers methods on a timer; enable with `@EnableScheduling`.\n- **`fixedRate`** = N ms between start times; can overlap with multi-thread pool.\n- **`fixedDelay`** = N ms between end and next start; never overlaps.\n- **`cron`** = Spring's 6-field format; always set `zone` explicitly.\n- **Default thread pool is single-threaded** — configure `ThreadPoolTaskScheduler` early.\n- **In clusters, `@Scheduled` fires on every replica** — use ShedLock, Quartz clustered, or K8s CronJob.\n- **Keep tasks short, idempotent, observable** — duration and outcome metrics, MDC logging.\n- **Externalize cron via properties** — use `@ConditionalOnProperty` or `cron = \"-\"` to disable per environment.\n- **Graceful shutdown** — `setWaitForTasksToCompleteOnShutdown(true)`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring's `@Scheduled` is the simplest way to run a method on a timer inside one JVM.\n\n**Three timing modes:**\n- `fixedRate` — N ms between start times; can overlap with multi-thread pool\n- `fixedDelay` — N ms between end and next start; never overlaps\n- `cron` — time-of-day expressions; Spring's 6-field format with leading seconds\n\n**Two pitfalls everyone hits:**\n- Default thread pool is single-threaded; multiple scheduled methods queue up\n- Configure `ThreadPoolTaskScheduler` with `setPoolSize(10)`, error handler, graceful shutdown\n- In multi-replica deployments every replica fires — duplicate runs without coordination\n\n**Cluster-safe options:**\n- ShedLock — `@Scheduled` plus `@SchedulerLock(name, lockAtMostFor, lockAtLeastFor)`; backed by JDBC/Redis/Mongo\n- Quartz clustered — heavier; rich misfire and recovery semantics\n- Kubernetes CronJob — schedules outside the app; Pod runs and exits at each tick\n\n**Cron pitfalls to call out:**\n- Spring 6-field vs Unix 5-field — leading seconds field; common migration bug\n- Timezone — `zone = \"UTC\"` for stable infra schedules; named zones are DST-aware\n- `*` in day-of-month and day-of-week is 'every day' (no AND semantics)\n- Feb 29 — use `L 2 *` for last day of February, not `29 2 *`\n\n**Operational hygiene:**\n- Keep tasks short — delegate heavy work to a queue/Executor; method is a trigger, not the worker\n- Always idempotent — failure mid-task, retries, lock expiry can cause double-runs\n- Log start, end, duration, outcome with MDC\n- Emit Micrometer metrics (`@Timed` or manual sample); alert on missed fires (no run in 2x period)\n- Wrap the body in try/catch — uncaught exceptions are logged but the run is lost\n\n**Decision framework:**\n- Single replica → plain `@Scheduled`\n- Multiple replicas, simple job → `@Scheduled` plus ShedLock\n- Complex scheduling or dynamic schedules → Quartz clustered\n- K8s-native, operational separation → Kubernetes CronJob\n- Don't stack solutions — pick one scheduler\n\nIn an interview I'd emphasize that `@Scheduled` is great for in-process periodic work, but the moment you have more than one replica or need recovery semantics, graduate to ShedLock or Quartz."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between fixedRate and fixedDelay when a task takes longer than the interval?",
+        "How does ShedLock ensure only one replica runs a scheduled task?",
+        "When would you move from @Scheduled to Quartz or K8s CronJob?",
+        "Why is specifying the timezone on cron expressions important?"
+      ],
+      "seo": {
+        "metaTitle": "Spring @Scheduled Guide — fixedRate, fixedDelay, cron, Clustering",
+        "metaDescription": "Spring @Scheduled timing semantics, thread pool configuration, cron pitfalls, and clustered deployment patterns with ShedLock, Quartz, and Kubernetes CronJob."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring's @Scheduled is the simplest way to run a method on a timer inside one JVM.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "@Scheduled is Spring's built-in lightweight scheduler. It's not a distributed scheduler and not a batch framework — it runs a method on a timer inside a single JVM. Enable and use: @EnableScheduling on a configuration class @Scheduled on a method (must be void, no args) Choose fixedRate, fixedDelay, or cron ``java @SpringBootApplication @EnableScheduling public class Application { } @Component public class Reports { @Scheduled(cron = \"0 0 2 *\", zone = \"UTC\") public void dailyReport() { } @Scheduled(fixedDelay = 30_000) public void heartbeat() { } @Scheduled(fixedRate = 5000, initialDelay =."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Each timing mode has distinct semantics.",
+              "Pick by what should happen when the task takes longer than the interval.",
+              "fixedRate — clock-based, start-to-start Next run starts N ms after the previous run start If task takes longer than N, the next run is queued; may overlap with multi-thread pool Good for steady-cadence sampling, polling, heartbeats Default single-thread pool serializes tasks — drift, not true overlap fixedDelay — end-to-next-start Next run starts N ms after the previous run ends Never overlaps Good for tasks of unpredictable duration; avoids piling up on slow external services Safer default than fixedRate for most use cases cron — time-of-day expressions Spring's cron format is 6 fields: second minute hour day-of-month month day-of-week Set zone explicitly — defaults to JVM local time Cron examples: 0 0 2 * — every day at 02:00 0 /15 *."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@Scheduled triggers methods on a timer; enable with @EnableScheduling",
+              "fixedRate = N ms between start times; can overlap with multi-thread pool",
+              "fixedDelay = N ms between end and next start; never overlaps",
+              "cron = Spring's 6-field format; always set zone explicitly",
+              "Default thread pool is single-threaded — configure ThreadPoolTaskScheduler early"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using fixedRate for a slow task (overlaps pile up) or forgetting distributed locking in a cluster"
+          }
+        ],
+        "cap": "Three timing modes: fixedRate — N ms between start times; can overlap with multi-thread pool fixedDelay — N ms between end and next start; never overlaps cron — time-of-day expressions; Spring's 6-fie",
+        "familiarity_anchors": [
+          "Enable",
+          "EnableScheduling",
+          "Scheduled"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between fixedRate and fixedDelay when a task takes longer than the interval?",
+          "How does ShedLock ensure only one replica runs a scheduled task?",
+          "When would you move from @Scheduled to Quartz or K8s CronJob?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sbt-sch-002",
+      "slug": "scheduled-task-observability-and-error-handling",
+      "question": "How do you make Spring `@Scheduled` tasks observable and resilient in production? What patterns prevent silent failures, missed fires, and runaway threads?",
+      "title": "@Scheduled Observability, Error Handling, and Resilience Patterns",
+      "direct_answer": "Production `@Scheduled` tasks need three layers of safety. **Observability** — log start/end/duration/outcome with MDC, emit Micrometer metrics (`@Timed`), and alert on missed fires (no run in 2x period). **Error handling** — wrap the body in try/catch so a single failure doesn't lose context; configure a custom `ErrorHandler` on the `TaskScheduler` for uncaught exceptions; record failure metrics and structured logs. **Resilience** — keep tasks short, delegate heavy work to a queue or `Executor`, set `setWaitForTasksToCompleteOnShutdown(true)` for graceful K8s shutdown, and protect against runaway threads via `lockAtMostFor` (ShedLock) or per-task timeouts.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "medium",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can operationalize scheduled tasks beyond just declaring `@Scheduled`",
+        "common_mistake": "Relying on default `ErrorHandler` that just logs, with no alert on consecutive failures or missed fires",
+        "to_stand_out": "Discuss missed-fire detection via heartbeat metric, runaway-thread protection, and the self-invocation pitfall when combining `@Async` with `@Scheduled`"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Stripe",
+        "Coinbase",
+        "Cloudflare",
+        "Datadog"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Production Scheduled Tasks Need Three Layers — Observability, Error Handling, Resilience",
+            "content": "A `@Scheduled` annotation is a single line that triggers a method on a timer. Making it production-grade is significantly more work, and the gaps are usually invisible until something breaks.\n\n**Three layers of safety:**\n- **Observability** — answer 'is this task running, how long does it take, when did it last succeed?' from operational dashboards\n- **Error handling** — distinguish transient failures from real ones; record context for debugging; alert on consecutive failures\n- **Resilience** — survive long-running tasks, K8s SIGTERM, runaway threads, and partial failures without halting the entire scheduler\n\n**The common production failures:**\n- Task throws silently every run for a week — no one notices because the default `ErrorHandler` just logs\n- Slow task holds a scheduler thread for hours, blocking all other scheduled methods\n- Lock not released because the holder crashed — no one runs the task until manual intervention\n- K8s rolling deploy kills mid-task — partial state in DB, no idempotency guard\n- Cron fires at unexpected time after DST transition — logs say 'ran at 03:00' instead of expected '02:00'\n\nEvery one of these is preventable with the patterns below."
+          },
+          {
+            "type": "step",
+            "title": "Observability — Logging, Metrics, and Missed-Fire Detection",
+            "content": "Operational dashboards must answer four questions: is the task running, how long does it take, when did it last succeed, and when did it last fail.\n\n**Structured logging with MDC**\n\n```java\n@Component\npublic class ReportingTask {\n    private static final Logger log = LoggerFactory.getLogger(ReportingTask.class);\n    private final ReportingService service;\n    private final MeterRegistry meter;\n\n    @Scheduled(cron = \"0 0 2 * * *\", zone = \"UTC\")\n    public void runDailyReport() {\n        String runId = UUID.randomUUID().toString();\n        MDC.put(\"taskName\", \"dailyReport\");\n        MDC.put(\"runId\", runId);\n        Timer.Sample sample = Timer.start(meter);\n        log.info(\"Scheduled task starting\");\n        try {\n            service.generateAndSend();\n            sample.stop(meter.timer(\"scheduled.task.duration\",\n                    \"task\", \"dailyReport\", \"outcome\", \"success\"));\n            meter.counter(\"scheduled.task.runs\",\n                    \"task\", \"dailyReport\", \"outcome\", \"success\").increment();\n            log.info(\"Scheduled task completed\");\n        } catch (Exception e) {\n            sample.stop(meter.timer(\"scheduled.task.duration\",\n                    \"task\", \"dailyReport\", \"outcome\", \"failure\"));\n            meter.counter(\"scheduled.task.runs\",\n                    \"task\", \"dailyReport\", \"outcome\", \"failure\").increment();\n            log.error(\"Scheduled task failed\", e);\n            throw e;\n        } finally {\n            MDC.clear();\n        }\n    }\n}\n```\n\n**Heartbeat metric for missed-fire detection**\n- Emit a counter or last-success-timestamp every successful run\n- Prometheus alert: `time() - last_success_timestamp > 2 * expected_period`\n- Catches scenarios where the scheduler stopped, the lock is stuck, or the task throws on every run\n\n**Distributed tracing**\n- Wrap the task body in a tracing span\n- Spring Cloud Sleuth / OpenTelemetry — `@Observed` annotation captures spans automatically\n- Lets you correlate scheduled-task work with downstream service calls\n\n**Per-task dashboards**\n- Last success time\n- Run duration trend (p50, p95, p99)\n- Failure rate over rolling window\n- Skip count if using ShedLock (locked-out runs)"
+          },
+          {
+            "type": "step",
+            "title": "Error Handling — Custom ErrorHandler and Failure Metrics",
+            "content": "The default `ErrorHandler` on `ConcurrentTaskScheduler` simply logs uncaught exceptions and continues. That's adequate for development but invisible in production.\n\n**Custom ErrorHandler on the TaskScheduler**\n\n```java\n@Bean\npublic TaskScheduler taskScheduler(MeterRegistry meter) {\n    ThreadPoolTaskScheduler ts = new ThreadPoolTaskScheduler();\n    ts.setPoolSize(10);\n    ts.setThreadNamePrefix(\"sched-\");\n    ts.setErrorHandler(throwable -> {\n        log.error(\"Uncaught exception in scheduled task\", throwable);\n        meter.counter(\"scheduled.task.uncaught_exception\",\n                \"exception\", throwable.getClass().getSimpleName()).increment();\n    });\n    ts.setWaitForTasksToCompleteOnShutdown(true);\n    ts.setAwaitTerminationSeconds(60);\n    return ts;\n}\n```\n\n**Per-method try/catch wrapping**\n- Catches the exception inside the method, preserves MDC context, emits a metric with the task name\n- Re-throwing after metric emission lets the global `ErrorHandler` log the stack trace too\n\n**Distinguishing transient from permanent failures**\n- Transient (DB deadlock, brief 503) — log warning, increment retry counter, schedule manual retry\n- Permanent (NPE, schema mismatch) — log error, increment failure counter, alert immediately\n\n**Alert thresholds**\n- Single failure of a daily task — alert\n- Two consecutive failures of an hourly task — alert\n- Five failures in 1 hour for an every-5-minute task — alert\n- No success in 2x the expected period — page (the scheduler may be stuck)\n\n**Don't swallow exceptions silently**\n\n```java\ntry {\n    riskyOperation();\n} catch (Exception ignored) { }\n```\n\nThis pattern hides bugs. Always log and emit a metric, even for 'expected' exceptions."
+          },
+          {
+            "type": "step",
+            "title": "Resilience — Runaway Threads, Graceful Shutdown, and the @Async Pitfall",
+            "content": "Long-running and crash-prone tasks need explicit protection. Three patterns cover most production scenarios.\n\n**Pattern 1 — Delegate heavy work to a queue or Executor**\n\n```java\n@Component\npublic class DataExportScheduler {\n    private final TaskExecutor exportExecutor;\n    private final ExportService service;\n\n    @Scheduled(cron = \"0 0 * * * *\")\n    public void triggerExports() {\n        List<ExportJob> jobs = service.findDueJobs();\n        for (ExportJob job : jobs) {\n            exportExecutor.execute(() -> service.runExport(job));\n        }\n    }\n}\n\n@Bean\npublic ThreadPoolTaskExecutor exportExecutor() {\n    ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();\n    exec.setCorePoolSize(4);\n    exec.setMaxPoolSize(8);\n    exec.setQueueCapacity(100);\n    exec.setThreadNamePrefix(\"export-\");\n    exec.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());\n    exec.initialize();\n    return exec;\n}\n```\n\n- The scheduled method runs in milliseconds — finds work and dispatches\n- Heavy work runs on a dedicated executor with bounded concurrency\n- Scheduler thread pool stays free for other scheduled tasks\n\n**Pattern 2 — Graceful K8s shutdown**\n\n```java\nts.setWaitForTasksToCompleteOnShutdown(true);\nts.setAwaitTerminationSeconds(60);\n```\n\n- On SIGTERM, scheduler stops accepting new fires\n- Running tasks get up to 60s to finish\n- After timeout, JVM exits regardless\n- Pair with K8s `terminationGracePeriodSeconds: 70` to give the JVM time to exit cleanly\n\n**Pattern 3 — Runaway-thread protection**\n- ShedLock's `lockAtMostFor` releases the lock after the configured duration even if the holder is still running — limits damage from a stuck task\n- Per-task timeout via `CompletableFuture.orTimeout(...)` or wrapping in an `ExecutorService.submit().get(timeout, unit)`\n- Circuit breaker (Resilience4j) on the body — fail fast after N failures\n\n**The @Async + @Scheduled self-invocation pitfall**\n- `@Async` works via AOP proxy — calling `this.asyncMethod()` from inside the same class bypasses the proxy\n- A `@Scheduled` method that calls `this.heavyWorkAsync()` won't actually run async\n- Split across beans, or extract the `@Async` method into a separate component\n\n```java\n@Component\npublic class TriggerScheduler {\n    private final HeavyWorker worker;\n\n    @Scheduled(fixedDelay = 60_000)\n    public void trigger() {\n        worker.runAsync();\n    }\n}\n\n@Component\npublic class HeavyWorker {\n    @Async\n    public void runAsync() {\n    }\n}\n```\n\n**Testing scheduled tasks**\n- `@EnableScheduling` is disabled in test slices by default — test the method directly\n- Verify cron expressions: `CronExpression.parse(...).next(Instant.now())`\n- Integration tests: simulate time advancement; manually invoke the method"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Patterns by Failure Mode",
+            "content": "Map the failure mode you're protecting against to the right pattern.\n\n| Failure Mode | Pattern |\n|---|---|\n| Task throws silently every run | Per-method try/catch + failure metric + alert on consecutive failures |\n| No run in 2x expected period | Heartbeat metric + Prometheus alert on staleness |\n| Slow task blocks scheduler | Delegate to dedicated `Executor`; configure `ThreadPoolTaskScheduler` pool size |\n| K8s SIGTERM kills mid-task | `setWaitForTasksToCompleteOnShutdown(true)` + `terminationGracePeriodSeconds` |\n| Crashed holder leaves lock | ShedLock `lockAtMostFor` releases lock after timeout |\n| Cluster duplicate runs | ShedLock, Quartz clustered, or K8s CronJob |\n| Self-invocation bypasses `@Async` | Split `@Scheduled` and `@Async` across separate beans |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Add Each Layer of Safety",
+            "content": "**When observability investments pay off:**\n- Tasks critical to business (billing, reporting, settlement)\n- Tasks called by downstream systems that depend on freshness\n- Tasks where silent failure is invisible until the next business cycle\n\n**When observability is overkill:**\n- Dev-only tasks\n- Tasks with obvious immediate side effects (sending notifications visible in UI)\n- Throwaway one-off scripts\n\n**When custom error handling helps:**\n- Multi-tenant scheduled tasks where one tenant's failure shouldn't halt others\n- Tasks with distinct transient vs permanent failure modes\n- Production environments with on-call rotations needing actionable alerts\n\n**When custom error handling hurts:**\n- Simple jobs where the default logger is enough\n- Adding complexity that obscures the actual work\n\n**When delegation to executor helps:**\n- Tasks that take more than a few seconds\n- Tasks that loop over N items each doing real work\n- Workloads where you want to throttle concurrency separately from scheduling cadence\n\n**When delegation hurts:**\n- Trivially fast tasks (heartbeat, cache refresh)\n- Tasks where the indirection adds debugging complexity\n\n**Watch for:**\n- **Default `ErrorHandler`** — silent log; no alert\n- **No heartbeat metric** — missed fires invisible until business impact appears\n- **Self-invocation pitfall** — `@Async` on the same bean as `@Scheduled` does nothing\n- **No graceful shutdown** — K8s SIGTERM mid-task corrupts state\n- **No runaway protection** — stuck task holds scheduler thread forever\n- **Synchronous heavy work in scheduled method** — blocks all other scheduled tasks"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Three layers** — observability, error handling, resilience.\n- **Structured logging with MDC** — `taskName`, `runId` propagate through the call stack.\n- **Micrometer metrics** — `scheduled.task.duration` and `scheduled.task.runs` with `outcome` tag.\n- **Heartbeat metric** for missed-fire detection — alert when no success in 2x expected period.\n- **Custom `ErrorHandler` on TaskScheduler** — logs and emits failure metric; default just logs.\n- **Delegate heavy work to an `Executor`** — scheduler thread stays free.\n- **Graceful shutdown** — `setWaitForTasksToCompleteOnShutdown(true)` plus K8s `terminationGracePeriodSeconds`.\n- **`@Async` + `@Scheduled` self-invocation pitfall** — split across beans to engage the AOP proxy."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Production `@Scheduled` tasks need three layers of safety beyond the bare annotation.\n\n**Observability:**\n- Structured logging with MDC — `taskName`, `runId`, `triggeredBy` propagate through the stack\n- Micrometer metrics — `scheduled.task.duration` and `scheduled.task.runs` with `outcome` tag\n- Heartbeat metric — emit on every successful run; Prometheus alert on staleness (no success in 2x expected period)\n- Distributed tracing via `@Observed` to correlate with downstream calls\n\n**Error handling:**\n- Wrap the method body in try/catch — preserve MDC, emit failure metric, log with context\n- Custom `ErrorHandler` on the `TaskScheduler` for uncaught exceptions — default just logs\n- Distinguish transient from permanent failures — different alert thresholds\n- Never silently swallow — even 'expected' exceptions deserve a metric\n\n**Resilience:**\n- Delegate heavy work to a dedicated `Executor` — scheduled method runs in milliseconds, finds work, dispatches\n- Graceful K8s shutdown — `setWaitForTasksToCompleteOnShutdown(true)` plus `terminationGracePeriodSeconds`\n- Runaway-thread protection — ShedLock `lockAtMostFor`, per-task timeouts, or circuit breakers\n\n**The @Async + @Scheduled pitfall:**\n- `@Async` works via AOP proxy; calling `this.asyncMethod()` bypasses it\n- A `@Scheduled` method calling `this.heavyWorkAsync()` does NOT run async\n- Split across two beans — `TriggerScheduler` with `@Scheduled` calling `HeavyWorker.runAsync()`\n\n**Common production failures these patterns prevent:**\n- Task throws silently for a week — no one notices because default error handler just logs\n- Slow task blocks the scheduler thread, delaying all other scheduled methods\n- Lock not released after holder crash — task halted until manual intervention\n- K8s rolling deploy kills mid-task without graceful shutdown\n- Cron fires at unexpected time after DST transition\n\n**Testing tips:**\n- `@EnableScheduling` is disabled in test slices — test method directly\n- Verify cron: `CronExpression.parse(...).next(Instant.now())`\n- Integration tests simulate time advancement\n\nIn an interview I'd emphasize the heartbeat metric — that's the single best safety net for catching silent failures."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you build a Prometheus alert that fires when a scheduled task hasn't run in 2x its expected period?",
+        "Why does `@Async` on the same bean as `@Scheduled` not work, and how do you fix it?",
+        "How would you protect against a runaway scheduled task that hangs and holds the scheduler thread forever?",
+        "What's the right K8s `terminationGracePeriodSeconds` for a service running scheduled tasks?"
+      ],
+      "seo": {
+        "metaTitle": "Spring @Scheduled Observability and Resilience Patterns",
+        "metaDescription": "Production patterns for Spring @Scheduled tasks — observability with Micrometer, custom ErrorHandler, missed-fire alerts, graceful shutdown, and runaway protection."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Production @Scheduled tasks need three layers of safety beyond the bare annotation.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A @Scheduled annotation is a single line that triggers a method on a timer. Making it production-grade is significantly more work, and the gaps are usually invisible until something breaks. Three layers of safety: Observability — answer 'is this task running, how long does it take, when did it last succeed?' from operational dashboards Error handling — distinguish transient failures from real ones; record context for debugging; alert on consecutive failures Resilience — survive long-running tasks, K8s SIGTERM, runaway threads, and partial failures without halting the entire scheduler The common."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Operational dashboards must answer four questions: is the task running, how long does it take, when did it last succeed, and when did it last fail.",
+              "Structured logging with MDC ``java @Component public class ReportingTask { private static final Logger log = LoggerFactory.getLogger(ReportingTask.class); private final ReportingService service; private final MeterRegistry meter; @Scheduled(cron = \"0 0 2 *\", zone = \"UTC\") public void runDailyReport() { String runId = UUID.randomUUID().toString(); MDC.put(\"taskName\", \"dailyReport\"); MDC.put(\"runId\", runId); Timer.Sample sample = Timer.start(meter); log.info(\"Scheduled task starting\"); try { service.generateAndSend(); sample.stop(meter.timer(\"scheduled.task.duration\", \"task\", \"dailyReport\", \"outcome\", \"success\")); meter.counter(\"scheduled.task.runs\", \"task\", \"dailyReport\", \"outcome\", \"success\").increment(); log.info(\"Scheduled task completed\"); } catch (Exception e) { sample.stop(meter.timer(\"scheduled.task.duration\", \"task\", \"dailyReport\", \"outcome\", \"failure\")); meter.counter(\"scheduled.task.runs\", \"task\", \"dailyReport\", \"outcome\", \"failure\").increment(); log.error(\"Scheduled task failed\", e); throw e; } finally { MDC.clear(); } } } ` Heartbeat metric for missed-fire detection Emit a counter or last-success-timestamp every successful run Prometheus alert: time()."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Three layers — observability, error handling, resilience",
+              "Structured logging with MDC — taskName, runId propagate through the call stack",
+              "Micrometer metrics — scheduled",
+              "duration and scheduled",
+              "runs with outcome tag"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Relying on default ErrorHandler that just logs, with no alert on consecutive failures or missed fires"
+          }
+        ],
+        "cap": "Observability: Structured logging with MDC — taskName, runId, triggeredBy propagate through the stack Micrometer metrics — scheduled.task.duration and scheduled.task.runs with outcome tag Heartbeat me",
+        "familiarity_anchors": [
+          "Production",
+          "Scheduled",
+          "Observability"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you build a Prometheus alert that fires when a scheduled task hasn't run in 2x its expected period?",
+          "Why does `@Async` on the same bean as `@Scheduled` not work, and how do you fix it?",
+          "How would you protect against a runaway scheduled task that hangs and holds the scheduler thread forever?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

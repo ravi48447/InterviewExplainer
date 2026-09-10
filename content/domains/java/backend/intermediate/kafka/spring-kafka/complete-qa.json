@@ -1,0 +1,384 @@
+{
+  "topic": "Spring Kafka Integration",
+  "topicSlug": "spring-kafka",
+  "questions": [
+    {
+      "id": "spring-kafka-setup",
+      "title": "Spring Kafka Setup and KafkaTemplate",
+      "slug": "spring-kafka-setup",
+      "question": "How do you set up Spring Kafka and use KafkaTemplate for sending messages?",
+      "difficulty": "easy",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- spring-kafka dependency + spring.kafka.* auto-configuration\n- KafkaTemplate<K,V>: Spring abstraction over Kafka producer\n- send() returns CompletableFuture<SendResult<K,V>> \u2014 async with partition + offset info\n- @KafkaListener: consumer annotation \u2014 topic, groupId, concurrency\n- @EnableKafka: enables listener container factory processing\n- ConcurrentKafkaListenerContainerFactory: concurrency, ack mode, error handling\n- Serialization: Spring JSON serializers for automatic object serialization"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Spring Kafka provides a KafkaTemplate abstraction similar to JdbcTemplate. It handles serialization and producer lifecycle, exposing a clean API for sending messages. The send method returns a CompletableFuture for async success/failure handling without blocking.\n\nOn the consumer side, @KafkaListener works like @RabbitListener \u2014 annotate a method with the topic and consumer group, and Spring handles polling, deserialization, and offset management. Spring Boot auto-configures everything from your application.yml.\n\nYou write custom bean configuration mainly when you need multiple producer configurations \u2014 different serializers for different topics, or different error handling per listener."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Auto-Configuration\n\n```yaml\nspring:\n  kafka:\n    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}\n    producer:\n      key-serializer: org.apache.kafka.common.serialization.StringSerializer\n      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer\n      acks: all\n      retries: 3\n      properties:\n        enable.idempotence: true\n    consumer:\n      group-id: my-service\n      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer\n      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer\n      auto-offset-reset: earliest\n      enable-auto-commit: false\n      properties:\n        spring.json.trusted.packages: com.myapp.events\n    listener:\n      ack-mode: manual\n      concurrency: 3\n```\n\n## KafkaTemplate Usage\n\n```java\n@Service\npublic class OrderEventPublisher {\n    private final KafkaTemplate<String, Object> kafkaTemplate;\n\n    public CompletableFuture<Void> publishOrderCreated(Order order) {\n        OrderCreatedEvent event = OrderCreatedEvent.from(order);\n        return kafkaTemplate.send(\"orders.created\", order.getId().toString(), event)\n            .thenAccept(result -> log.info(\n                \"Published to partition {} at offset {}\",\n                result.getRecordMetadata().partition(),\n                result.getRecordMetadata().offset()\n            ))\n            .exceptionally(ex -> {\n                log.error(\"Failed to publish order {}\", order.getId(), ex);\n                outboxService.saveForRetry(event);\n                return null;\n            });\n    }\n}\n```\n\n## @KafkaListener Patterns\n\n```java\n// Basic\n@KafkaListener(topics = \"orders.created\", groupId = \"inventory-service\")\npublic void onOrderCreated(OrderCreatedEvent event) {\n    inventoryService.reserveStock(event.getOrderId(), event.getItems());\n}\n\n// With manual ack and record metadata\n@KafkaListener(topics = \"payments.processed\", groupId = \"notification-service\")\npublic void onPaymentProcessed(ConsumerRecord<String, PaymentEvent> record, Acknowledgment ack) {\n    try {\n        notificationService.send(record.value());\n        ack.acknowledge();\n    } catch (Exception ex) {\n        log.error(\"Failed at offset {}\", record.offset(), ex);\n        // Don't ack \u2014 redelivery will happen\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Kafka provides a KafkaTemplate abstraction similar to JdbcTemplate.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "You write custom bean configuration mainly when you need multiple producer configurations \u2014 different serializers for different topics, or different error handling per listener.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "spring-kafka-error-handling",
+      "title": "Kafka Error Handling and Retry",
+      "slug": "spring-kafka-error-handling",
+      "question": "How do you implement robust error handling and retry logic in Spring Kafka consumers?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- DefaultErrorHandler: configurable retry with FixedBackOff or ExponentialBackOff\n- DeadLetterPublishingRecoverer: routes failed messages to {topic}.DLT after exhausting retries\n- Non-retryable exceptions: immediate DLT route for validation, deserialization errors\n- @RetryableTopic: non-blocking retry via intermediate retry topics\n- @DltHandler: handler method for DLT messages\n- Idempotent consumers: safe to process same message multiple times\n- Poison pill: message that always fails \u2014 DLT prevents partition blocking"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Error handling in Kafka consumers distinguishes transient from permanent failures. A transient failure \u2014 database temporarily unavailable \u2014 should be retried. A permanent failure \u2014 malformed message, business rule violation \u2014 should not be retried endlessly because it blocks the entire partition.\n\nDefaultErrorHandler with DeadLetterPublishingRecoverer is the standard solution. After exhausting retries with exponential backoff, it publishes the failed message to a DLT with headers containing the original offset and exception. The partition is unblocked; operations team investigates the DLT.\n\n@RetryableTopic is a cleaner annotation-based approach that avoids blocking the main partition during retries by using intermediate retry topics with delay."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## DefaultErrorHandler with DLT\n\n```java\n@Configuration\npublic class KafkaConsumerConfig {\n\n    @Bean\n    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(\n            ConsumerFactory<String, Object> consumerFactory,\n            KafkaTemplate<String, Object> kafkaTemplate) {\n\n        var recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate,\n            (record, ex) -> new TopicPartition(record.topic() + \".DLT\", record.partition()));\n\n        var backoff = new ExponentialBackOff(1000L, 2.0);\n        backoff.setMaxAttempts(3);  // 1s, 2s, 4s delays\n\n        var errorHandler = new DefaultErrorHandler(recoverer, backoff);\n        errorHandler.addNotRetryableExceptions(\n            JsonProcessingException.class,  // malformed \u2014 retry won't help\n            ValidationException.class       // business error \u2014 retry won't help\n        );\n\n        var factory = new ConcurrentKafkaListenerContainerFactory<String, Object>();\n        factory.setConsumerFactory(consumerFactory);\n        factory.setConcurrency(3);\n        factory.setCommonErrorHandler(errorHandler);\n        return factory;\n    }\n}\n```\n\n## @RetryableTopic\n\n```java\n@Component\npublic class PaymentConsumer {\n\n    // Creates: payments \u2192 payments-retry-0 \u2192 payments-retry-1 \u2192 payments.DLT\n    @RetryableTopic(\n        attempts = \"4\",\n        backoff = @Backoff(delay = 2000, multiplier = 2.0)\n    )\n    @KafkaListener(topics = \"payments\", groupId = \"payment-processor\")\n    public void processPayment(PaymentEvent event) {\n        paymentService.process(event);\n    }\n\n    @DltHandler\n    public void handleDlt(PaymentEvent event,\n                          @Header(KafkaHeaders.EXCEPTION_MESSAGE) String error) {\n        log.error(\"Payment {} permanently failed: {}\", event.getPaymentId(), error);\n        alertingService.notify(event);\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Error handling in Kafka consumers distinguishes transient from permanent failures.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "@RetryableTopic is a cleaner annotation-based approach that avoids blocking the main partition during retries by using intermediate retry topics with delay.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-exactly-once",
+      "title": "Kafka Delivery Semantics",
+      "slug": "kafka-exactly-once",
+      "question": "What are Kafka's delivery semantics and how do you achieve exactly-once processing?",
+      "difficulty": "hard",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- At-most-once: ack before processing \u2014 possible message loss, no duplicates\n- At-least-once: ack after processing \u2014 no loss, possible duplicates\n- Exactly-once: idempotent producer + transactional API \u2014 no loss, no duplicates\n- Idempotent producer: enable.idempotence=true \u2014 broker deduplicates retried messages\n- Kafka transactions: atomic produce+consume+produce \u2014 all or nothing\n- Practical EOS: complex + lower throughput \u2014 prefer at-least-once + idempotent consumer"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Kafka offers three delivery guarantees. At-most-once commits offset before processing \u2014 if the app crashes before processing, the message is lost. At-least-once commits after processing \u2014 no lost messages but possible redelivery if a crash occurs after processing but before commit. Exactly-once uses transactions to atomically produce and commit offset \u2014 zero loss, zero duplicates.\n\nTrue exactly-once requires Kafka transactions. The idempotent producer deduplicates retried messages at the broker. Combined with the transactional API, you atomically consume a message, process it, and produce results \u2014 either all happens or none does.\n\nIn practice most teams use at-least-once with idempotent consumers \u2014 design handlers to be safe to process twice. This is simpler, performs better, and covers most use cases."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Transactional Producer\n\n```java\n@Bean\npublic KafkaTransactionManager<String, Object> kafkaTransactionManager(\n        ProducerFactory<String, Object> pf) {\n    return new KafkaTransactionManager<>(pf);\n}\n\n@KafkaListener(topics = \"orders.raw\")\n@Transactional(\"kafkaTransactionManager\")\npublic void processAndPublish(ConsumerRecord<String, RawOrderEvent> record) {\n    // Atomic: produce + commit offset \u2014 both or neither\n    OrderProcessedEvent processed = processRawOrder(record.value());\n    kafkaTemplate.send(\"orders.processed\", record.key(), processed);\n}\n```\n\n## Idempotent Consumer (Recommended for Most Cases)\n\n```java\n@Service\npublic class WalletService {\n\n    @KafkaListener(topics = \"payments.credited\")\n    @Transactional\n    public void creditWallet(PaymentCreditedEvent event) {\n        // Safe to call twice \u2014 only credits if not already done\n        if (!paymentRepo.existsByPaymentIdAndStatus(event.getPaymentId(), CREDITED)) {\n            walletRepo.increaseBalance(event.getUserId(), event.getAmount());\n            paymentRepo.save(Payment.credited(event.getPaymentId()));\n        }\n        // Duplicate delivery: existsBy returns true \u2192 skip \u2192 no double credit\n    }\n}\n```\n\n## Delivery Semantics Summary\n\n```\nAt-Most-Once:   commit \u2192 process  (loss possible)\nAt-Least-Once:  process \u2192 commit  (duplicate possible)\nExactly-Once:   TX{process + produce + commit}  (no loss, no duplicate)\n\nRecommendation:\n- Use at-least-once + idempotent consumer for most services\n- Use exactly-once only when duplicate processing has financial/data consequences\n  and the complexity cost is justified\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Kafka offers three delivery guarantees.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "This is simpler, performs better, and covers most use cases.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-topic-management",
+      "title": "Kafka Topic Design and Partition Strategy",
+      "slug": "kafka-topic-management",
+      "question": "How do you design Kafka topics, decide partition count, and manage topics for a Spring Boot application?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Partitions: unit of parallelism \u2014 more partitions = more consumers = more throughput\n- Replication factor: 3 for production (leader + 2 replicas) \u2014 survives 2 broker failures\n- Retention: time-based (days/hours) or size-based retention of messages\n- Compaction: keep only latest message per key \u2014 good for state/lookup topics\n- Topic naming convention: domain.entity.event \u2014 orders.created, payments.processed\n- Partition count: set based on expected max consumers \u00d7 safety margin \u2014 hard to reduce later\n- NewTopic @Bean: Spring Kafka creates topics if they don't exist on startup\n- min.insync.replicas: ensure durability \u2014 acks=all + min.insync.replicas=2"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Partition count is the most important design decision for a Kafka topic because it can only increase, never decrease. Set it based on your maximum anticipated consumer throughput. If you think you'll never need more than 6 parallel consumers for a topic, set it to 6. Adding more later is possible but rebalancing impacts are disruptive.\n\nFor production, always use a replication factor of 3 \u2014 one leader and two replicas. Combined with min.insync.replicas=2 and acks=all, this ensures a message is only acknowledged after it's written to at least two brokers. A single broker failure doesn't lose data.\n\nTopic naming should follow a consistent pattern like domain.entity.event. This makes it easy to set access control policies \u2014 a service can be allowed to produce to its own domain's topics and consume from others. Compacted topics are a special case: they retain only the latest message per key, making them suitable for maintaining a current-state view of entities."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Spring Kafka Topic Configuration\n\n```java\n@Configuration\npublic class KafkaTopicConfig {\n\n    @Value(\"${kafka.topics.orders.partitions:6}\")\n    private int orderPartitions;\n\n    @Bean\n    public NewTopic orderCreatedTopic() {\n        return TopicBuilder.name(\"orders.created\")\n            .partitions(6)            // 6 max parallel consumers\n            .replicas(3)              // replication factor = 3\n            .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(Duration.ofDays(7).toMillis()))\n            .config(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, \"2\")\n            .build();\n    }\n\n    @Bean\n    public NewTopic userProfileTopic() {\n        return TopicBuilder.name(\"users.profile\")\n            .partitions(12)\n            .replicas(3)\n            // Compacted topic \u2014 retain latest profile per userId key\n            .config(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT)\n            .config(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, \"0.1\")\n            .build();\n    }\n\n    @Bean\n    public NewTopic auditEventsTopic() {\n        return TopicBuilder.name(\"audit.events\")\n            .partitions(24)           // high volume \u2014 more parallelism\n            .replicas(3)\n            // Keep 90 days of audit events\n            .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(Duration.ofDays(90).toMillis()))\n            .build();\n    }\n}\n```\n\n## Topic Naming Convention\n\n```\nPattern: {domain}.{entity}.{event}\n\norders.created          \u2192 order service publishes when order placed\norders.shipped          \u2192 logistics publishes when order shipped\npayments.processed      \u2192 payment service publishes payment result\nusers.profile           \u2192 compacted; user service publishes profile updates\ninventory.reserved      \u2192 inventory service publishes stock reservation\nnotifications.email     \u2192 notification service publishes outgoing emails\n\n```\n\n## Partition Count Sizing\n\n```\nDesired throughput: 10,000 messages/second\nSingle partition throughput (typical): ~2,000-5,000 msg/s\nRequired partitions: 10,000 / 3,000 \u2248 4 partitions\n\nWith 2x safety margin for growth: 8 partitions\nRound up to power of 2 or meaningful number: 12 partitions\n\nConsumer scaling:\n- 1 consumer handles all 12 partitions\n- 6 consumers \u2192 2 partitions each\n- 12 consumers \u2192 1 partition each (maximum parallelism)\n- 13 consumers \u2192 1 consumer sits idle (waste)\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Partition count is the most important design decision for a Kafka topic because it can only increase, never decrease.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Compacted topics are a special case: they retain only the latest message per key, making them suitable for maintaining a current-state view of entities.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-outbox-pattern",
+      "title": "Transactional Outbox Pattern with Kafka",
+      "slug": "kafka-outbox-pattern",
+      "question": "What is the transactional outbox pattern and how do you implement it with Kafka and Spring Boot?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Problem: database write and Kafka publish are two separate systems \u2014 no distributed transaction\n- Two-phase commit: impractical at scale \u2014 locks, coordination overhead\n- Outbox pattern: write event to database outbox table in same DB transaction as business data\n- Polling publisher: separate process reads outbox table and publishes to Kafka, then deletes/marks published\n- Debezium: CDC-based outbox relay \u2014 captures DB transaction log changes and publishes to Kafka\n- Guarantees: at-least-once delivery \u2014 exactly-once requires idempotent consumers\n- Spring Modulith: built-in support for event persistence and outbox pattern"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "The transactional outbox pattern solves the dual-write problem. When you save business data and then publish to Kafka in two separate operations, either one can fail independently \u2014 leaving your system in an inconsistent state. Kafka also doesn't participate in database transactions, so you can't use a two-phase commit.\n\nThe solution is to write the Kafka event as a row in an outbox table in the same database transaction as your business data. Either both the order row and the outbox event row are committed, or neither is. Then a separate process reads pending outbox entries and publishes them to Kafka.\n\nDebezium is the most robust implementation of the outbox publisher. It reads PostgreSQL's write-ahead log using Change Data Capture, eliminating the need to poll and the risk of missed events. When Debezium publishes the outbox row change to Kafka, you get reliable exactly-once event publication from the database change itself."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Outbox Table Schema\n\n```sql\nCREATE TABLE outbox_events (\n    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    aggregate_type VARCHAR(100) NOT NULL,  -- 'Order', 'Payment'\n    aggregate_id   VARCHAR(100) NOT NULL,  -- order ID or payment ID\n    event_type     VARCHAR(200) NOT NULL,  -- 'OrderCreated', 'PaymentProcessed'\n    payload        JSONB        NOT NULL,\n    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),\n    published_at   TIMESTAMPTZ,           -- null = pending; set when published\n    published      BOOLEAN      NOT NULL DEFAULT FALSE\n);\nCREATE INDEX idx_outbox_unpublished ON outbox_events (created_at) WHERE NOT published;\n```\n\n## Service: Atomic Write + Outbox\n\n```java\n@Service\npublic class OrderService {\n    private final OrderRepository orderRepo;\n    private final OutboxEventRepository outboxRepo;\n\n    @Transactional  // both order and outbox event in ONE DB transaction\n    public Order createOrder(CreateOrderRequest request) {\n        Order order = Order.from(request);\n        orderRepo.save(order);\n\n        // Event written to DB \u2014 not yet published to Kafka\n        outboxRepo.save(OutboxEvent.builder()\n            .aggregateType(\"Order\")\n            .aggregateId(order.getId().toString())\n            .eventType(\"OrderCreated\")\n            .payload(objectMapper.valueToTree(OrderCreatedEvent.from(order)))\n            .build());\n\n        return order;\n        // Transaction commits: order row + outbox row \u2014 both or neither\n    }\n}\n```\n\n## Polling Publisher (Simple Approach)\n\n```java\n@Component\npublic class OutboxPublisher {\n\n    @Scheduled(fixedDelay = 1000)  // poll every second\n    @Transactional\n    public void publishPendingEvents() {\n        List<OutboxEvent> pending = outboxRepo.findTop100ByPublishedFalseOrderByCreatedAtAsc();\n\n        for (OutboxEvent event : pending) {\n            kafkaTemplate.send(topicFor(event.getEventType()),\n                event.getAggregateId(),\n                event.getPayload());\n            event.setPublished(true);\n            outboxRepo.save(event);\n            // At-least-once: if crash after Kafka send but before DB save,\n            // the event will be republished \u2014 consumer must be idempotent\n        }\n    }\n}\n```\n\n## Debezium Outbox Pattern (Production Grade)\n\n```json\n// Debezium connector config (deployed separately)\n{\n  \"connector.class\": \"io.debezium.connector.postgresql.PostgresConnector\",\n  \"database.hostname\": \"prod-db.cluster.aws.com\",\n  \"database.dbname\": \"appdb\",\n  \"table.include.list\": \"public.outbox_events\",\n  \"transforms\": \"outbox\",\n  \"transforms.outbox.type\": \"io.debezium.transforms.outbox.EventRouter\",\n  \"transforms.outbox.table.field.event.type\": \"event_type\",\n  \"transforms.outbox.route.by.field\": \"aggregate_type\"\n  // Routes to Kafka topic based on aggregate_type: Order \u2192 orders, Payment \u2192 payments\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "The transactional outbox pattern solves the dual-write problem.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "When Debezium publishes the outbox row change to Kafka, you get reliable exactly-once event publication from the database change itself.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "kafka-monitoring-metrics",
+      "title": "Kafka Monitoring and Performance Tuning",
+      "slug": "kafka-monitoring-metrics",
+      "question": "What are the key Kafka metrics to monitor and how do you tune performance for a Spring Boot application?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Consumer lag: most important metric \u2014 how far behind is consumer from latest offset\n- spring.kafka.listener.idle-event-interval: detect idle consumers\n- Micrometer integration: Spring Kafka exposes metrics automatically\n- Producer metrics: record-send-rate, request-latency-avg, record-error-rate\n- Consumer metrics: records-consumed-rate, fetch-latency-avg, commit-latency-avg\n- batch.size + linger.ms: producer batching for higher throughput\n- compression.type: lz4 or snappy for high-volume topics\n- max.poll.records: how many records consumer fetches per poll"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Consumer lag is the most critical Kafka metric \u2014 it measures how far behind your consumer is from the latest message in a topic. A growing lag means your consumer can't keep up with production rate. Alert when lag exceeds a threshold that would affect business SLAs \u2014 for example, if your consumer is 10 minutes behind on the orders topic, orders are sitting unprocessed.\n\nFor producer performance, batch.size and linger.ms control how messages are grouped before sending. Increasing these improves throughput at the cost of slightly higher latency. For a high-volume topic, enabling lz4 compression reduces network bandwidth and storage significantly \u2014 typically 3-5x compression ratio for JSON payloads.\n\nSpring Boot with Micrometer automatically exposes Kafka consumer and producer metrics to your metrics system. The consumer group lag can be monitored via Kafka's own consumer group metrics or through the Kafka Admin API, integrated into your Grafana dashboard alongside application metrics."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Key Metrics to Monitor\n\n```\nConsumer Metrics:\n  kafka.consumer.fetch-latency-avg      \u2192 time per fetch request\n  kafka.consumer.records-consumed-rate  \u2192 messages/second processed\n  kafka.consumer.records-lag            \u2192 lag per partition (MOST IMPORTANT)\n  kafka.consumer.commit-latency-avg     \u2192 offset commit latency\n\nProducer Metrics:\n  kafka.producer.record-send-rate       \u2192 messages/second produced\n  kafka.producer.record-error-rate      \u2192 failed sends/second (alert if > 0)\n  kafka.producer.request-latency-avg    \u2192 round-trip time to broker\n  kafka.producer.batch-size-avg         \u2192 batching efficiency\n\nBroker Metrics (JMX or Prometheus JMX Exporter):\n  kafka.server:type=BrokerTopicMetrics,name=MessagesInPerSec\n  kafka.server:type=ReplicaManager,name=UnderReplicatedPartitions  (alert if > 0)\n  kafka.controller:type=KafkaController,name=ActiveControllerCount (alert if != 1)\n```\n\n## Producer Tuning\n\n```yaml\nspring:\n  kafka:\n    producer:\n      batch-size: 65536         # 64KB batch \u2014 default 16KB; larger = better throughput\n      properties:\n        linger.ms: 5            # wait 5ms to accumulate batch \u2014 better batching\n        compression.type: lz4   # compress batches \u2014 ~3-5x for JSON\n        buffer.memory: 67108864 # 64MB producer buffer\n```\n\n## Consumer Tuning\n\n```yaml\nspring:\n  kafka:\n    consumer:\n      properties:\n        max.poll.records: 500      # records per poll \u2014 default 500\n        fetch.min.bytes: 1024      # wait until 1KB available \u2014 reduces poll frequency\n        fetch.max.wait.ms: 500     # or 500ms \u2014 whichever comes first\n        session.timeout.ms: 45000  # consumer considered dead after 45s\n        heartbeat.interval.ms: 15000\n```\n\n## Lag Monitoring with Micrometer\n\n```java\n@Component\npublic class KafkaLagMonitor {\n\n    private final KafkaAdmin kafkaAdmin;\n    private final MeterRegistry meterRegistry;\n\n    @Scheduled(fixedDelay = 30000)  // check every 30 seconds\n    public void checkConsumerLag() {\n        // Use AdminClient to get consumer group lag\n        try (AdminClient client = AdminClient.create(kafkaAdmin.getConfigurationProperties())) {\n            client.listConsumerGroupOffsets(\"my-service\")\n                .partitionsToOffsetAndMetadata()\n                .thenAccept(offsets -> offsets.forEach((tp, offsetMeta) -> {\n                    long lag = offsetMeta.offset(); // simplified \u2014 real lag = latest - committed\n                    Gauge.builder(\"kafka.consumer.group.lag\",\n                            () -> lag,\n                            n -> n)\n                        .tag(\"topic\", tp.topic())\n                        .tag(\"partition\", String.valueOf(tp.partition()))\n                        .register(meterRegistry);\n                }));\n        }\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Consumer lag is the most critical Kafka metric \u2014 it measures how far behind your consumer is from the latest message in a topic.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "The consumer group lag can be monitored via Kafka's own consumer group metrics or through the Kafka Admin API, integrated into your Grafana dashboard alongside application metrics.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

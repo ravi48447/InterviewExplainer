@@ -1,0 +1,120 @@
+{
+  "topic": "Job And Step Structure",
+  "topicSlug": "job-and-step-structure",
+  "questions": [
+    {
+      "id": "sb-003",
+      "slug": "spring-batch-job-parameters-restart-failed-jobs",
+      "question": "How do Job parameters work in Spring Batch, and how do you restart a failed job from where it left off?",
+      "title": "Spring Batch Job Parameters and Restarting Failed Jobs",
+      "direct_answer": "Job parameters uniquely identify a JobInstance \u2014 the same Job name plus the same parameters always map to the same instance, preventing duplicate runs. When a job fails, its JobExecution is marked FAILED in the JobRepository, and re-launching with the same parameters triggers a restart that skips already-committed steps and resumes from the last failed or incomplete step.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of JobInstance vs JobExecution and the idempotency model Spring Batch enforces",
+        "common_mistake": "Adding a timestamp or run-id parameter every time to force a new JobInstance \u2014 valid, but candidates should know it also means losing automatic restart capability for that specific run",
+        "to_stand_out": "Mention @StepScope and @JobScope for late binding of parameters into readers/writers, and how JobParametersIncrementer enables scheduled reruns"
+      },
+      "company_tags": [
+        "IBM",
+        "Cognizant",
+        "SAP",
+        "Oracle",
+        "Societe Generale"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Batch's JobInstance Model Enforces Idempotency \u2014 And Most Teams Fight It Until They Understand Why It Exists",
+            "content": "Spring Batch distinguishes between three concepts that most developers initially conflate: **JobInstance** (what you're processing), **JobExecution** (a specific attempt to process it), and **JobParameters** (the identity of the instance).\n\nA `JobInstance` is identified by the combination of **Job name + JobParameters**. If you run the `orderProcessingJob` with `processingDate=2024-01-15`, Spring Batch creates one JobInstance for that combination. If that run fails and you relaunch with the same parameters, Spring Batch creates a new `JobExecution` for the **same JobInstance** \u2014 and restarts from the last committed checkpoint, not from scratch.\n\nIf the first run completed successfully (`COMPLETED` status), relaunching with the same parameters throws `JobInstanceAlreadyCompleteException`. This is **intentional** \u2014 it prevents accidental re-processing of already-completed business data. If you genuinely need to rerun a completed job (data correction, reprocessing), you have two options: launch with different parameters that reflect the new execution (e.g., a `reprocessing=true` flag), or clean up the execution metadata from the `BATCH_*` tables.\n\nThis model is the `common_mistake` target: teams add a timestamp or UUID to parameters on every launch to force uniqueness, avoiding the idempotency constraint. That works but defeats the restart model \u2014 each launch is a new instance with no restart capability. The right design separates identity parameters (business keys) from run-control parameters (technical incrementers).\n\nUnderstanding the difference between `JobInstance` and `JobExecution` is the foundation of the entire restart model. Think of `JobInstance` as the business task ('process March statements for account group A') and `JobExecution` as an attempt to complete that task. One business task may have multiple execution attempts if early attempts fail. Spring Batch records every attempt, and the metadata in `BATCH_JOB_EXECUTION` and `BATCH_STEP_EXECUTION` tells you the exact state of each attempt \u2014 what was read, what was committed, where the failure occurred."
+          },
+          {
+            "type": "phase",
+            "title": "How Spring Batch Determines Restart Position \u2014 The Checkpoint Mechanism",
+            "content": "When a failed JobExecution is restarted, Spring Batch uses the **step execution metadata** to determine where to resume. Each Step execution records its status (`COMPLETED`, `FAILED`, `STOPPED`), and for chunk steps, the `readCount` (number of items read in the last successful execution) is the checkpoint.\n\nFor **paging readers**, the restart position is derived from `readCount` \u2014 Spring Batch skips forward by that many items on restart. If 7000 items were processed before failure, the paging reader starts at offset 7000. This requires that the data set is stable between runs \u2014 if items were inserted into the query result set between the failed run and the restart, the offset no longer maps to the same item.\n\nFor **cursor readers**, restarting requires the cursor to be re-opened from the beginning and skipped forward to `readCount`. Some cursor-based readers support `saveState(false)` to disable restart capability (and process from scratch on restart) \u2014 appropriate for short, fast steps where restart overhead exceeds restart benefit.\n\nFor **partitioned jobs** (multiple concurrent step instances), each partition maintains its own step execution and checkpoint. A failed partition restarts only its own partition \u2014 other completed partitions are not re-executed. This is the scalability advantage of partitioning: partial failure only re-runs the affected partition, not the entire dataset."
+          },
+          {
+            "type": "step",
+            "title": "Designing Job Parameters for Production \u2014 Identity, Incrementers, and Operational Flexibility",
+            "content": "JobParameters must serve two purposes simultaneously: **identifying the business scope** of a run (what data is being processed) and **enabling operational flexibility** (re-running, forcing new instances, testing). Conflating these two purposes in a single parameter set leads to operational friction.\n\nA clean production parameter design: **business parameters** are the identity \u2014 `processingDate`, `region`, `batchType`. These uniquely identify what data the job is processing. **Technical parameters** are additive \u2014 `runId` (from `RunIdIncrementer`) creates uniqueness when you need multiple runs against the same business data, such as manual reruns after data corrections.\n\nJob parameters are typed: String, Long, Double, Date. Use the right type \u2014 don't pass a date as a String and parse it in the processor. `@Value(\"#{jobParameters['processingDate']}\")` with type `LocalDate` requires a custom converter; using Spring Batch's native Date type and converting is simpler.\n\n**`@JobScope`** is the correct scope for beans that depend on job parameters but not step parameters \u2014 configuration beans that read job parameters at job launch time, before any steps execute. Use `@StepScope` for readers and writers that need per-step parameters. Both scopes create beans lazily at the appropriate lifecycle point, not at application startup.\n\nFor **scheduled execution**, configure your scheduler (Quartz, Spring `@Scheduled`, Kubernetes CronJob) to pass meaningful parameters \u2014 the processing date, not a run timestamp. This makes the `BATCH_JOB_EXECUTION_PARAMS` table readable as an audit log of what was processed when, rather than a list of meaningless UUIDs.\n\n**Cleaning up execution metadata** is an operational concern often ignored until the `BATCH_JOB_EXECUTION` table grows to millions of rows and queries slow down. Spring Batch 5 includes a `BatchDataSourceScriptDatabaseInitializer` and a `JobExplorerFactoryBean`, and you can pair a scheduled cleanup job (using Spring Batch itself) that deletes old execution metadata beyond a retention window. Alternatively, set up database partitioning on execution start time. For most organizations, 90 days of execution history is enough for auditing \u2014 beyond that, archive to cold storage or delete."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`JobParameters` determine `JobInstance` identity** \u2014 same Job name + same parameters = same `JobInstance`; a `JobInstance` can have multiple `JobExecution`s (initial run + restarts).\n- **Adding a timestamp parameter forces a new `JobInstance`** \u2014 useful for jobs that must re-run from scratch every time; but defeats the restart mechanism for jobs that should resume.\n- **A `FAILED` `JobExecution` can be restarted; a `COMPLETED` one cannot by default** \u2014 Spring Batch prevents re-running a successfully completed `JobInstance` with the same parameters; use `allowStartIfComplete(true)` per step for idempotent steps.\n- **`@StepScope` and `@JobScope` enable late binding of parameters** \u2014 `@Value(\"#{jobParameters['file']}\")` in a `@StepScope` bean is evaluated when the step starts, not when the `ApplicationContext` loads.\n- **Step restartability depends on `ItemReader` stateful checkpointing** \u2014 `FlatFileItemReader` saves its position in `ExecutionContext`; on restart, it seeks to the last committed position and resumes from there."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch's restart capability is one of its most powerful features \u2014 a job that fails at record 50,000 can resume from record 50,001 rather than starting over. This requires understanding how parameters, instances, and executions relate.\n\n**The identity model**\n- `JobInstance` = Job name + `JobParameters`; represents a logical run (e.g., 'import for 2024-01')\n- `JobExecution` = one physical attempt of a `JobInstance`; a failed `JobInstance` gets a new `JobExecution` on restart\n- `StepExecution` = one attempt of one step within a `JobExecution`; stores `readCount`, `writeCount`, `commitCount`, and the `ExecutionContext` for restart state\n\n**Starting vs restarting**\n- First run: `jobLauncher.run(job, params)` creates a new `JobInstance` and a new `JobExecution`\n- Restart: `jobLauncher.run(job, sameParams)` finds the existing `FAILED` `JobInstance` and creates a new `JobExecution` for it; steps that completed successfully are skipped\n- A `COMPLETED` `JobInstance` cannot be re-launched by default \u2014 add `allowStartIfComplete(true)` to steps that need to run again\n\n**Late binding with `@StepScope`**\n- `@StepScope @Bean FlatFileItemReader reader(@Value(\"#{jobParameters['inputFile']}\") String file)` \u2014 the `file` value is not available at context load time; `@StepScope` defers bean creation until the step starts\n- Essential for parameterized readers and writers"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if you try to restart a COMPLETED job without changing its parameters?",
+        "How would you design a daily batch job so that each day's run is independent but also restartable on failure?",
+        "How does Spring Batch store job execution metadata and which tables are involved?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Job Parameters & Restarting Failed Jobs \u2014 Java Guide",
+        "metaDescription": "Learn how Spring Batch Job parameters identify JobInstances, how to restart failed jobs from the last checkpoint, and how to use @StepScope for late parameter binding."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Batch's restart capability is one of its most powerful features \u2014 a job that fails at record 50,000 can resume from record 50,001 rather than starting over.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Spring Batch distinguishes between three concepts that most developers initially conflate: JobInstance (what you're processing), JobExecution (a specific attempt to process it), and JobParameters (the identity of the instance). A JobInstance is identified by the combination of Job name + JobParameters. If you run the orderProcessingJob with processingDate=2024-01-15, Spring Batch creates one JobInstance for that combination. If that run fails and you relaunch with the same parameters, Spring Batch creates a new JobExecution for the same JobInstance \u2014 and restarts from the last committed checkpoint, not from scratch. If the."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "JobParameters must serve two purposes simultaneously: identifying the business scope of a run (what data is being processed) and enabling operational flexibility (re-running, forcing new instances, testing).",
+              "Conflating these two purposes in a single parameter set leads to operational friction.",
+              "A clean production parameter design: business parameters are the identity \u2014 processingDate, region, batchType.",
+              "These uniquely identify what data the job is processing.",
+              "Technical parameters are additive \u2014 runId (from RunIdIncrementer) creates uniqueness when you need multiple runs against the same business data, such as manual reruns after data corrections.",
+              "Job parameters are typed: String, Long, Double, Date."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "JobParameters determine JobInstance identity \u2014 same Job name + same parameters = same JobInstance; a JobInstance can have multiple JobExecutions (initial run + restarts)",
+              "Adding a timestamp parameter forces a new JobInstance \u2014 useful for jobs that must re-run from scratch every time; but defeats the restart mechanism for jobs that should resume",
+              "A FAILED JobExecution can be restarted; a COMPLETED one cannot by default \u2014 Spring Batch prevents re-running a successfully completed JobInstance with the same parameters; use allowStartIfComplete(true) per step for idempotent steps",
+              "@StepScope and @JobScope enable late binding of parameters \u2014 @Value(\"#{jobParameters['file']}\") in a @StepScope bean is evaluated when the step starts, not when the ApplicationContext loads",
+              "Step restartability depends on ItemReader stateful checkpointing \u2014 FlatFileItemReader saves its position in ExecutionContext; on restart, it seeks to the last committed position and resumes from there"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Adding a timestamp or run-id parameter every time to force a new JobInstance \u2014 valid, but candidates should know it also means losing automatic restart capability for that specific run"
+          }
+        ],
+        "cap": "The identity model JobInstance = Job name + JobParameters; represents a logical run (e.g., 'import for 2024-01') JobExecution = one physical attempt of a JobInstance; a failed JobInstance gets a new J",
+        "familiarity_anchors": [
+          "JobInstance",
+          "JobExecution",
+          "FAILED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if you try to restart a COMPLETED job without changing its parameters?",
+          "How would you design a daily batch job so that each day's run is independent but also restartable on failure?",
+          "How does Spring Batch store job execution metadata and which tables are involved?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "topic": "Integration Testing",
+  "topicSlug": "integration-testing",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "testing",
+  "questions": [
+    {
+      "id": "springboottest-integration",
+      "title": "@SpringBootTest Integration Tests",
+      "slug": "springboottest-integration",
+      "question": "How do you write proper integration tests with @SpringBootTest?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **`@SpringBootTest`: loads full application context \u2014 real beans, real wiring**\n- **`webEnvironment = RANDOM_PORT` or `MOCK` \u2014 controls whether real HTTP server starts**\n- **`TestRestTemplate` or `WebTestClient` for HTTP-level testing**\n- **Use Testcontainers for real PostgreSQL \u2014 don't mock the DB in integration tests**\n- **Slow by nature \u2014 reserve for critical paths, not every edge case**\n- **`@Sql` / `@DirtiesContext`: data setup and context reset between tests**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "`@SpringBootTest` starts the full application context, including all beans. It's the closest thing to running the real application in a test. The key decision is `webEnvironment`: `MOCK` gives you a MockMvc-compatible setup, `RANDOM_PORT` starts a real HTTP server that your `TestRestTemplate` or `WebTestClient` calls.\n\nFor integration tests to be meaningful, use a real database via Testcontainers \u2014 not H2, not in-memory mocks. You want to test the full stack: controller \u2192 service \u2192 repository \u2192 real DB. If you mock collaborators, it's not really an integration test.\n\nIntegration tests are 10-50x slower than unit tests, so use them sparingly: test the critical happy path, test critical failure scenarios (DB down, external service timeout), and test security configuration. Don't write integration tests for every business rule."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## @SpringBootTest with Real Server\n\n```java\n@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)\n@Testcontainers\n@Transactional  // Rollback after each test\nclass OrderIntegrationTest {\n\n    @Container\n    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(\"postgres:15\")\n        .withDatabaseName(\"testdb\")\n        .withUsername(\"test\")\n        .withPassword(\"test\");\n\n    @DynamicPropertySource\n    static void configureProperties(DynamicPropertyRegistry registry) {\n        registry.add(\"spring.datasource.url\", postgres::getJdbcUrl);\n        registry.add(\"spring.datasource.username\", postgres::getUsername);\n        registry.add(\"spring.datasource.password\", postgres::getPassword);\n    }\n\n    @Autowired\n    private TestRestTemplate restTemplate;  // Automatic with RANDOM_PORT\n\n    @Autowired\n    private UserRepository userRepository;  // For setup/teardown\n\n    @Autowired\n    private OrderRepository orderRepository;\n\n    private User testUser;\n    private String authToken;\n\n    @BeforeEach\n    void setup() {\n        testUser = userRepository.save(User.builder()\n            .email(\"test@example.com\")\n            .password(\"$2a$10$hashhashhash\")  // BCrypt encoded\n            .role(\"USER\")\n            .build());\n        authToken = authenticateAndGetToken(\"test@example.com\", \"password\");\n    }\n\n    @Test\n    void shouldCreateAndRetrieveOrderEndToEnd() {\n        // Create order via HTTP\n        CreateOrderRequest request = CreateOrderRequest.builder()\n            .items(List.of(new OrderItem(\"item-1\", 2, new BigDecimal(\"29.99\"))))\n            .shippingAddress(\"123 Test St\")\n            .build();\n\n        ResponseEntity<OrderResponse> createResponse = restTemplate\n            .withBasicAuth(\"test@example.com\", \"password\")\n            .postForEntity(\"/api/orders\", request, OrderResponse.class);\n\n        assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);\n        Long orderId = createResponse.getBody().getId();\n        assertThat(orderId).isNotNull();\n\n        // Retrieve order via HTTP\n        ResponseEntity<OrderResponse> getResponse = restTemplate\n            .withBasicAuth(\"test@example.com\", \"password\")\n            .getForEntity(\"/api/orders/\" + orderId, OrderResponse.class);\n\n        assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);\n        assertThat(getResponse.getBody().getStatus()).isEqualTo(\"PENDING\");\n    }\n\n    @Test\n    void shouldReturn401WhenNotAuthenticated() {\n        ResponseEntity<String> response = restTemplate\n            .getForEntity(\"/api/orders\", String.class);\n\n        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);\n    }\n}\n```\n\n## WebTestClient (Reactive / Fluent API)\n\n```java\n@SpringBootTest(webEnvironment = RANDOM_PORT)\nclass OrderWebTestClientTest {\n\n    @Autowired\n    private WebTestClient webTestClient;\n\n    @Test\n    void shouldReturnOrders() {\n        webTestClient.get()\n            .uri(\"/api/orders\")\n            .header(\"Authorization\", \"Bearer \" + authToken)\n            .exchange()\n            .expectStatus().isOk()\n            .expectHeader().contentType(MediaType.APPLICATION_JSON)\n            .expectBody()\n            .jsonPath(\"$.content\").isArray()\n            .jsonPath(\"$.totalElements\").isNumber();\n    }\n\n    @Test\n    void shouldHandleHighLoad() {\n        // Test with multiple concurrent requests:\n        Flux.range(1, 10)\n            .flatMap(i -> webTestClient.get().uri(\"/api/orders\").exchange())\n            .blockLast();\n        // No assertion failure = all requests handled successfully\n    }\n}\n```\n\n## Data Setup with @Sql\n\n```java\n@SpringBootTest\n@Sql(scripts = \"/sql/test-data.sql\",   // Load before each test\n     executionPhase = BEFORE_TEST_METHOD)\n@Sql(scripts = \"/sql/cleanup.sql\",     // Cleanup after each test\n     executionPhase = AFTER_TEST_METHOD)\nclass OrderRepositoryIntegrationTest {\n    // test-data.sql inserts known test records\n    // cleanup.sql deletes them\n    // Alternative: @Transactional rollback (simpler)\n}\n```\n\n## Testing Layers in Isolation vs Full Stack\n\n```\nTest Level          | What's Real         | What's Mocked       | Speed\n--------------------|---------------------|---------------------|--------\nUnit                | Class under test    | All collaborators   | Fastest\n@WebMvcTest         | HTTP + Controller   | Services, Repos     | Fast\n@DataJpaTest        | JPA + Repository    | Services, Web       | Medium\n@SpringBootTest     | Everything          | Nothing (ideally)   | Slowest\n\nTest Distribution (ideal pyramid):\n  70% Unit tests\n  20% Controller + Service slice tests\n  10% Full integration tests\n```\n\n## Production Reality\n\nKeep integration tests to a minimum \u2014 5-20 tests per application covering: happy path of critical flows (order creation, payment processing), authentication (403/401 for protected endpoints), cross-component interactions (event publishing \u2192 event handler \u2192 DB update). Use the test pyramid: many unit tests, few integration tests. Integration tests are valuable for catching wiring issues: \"does the whole thing hang together?\" not \"does every edge case work?\" \u2014 that's for unit tests."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P08",
+        "hook": "@SpringBootTest starts the full application context, including all beans.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Don't write integration tests for every business rule.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

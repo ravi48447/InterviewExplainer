@@ -1,0 +1,225 @@
+{
+  "topic": "Kafka Architecture",
+  "topicSlug": "kafka-architecture",
+  "questions": [
+    {
+      "id": "eda-007",
+      "slug": "event-schema-evolution-backward-compatibility",
+      "question": "How do you handle event schema evolution in an event-driven system?",
+      "title": "Event Schema Evolution: Backward and Forward Compatibility",
+      "direct_answer": "Use schema versioning with backward-compatible changes (add optional fields only, never remove or rename required fields). For breaking changes, introduce a new event version alongside the old one and migrate consumers before retiring the old version. Apache Avro with Schema Registry enforces compatibility rules automatically.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand that events are contracts \u2014 changing them can break consumers you don't control or that run independently",
+        "common_mistake": "Removing or renaming event fields without coordinating consumer updates, causing deserialization failures in production",
+        "to_stand_out": "Discuss Avro's schema registry compatibility modes (BACKWARD, FORWARD, FULL), explain the dual-write migration pattern for breaking changes, and mention event versioning strategies"
+      },
+      "company_tags": [
+        "linkedin",
+        "confluent",
+        "netflix",
+        "spotify"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Friday Deploy That Broke Every Consumer You Didn't Know About",
+            "content": "A producer team renames the `customerId` field to `customerRef` in an order event and deploys on Friday. By Saturday morning, three consumer services \u2014 owned by three different teams \u2014 are throwing `DeserializationException` on every message. Consumer lag is growing by thousands per minute. The analytics pipeline hasn't ingested data in 12 hours. The notification service stopped sending order confirmations. Nobody paged on-call because the producer's health checks all pass \u2014 it's publishing successfully.\n\nThis is the schema evolution problem. Events are **public contracts**. Unlike REST APIs where you often control both the client and server, events may have consumers you don't know about \u2014 other teams subscribed to your topic, partner integrations, analytics pipelines built months ago. A field rename that looks like a harmless cleanup is a breaking change that can cascade across organizational boundaries.\n\nThe fundamental rule: **additive changes are safe, destructive changes are breaking**. Adding a new optional field with a default value is backward compatible \u2014 consumers that don't know about it ignore it, consumers that do can use it. Removing a field, renaming a field, or changing a field's type breaks every consumer that depends on the old shape. This isn't about being careful \u2014 it's about having automated guardrails that prevent breaking schemas from reaching production. That's what Schema Registry with compatibility enforcement provides: a build-time gate that rejects schema registrations that would break existing consumers."
+          },
+          {
+            "type": "step",
+            "title": "Safe Changes vs Breaking Changes \u2014 The Rules That Prevent Saturday Outages",
+            "content": "Schema changes fall into two categories, and the boundary between them must be clear to every developer who touches event definitions.\n\n**Safe (backward-compatible) changes** \u2014 consumers with the old schema can still read new messages:\n- Add an optional field with a default value\n- Add a new event type to the topic\n- Widen a numeric type (int \u2192 long)\n\n**Breaking changes** \u2014 consumers with the old schema will fail:\n- Remove a field\n- Rename a field\n- Change a field's type (string \u2192 int)\n- Make an optional field required\n\nThe practical implementation uses Avro with Confluent Schema Registry. Each event schema is registered with the registry, and the registry enforces a configurable compatibility mode per subject.\n\n```java\n// V1 \u2014 original event\npublic record OrderPlacedV1(\n    String orderId,\n    String customerId,\n    BigDecimal total\n) {}\n\n// V2 \u2014 SAFE: added optional field with default\n// Old consumers ignore promoCode, new consumers can use it\npublic record OrderPlacedV2(\n    String orderId,\n    String customerId,\n    BigDecimal total,\n    @Nullable String promoCode  // new, optional\n) {}\n```\n\nSchema Registry in `BACKWARD` compatibility mode rejects any new schema that would break consumers using the previous version. `FORWARD` compatibility protects producers \u2014 old messages must be readable by consumers using the new schema. `FULL` compatibility requires both directions. For most event-driven systems, `BACKWARD` is the right default: new producers should never break existing consumers."
+          },
+          {
+            "type": "step",
+            "title": "The Dual-Write Migration \u2014 When Breaking Changes Are Unavoidable",
+            "content": "Sometimes a breaking change is genuinely necessary. The `customerId` string needs to become a structured `Customer` object with ID, name, and email. No amount of optional field additions bridges this gap. The dual-write migration pattern handles this safely.\n\nThe approach has five phases: (1) Create the new event type or topic alongside the old one. (2) Update the producer to publish both old and new formats simultaneously. (3) Migrate consumers one by one to the new format, verifying each in staging. (4) Confirm all consumers have migrated \u2014 monitor that no consumer group is reading the old format. (5) Stop publishing the old format.\n\n```java\n@Service\npublic class OrderEventPublisher {\n\n    public void publishOrderPlaced(Order order) {\n        // Phase 2: dual-write \u2014 publish both formats\n        kafka.send(\"order-events\",\n            new OrderPlacedV2(order.getId(),\n                order.getCustomerId(), order.getTotal(), order.getPromoCode()));\n\n        kafka.send(\"order-events-v3\",\n            new OrderPlacedV3(order.getId(),\n                new Customer(order.getCustomerId(), order.getName(),\n                    order.getEmail()),\n                Money.of(order.getTotal(), order.getCurrency())));\n    }\n}\n```\n\nThe dual-write phase is the riskiest \u2014 you're maintaining two publishing paths and must ensure they stay consistent. Keep this phase as short as possible. Track migration progress by monitoring consumer group offsets on both topics. When the old topic shows zero active consumer groups, it's safe to stop publishing.\n\nAutomate schema registration in CI/CD rather than registering manually. The `kafka-schema-registry-maven-plugin` tests compatibility during the build phase, so a breaking change fails the pipeline before reaching production. This shifts schema enforcement from runtime deserialization failures to build-time validation \u2014 you find out in CI, not at 2 AM."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Additive changes are safe, destructive changes break consumers** \u2014 adding an optional field is backward compatible.\n- **Schema Registry in BACKWARD mode** \u2014 rejects registrations that would break consumers reading with the previous version.\n- **Dual-write migration for breaking changes** \u2014 publish old and new formats simultaneously until all consumer groups have migrated.\n- **CI/CD schema validation** \u2014 the `kafka-schema-registry-maven-plugin` tests compatibility during build.\n- **Avro/Protobuf over JSON for high-volume topics** \u2014 generated serializers catch mismatches at compile time; payloads are 5\u201310\u00d7 smaller than JSON."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Events are public contracts \u2014 once published, consumers depend on their schema. The dangerous part is that you may not even know all your consumers. Another team subscribed to your topic six months ago, and your field rename just broke their pipeline without warning.\n\n**The safe evolution rule:**\n- Additive changes are backward compatible \u2014 adding an optional field with a default value is always safe because consumers that don't know about it simply ignore it\n- Removing a field, renaming a field, or changing its type breaks every consumer that depends on the old shape \u2014 these are breaking changes that require a migration strategy\n- The safest constraint: treat your event schema with the same discipline as a public REST API\n\n**Schema Registry enforcement:**\n- Apache Avro with Confluent Schema Registry is the production standard \u2014 the registry stores every schema version and enforces compatibility modes\n- BACKWARD mode means no new schema can break existing consumers; the registry rejects incompatible registrations at schema registration time, not at 2 AM when deserialization starts failing\n- Avro and Protobuf payloads are 5\u201310\u00d7 smaller than JSON, and generated serializers catch mismatches at compile time\n\n**Handling unavoidable breaking changes:**\n- The dual-write migration: publish the event in both old and new format simultaneously; migrate consumers one at a time, verifying each in staging\n- Once you confirm no consumer groups are reading the old format \u2014 monitor consumer group offsets \u2014 stop publishing the old version\n- Automate schema registration in CI/CD so breaking changes fail the build pipeline, not production at 2 AM\n\nI recommend automating schema compatibility validation in CI as the single highest-leverage improvement for schema management \u2014 shifting from runtime deserialization failures to build-time validation catches breaking changes before they reach any environment."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between BACKWARD and FORWARD compatibility in Avro Schema Registry?",
+        "How would you migrate all consumers from OrderPlacedV1 to OrderPlacedV2 safely?",
+        "What are the trade-offs of using JSON vs Avro vs Protobuf for event serialization?"
+      ],
+      "seo": {
+        "metaTitle": "Event Schema Evolution Backward Compatibility Avro | InterviewExplainer",
+        "metaDescription": "Handle event schema evolution in Java microservices. Backward compatible changes, breaking change migration, Avro Schema Registry, and versioning strategies."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Events are public contracts \u2014 once published, consumers depend on their schema.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A producer team renames the customerId field to customerRef in an order event and deploys on Friday. By Saturday morning, three consumer services \u2014 owned by three different teams \u2014 are throwing DeserializationException on every message. Consumer lag is growing by thousands per minute. The analytics pipeline hasn't ingested data in 12 hours. The notification service stopped sending order confirmations. Nobody paged on-call because the producer's health checks all pass \u2014 it's publishing successfully. This is the schema evolution problem. Events are public contracts. Unlike REST APIs where you often."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Schema changes fall into two categories, and the boundary between them must be clear to every developer who touches event definitions.",
+              "Safe (backward-compatible) changes \u2014 consumers with the old schema can still read new messages: Add an optional field with a default value Add a new event type to the topic Widen a numeric type (int \u2192 long) Breaking changes \u2014 consumers with the old schema will fail: Remove a field Rename a field Change a field's type (string \u2192 int) Make an optional field required The practical implementation uses Avro with Confluent Schema Registry.",
+              "Each event schema is registered with the registry, and the registry enforces a configurable compatibility mode per subject.",
+              "``java // V1 \u2014 original event public record OrderPlacedV1( String orderId, String customerId, BigDecimal total ) {} // V2 \u2014 SAFE: added optional field with default //."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Additive changes are safe, destructive changes break consumers \u2014 adding an optional field is backward compatible",
+              "Schema Registry in BACKWARD mode \u2014 rejects registrations that would break consumers reading with the previous version",
+              "Dual-write migration for breaking changes \u2014 publish old and new formats simultaneously until all consumer groups have migrated",
+              "CI/CD schema validation \u2014 the kafka-schema-registry-maven-plugin tests compatibility during build",
+              "Avro/Protobuf over JSON for high-volume topics \u2014 generated serializers catch mismatches at compile time; payloads are 5\u201310\u00d7 smaller than JSON"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Removing or renaming event fields without coordinating consumer updates, causing deserialization failures in production"
+          }
+        ],
+        "cap": "The safe evolution rule: Additive changes are backward compatible \u2014 adding an optional field with a default value is always safe because consumers that don't know about it simply ignore it Removing a",
+        "familiarity_anchors": [
+          "Apache",
+          "Schema",
+          "Registry"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between BACKWARD and FORWARD compatibility in Avro Schema Registry?",
+          "How would you migrate all consumers from OrderPlacedV1 to OrderPlacedV2 safely?",
+          "What are the trade-offs of using JSON vs Avro vs Protobuf for event serialization?"
+        ]
+      }
+    },
+    {
+      "id": "sk-008",
+      "slug": "embedded-kafka-testing-spring-boot",
+      "question": "How do you write integration tests for Spring Kafka consumers and producers?",
+      "title": "Kafka Integration Testing with @EmbeddedKafka",
+      "direct_answer": "@EmbeddedKafka starts an in-memory Kafka broker for tests. Use EmbeddedKafkaBroker to configure test topics, KafkaTemplate to produce test messages, and Consumer.poll() or a test listener with CountDownLatch to verify consumption.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Practical ability to write Kafka integration tests without external dependencies",
+        "common_mistake": "Using Thread.sleep() to wait for message consumption \u2014 use CountDownLatch or Awaitility instead",
+        "to_stand_out": "Mention testing error handling paths and DLT routing, not just happy path"
+      },
+      "company_tags": [
+        "Confluent",
+        "Pivotal",
+        "Zalando",
+        "Thoughtworks"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@EmbeddedKafka Starts a Real Kafka Broker in the Test JVM \u2014 No Docker, No External Dependencies",
+            "content": "Testing Kafka consumers and producers requires a running Kafka broker. **`@EmbeddedKafka`** starts an in-memory Kafka broker inside the test JVM \u2014 real Kafka, not a mock. Your producer sends real messages, your consumer receives them through the actual Kafka protocol. This catches serialization issues, partition behavior, and consumer group mechanics that mocks would miss.\n\nAdd `spring-kafka-test` dependency and annotate the test class with `@EmbeddedKafka(partitions = 3, topics = {\"test-orders\"})`. Spring Boot auto-configures the embedded broker and sets `spring.kafka.bootstrap-servers` to the embedded broker's address.\n\nThe challenge with Kafka tests is **asynchronicity.** The producer sends a message, but the consumer processes it on a separate thread. You can't assert immediately after sending. Use **`ConsumerRecord` assertions with timeouts** \u2014 `KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10))` polls until records arrive or the timeout expires. For listener-based tests, use `CountDownLatch` or `Awaitility` to wait for the listener to process the message."
+          },
+          {
+            "type": "step",
+            "title": "Testing Producers, Consumers, and Error Handling Scenarios",
+            "content": "**Producer tests** send a message with `KafkaTemplate` and verify it arrives using a test consumer created from `ConsumerFactory`. Assert on the record's key, value, headers, and partition. This validates serialization configuration and partition routing.\n\n**Consumer tests** produce a message using `KafkaTemplate` or a test producer and assert that the `@KafkaListener` method processed it. Inject a `CountDownLatch` into the listener and `await()` in the test. This validates deserialization, consumer group assignment, and listener logic.\n\n**Error handling tests** verify that failed messages reach the DLT. Send a message that causes the listener to throw, wait for retries to exhaust, and assert that a record appears on the DLT topic. This validates the entire error-handling pipeline: retry, backoff, and recovery.\n\nFor **unique topic names per test**, append `@DynamicPropertySource` or use `UUID.randomUUID()` in topic names. Shared topics between test methods cause interference \u2014 one test consumes another test's messages, leading to flaky tests."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@EmbeddedKafka` starts a **real Kafka broker inside the test JVM** \u2014 no Docker, no external infrastructure. Your producer and consumer use the actual Kafka protocol, catching serialization and partition issues that mocks miss.\n\nThe main challenge is asynchronicity. The producer sends on one thread, the consumer processes on another. **Use `CountDownLatch` or `Awaitility`** to wait for the listener to process the message.\n\nFor producer tests: send with `KafkaTemplate`, consume with a test consumer, assert on key/value/partition.\n\nFor consumer tests: produce a test message, wait for the `@KafkaListener` to process it via `CountDownLatch`.\n\nFor error handling tests: send a message that causes failure, verify it reaches the DLT after retries.\n\nUse unique topic names per test to prevent interference \u2014 shared topics cause flaky tests.\n\nIn practice, I use `@EmbeddedKafka` for integration tests and Testcontainers with a real Kafka container for more realistic end-to-end tests."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **@EmbeddedKafka starts a real Kafka broker in the test JVM** \u2014 not a mock; tests real serialization, partition assignment, and consumer group behavior; requires `spring-kafka-test` dependency.\n- **Kafka tests are asynchronous** \u2014 producer and consumer run on different threads; use `CountDownLatch`, `Awaitility`, or `KafkaTestUtils.getRecords()` with timeouts to wait for processing.\n- **Unique topic names per test prevent interference** \u2014 shared topics between test methods cause one test to consume another's messages; append UUID or use `@DynamicPropertySource` for isolation.\n- **Error handling tests verify the full retry-to-DLT pipeline** \u2014 send a failing message, wait for retry exhaustion, assert a record appears on the Dead Letter Topic with the original payload.\n- **Testcontainers provides more realistic Kafka testing** \u2014 runs a real Kafka Docker container; slower startup but matches production behavior more closely than embedded broker."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test Kafka transactional producers with @EmbeddedKafka?",
+        "What is the difference between @EmbeddedKafka and Testcontainers for Kafka testing?",
+        "How do you verify message headers in Kafka integration tests?"
+      ],
+      "seo": {
+        "metaTitle": "@EmbeddedKafka Integration Testing Spring Boot \u2014 Java Interview",
+        "metaDescription": "Kafka integration testing with @EmbeddedKafka in Spring Boot. CountDownLatch, Awaitility, DLT testing, and consumer test patterns."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "@EmbeddedKafka starts a real Kafka broker inside the test JVM \u2014 no Docker, no external infrastructure.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Testing Kafka consumers and producers requires a running Kafka broker. @EmbeddedKafka starts an in-memory Kafka broker inside the test JVM \u2014 real Kafka, not a mock. Your producer sends real messages, your consumer receives them through the actual Kafka protocol. This catches serialization issues, partition behavior, and consumer group mechanics that mocks would miss. Add spring-kafka-test dependency and annotate the test class with @EmbeddedKafka(partitions = 3, topics = {\"test-orders\"}). Spring Boot auto-configures the embedded broker and sets spring.kafka.bootstrap-servers to the embedded broker's address. The challenge with Kafka tests is asynchronicity."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Producer tests send a message with KafkaTemplate and verify it arrives using a test consumer created from ConsumerFactory.",
+              "Assert on the record's key, value, headers, and partition.",
+              "This validates serialization configuration and partition routing.",
+              "Consumer tests produce a message using KafkaTemplate or a test producer and assert that the @KafkaListener method processed it.",
+              "Inject a CountDownLatch into the listener and await() in the test.",
+              "This validates deserialization, consumer group assignment, and listener logic."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@EmbeddedKafka starts a real Kafka broker in the test JVM \u2014 not a mock; tests real serialization, partition assignment, and consumer group behavior; requires spring-kafka-test dependency",
+              "Kafka tests are asynchronous \u2014 producer and consumer run on different threads; use CountDownLatch, Awaitility, or KafkaTestUtils",
+              "getRecords() with timeouts to wait for processing",
+              "Unique topic names per test prevent interference \u2014 shared topics between test methods cause one test to consume another's messages; append UUID or use @DynamicPropertySource for isolation",
+              "Error handling tests verify the full retry-to-DLT pipeline \u2014 send a failing message, wait for retry exhaustion, assert a record appears on the Dead Letter Topic with the original payload"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using Thread.sleep() to wait for message consumption \u2014 use CountDownLatch or Awaitility instead"
+          }
+        ],
+        "cap": "In practice, I use @EmbeddedKafka for integration tests and Testcontainers with a real Kafka container for more realistic end-to-end tests.",
+        "familiarity_anchors": [
+          "EmbeddedKafka",
+          "Kafka",
+          "EmbeddedKafkaBroker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test Kafka transactional producers with @EmbeddedKafka?",
+          "What is the difference between @EmbeddedKafka and Testcontainers for Kafka testing?",
+          "How do you verify message headers in Kafka integration tests?"
+        ]
+      }
+    }
+  ]
+}

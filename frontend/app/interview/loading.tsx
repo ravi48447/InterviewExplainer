@@ -1,0 +1,18 @@
+export default function InterviewLoading() {
+  return (
+    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 p-6 animate-pulse">
+      <div className="flex w-full min-w-0 gap-6">
+        <div className="hidden lg:block w-[280px] shrink-0 space-y-4">
+          <div className="h-40 bg-background/60 rounded-xl border border-border" />
+          <div className="h-32 bg-background/60 rounded-xl border border-border" />
+        </div>
+        <div className="flex-1 space-y-4">
+          <div className="h-44 bg-background/60 rounded-xl border border-border" />
+          <div className="h-24 bg-background/60 rounded-xl border border-border" />
+          <div className="h-24 bg-background/60 rounded-xl border border-border" />
+          <div className="h-24 bg-background/60 rounded-xl border border-border" />
+        </div>
+      </div>
+    </div>
+  );
+}

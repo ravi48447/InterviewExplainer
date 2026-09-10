@@ -1,0 +1,340 @@
+{
+  "topic": "Indexes And Performance",
+  "topicSlug": "indexes-and-performance",
+  "questions": [
+    {
+      "id": "dd-003",
+      "slug": "database-indexes-types",
+      "question": "How do database indexes work and what types exist?",
+      "title": "Database Indexes: How They Work and What Types Exist",
+      "direct_answer": "A database index is a separate data structure that maps column values to row locations, allowing the database to find rows without scanning the entire table. The most common type is the B-tree index, which supports equality and range queries. Other types include hash indexes (equality only), bitmap indexes (low-cardinality columns), and GiST/GIN indexes for full-text and JSON search.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand the internal mechanics of indexes well enough to decide when to add them, when not to, and what the write penalty is.",
+        "common_mistake": "Adding indexes on every column just in case. Each index slows down inserts and updates because the index structure must be maintained. Index bloat is a real operational problem.",
+        "to_stand_out": "Discuss covering indexes (index-only scans), composite index column ordering, and partial indexes for filtering a subset of rows."
+      },
+      "company_tags": [
+        "Google",
+        "Amazon",
+        "Shopify",
+        "LinkedIn"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "content": "Without an index, the database performs a sequential scan -- reading every row to find matches. An index is a sorted auxiliary structure (usually a B-tree) that stores column values alongside pointers to heap rows. The database traverses the tree in O(log n) to find matching values, then follows the pointer to the actual row. Indexes trade write overhead and storage for faster reads.",
+            "title": "Overview"
+          },
+          {
+            "type": "code_example",
+            "language": "java",
+            "content": "-- B-tree index: supports =, <, >, BETWEEN, LIKE 'prefix%'\nCREATE INDEX idx_orders_customer ON orders(customer_id);\n\n-- Composite index: column order matters\n-- Good for WHERE customer_id = ? AND status = ?\n-- Also usable for WHERE customer_id = ? alone (leading column)\n-- NOT usable for WHERE status = ? alone\nCREATE INDEX idx_orders_customer_status ON orders(customer_id, status);\n\n-- Covering index: avoids heap fetch entirely\n-- Query: SELECT status, total FROM orders WHERE customer_id = ?\nCREATE INDEX idx_orders_covering ON orders(customer_id) INCLUDE (status, total);\n\n-- Partial index: only indexes rows matching a condition\nCREATE INDEX idx_active_orders ON orders(customer_id)\nWHERE status = 'ACTIVE';\n\n-- Hash index: equality-only, faster for = but no range support\nCREATE INDEX idx_session_token ON sessions USING HASH (token);\n\n-- GIN index: for full-text search and JSONB\nCREATE INDEX idx_products_tags ON products USING GIN (tags);\n\n// JPA: declare indexes on the @Table annotation\n@Entity\n@Table(name = \"orders\",\n    indexes = {\n        @Index(name = \"idx_orders_customer_status\",\n               columnList = \"customer_id, status\")\n    })\npublic class Order {\n    @Id private Long id;\n    private Long customerId;\n    private String status;\n    private BigDecimal total;\n}",
+            "title": "Code Example"
+          },
+          {
+            "type": "step",
+            "title": "Index Maintenance and Monitoring in Production",
+            "content": "Creating the right indexes is only half the job \u2014 monitoring and maintaining them in production is what separates a well-tuned database from one that degrades over months. Three operational practices are essential.\n\nFirst, validate indexes with `EXPLAIN (ANALYZE, BUFFERS)` before and after creating them. The BUFFERS option shows how many pages were read from the buffer cache versus disk, revealing whether the index actually reduces I/O. Watch for index scans that still read thousands of heap pages \u2014 this indicates low selectivity or a missing covering index. In production, use `pg_stat_user_indexes` to find unused indexes: any index with `idx_scan = 0` after several weeks of production traffic is costing write overhead without providing read benefit and should be dropped.\n\nSecond, manage index bloat. PostgreSQL's MVCC architecture means that UPDATE and DELETE operations leave dead tuples in both tables and indexes. Over time, indexes grow larger than necessary, consuming memory and slowing scans. Monitor bloat using the `pgstattuple` extension or community queries that estimate dead tuple ratios. When bloat exceeds 30-40%, run `REINDEX CONCURRENTLY` to rebuild the index without locking the table. Schedule this during low-traffic windows as it temporarily doubles the index's disk usage.\n\nThird, use `pg_stat_statements` to identify slow queries that need new indexes. This extension records execution statistics for every distinct query pattern, including mean and max execution time, rows returned, and block I/O. Sort by `total_exec_time` to find the queries consuming the most cumulative database time \u2014 these are your highest-ROI optimization targets. A single composite index on the right columns can turn a 200ms query scanning 500,000 rows into a 2ms index lookup returning 50 rows.\n\nFor JPA applications, enable Hibernate's slow query log (`hibernate.session.events.log.LOG_QUERIES_SLOWER_THAN_MS`) to surface queries that exceed a threshold directly in application logs, linking them to the code path that generated them."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Composite left-prefix rule** \u2014 an index on `(customer_id, status)` cannot serve `WHERE status = ?` alone; the leading column must appear in the filter, or the planner ignores the index entirely\n- **Covering index = index-only scan** \u2014 all selected columns are in the index, so the database never reads the heap; the highest-impact optimization for read-heavy hot paths\n- **Partial index targets filtered subsets** \u2014 `WHERE deleted_at IS NULL` keeps the index small and aligned with live-row queries; indexing soft-deleted rows wastes space and write budget\n- **Hash index: equality only, no ranges** \u2014 O(1) lookup for `=` but useless for `BETWEEN`, `LIKE`, or `ORDER BY`; PostgreSQL supports it; MySQL InnoDB does not\n- **Every index is a write tax** \u2014 inserts and updates must maintain the structure; validate with `EXPLAIN ANALYZE` before adding and monitor bloat on write-heavy tables"
+          },
+          {
+            "type": "speakable_answer",
+            "content": "You've seen that indexes make queries faster \u2014 the more useful question is why some indexes are used and others are ignored, and why adding too many actually hurts performance.\n\n**B-tree \u2014 the default for almost everything**\n- A B-tree index keeps values in sorted order across balanced tree nodes, which means it handles equality (`=`), ranges (`BETWEEN`, `>`, `<`), prefix matching (`LIKE 'foo%'`), and `ORDER BY` all from one structure \u2014 O(log n) traversal instead of a full table scan\n- This is what PostgreSQL and MySQL InnoDB create when you run `CREATE INDEX` without specifying a type\n\n**Composite indexes \u2014 column order is the critical decision**\n- An index on `(customer_id, status)` sorts first by `customer_id`, then by `status` within each customer \u2014 which means it serves `WHERE customer_id = ?` or `WHERE customer_id = ? AND status = ?`, but not `WHERE status = ?` alone, because status has no starting sort position without customer_id\n- Put the most selective equality column first; range columns at the end\n\n**Covering indexes \u2014 zero heap fetches**\n- When the index contains every column a query needs, the database answers it entirely from the index without touching the table \u2014 called an index-only scan, which eliminates the most expensive I/O step for hot read queries\n- Add non-key columns with `INCLUDE (col)` in PostgreSQL to make any index covering without affecting the sort key\n\n**Partial indexes \u2014 index only the rows you actually query**\n- A partial index carries a WHERE clause \u2014 `CREATE INDEX ON orders(user_id) WHERE deleted_at IS NULL` \u2014 which means it only indexes active rows, so it stays small and precisely aligned with the query pattern instead of growing with every soft-deleted record\n\nEvery index is a write tax \u2014 inserts and updates must maintain every index on the table. Run `EXPLAIN ANALYZE` before and after; never add an index without confirming it changes the plan.",
+            "title": "How to Answer in an Interview"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is an index-only scan and when does it apply?",
+        "How does a composite index differ from two separate single-column indexes?",
+        "What happens to indexes during bulk inserts and how do you optimize that?"
+      ],
+      "seo": {
+        "metaTitle": "How Database Indexes Work -- Types and Java Examples | Interview Prep",
+        "metaDescription": "Learn how B-tree, hash, composite, and covering database indexes work with Java and SQL examples. Essential for Java backend interviews."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "You've seen that indexes make queries faster \u2014 the more useful question is why some indexes are used and others are ignored, and why adding too many actually hurts performance.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Without an index, the database performs a sequential scan -- reading every row to find matches. An index is a sorted auxiliary structure (usually a B-tree) that stores column values alongside pointers to heap rows. The database traverses the tree in O(log n) to find matching values, then follows the pointer to the actual row. Indexes trade write overhead and storage for faster reads."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Creating the right indexes is only half the job \u2014 monitoring and maintaining them in production is what separates a well-tuned database from one that degrades over months.",
+              "Three operational practices are essential.",
+              "First, validate indexes with EXPLAIN (ANALYZE, BUFFERS) before and after creating them.",
+              "The BUFFERS option shows how many pages were read from the buffer cache versus disk, revealing whether the index actually reduces I/O.",
+              "Watch for index scans that still read thousands of heap pages \u2014 this indicates low selectivity or a missing covering index.",
+              "In production, use pg_stat_user_indexes to find unused indexes: any index with idx_scan = 0 after several weeks of production traffic is costing write overhead without providing read benefit and should be dropped."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Composite left-prefix rule \u2014 an index on (customer_id, status) cannot serve WHERE status = ? alone; the leading column must appear in the filter, or the planner ignores the index entirely Covering index = index-only scan \u2014 all selected columns are in the index, so the database never reads the heap; the highest-impact optimization for read-heavy hot paths Partial index targets filtered subsets \u2014 WHERE deleted_at IS NULL keeps the index small and aligned with live-row queries; indexing soft-deleted rows wastes space and write budget Hash index: equality only, no ranges \u2014 O(1) lookup for = but useless for BETWEEN, LIKE, or ORDER BY; PostgreSQL supports it; MySQL InnoDB does not Every index is a write tax \u2014 inserts and updates must maintain the structure; validate with EXPLAIN ANALYZE before adding and monitor bloat on write-heavy tables"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Adding indexes on every column just in case. Each index slows down inserts and updates because the index structure must be maintained. Index bloat is a real operational problem."
+          }
+        ],
+        "cap": "Run EXPLAIN ANALYZE before and after; never add an index without confirming it changes the plan.",
+        "familiarity_anchors": [
+          "Other"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is an index-only scan and when does it apply?",
+          "How does a composite index differ from two separate single-column indexes?",
+          "What happens to indexes during bulk inserts and how do you optimize that?"
+        ]
+      }
+    },
+    {
+      "id": "sql-indexes",
+      "slug": "database-indexes-btree-hash",
+      "question": "Database Indexes \u2014 B-Tree, Hash, Composite, and Covering Indexes",
+      "title": "Database Indexes \u2014 B-Tree, Hash, Composite, and Covering Indexes",
+      "direct_answer": "A database index is an auxiliary data structure \u2014 separate from the table \u2014 that maps column values to row locations for fast lookups. B-Tree indexes store values in a balanced tree supporting equality and range queries in O(log n). Hash indexes map values through a hash function for O(1) equality lookups but cannot handle ranges. Composite indexes cover multiple columns with a strict left-prefix rule. Covering indexes include all columns a query needs, enabling index-only scans that skip the heap entirely.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether you understand the internal structure of each index type well enough to predict when the planner will use it, ignore it, or choose a sequential scan instead.",
+        "common_mistake": "Creating a composite index on (a, b, c) and expecting it to accelerate queries filtering only on b or c \u2014 the left-prefix rule means only queries starting with column a can use it.",
+        "to_stand_out": "Explain covering indexes and index-only scans \u2014 when all required columns are in the index, the database never touches the heap, eliminating random I/O entirely."
+      },
+      "company_tags": [
+        "Google",
+        "Amazon",
+        "Shopify",
+        "LinkedIn"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "An Index Is a Trade \u2014 Faster Reads for Slower Writes and More Storage",
+            "content": "Most developers think of indexes as \"making queries faster.\" That\u2019s the effect, but understanding **why** requires knowing the data structure inside the index and what happens when the planner decides it\u2019s cheaper to ignore it.\n\nWithout an index, the database performs a **sequential scan** \u2014 reading every row from the first page to the last. For a 10-million-row table, that means reading potentially hundreds of thousands of 8KB pages from disk. An index provides a shortcut: a separate, sorted structure that maps column values to the physical locations of matching rows. The database traverses this structure in O(log n) and jumps directly to the relevant pages.\n\nBut indexes are not free. Every INSERT updates every index on the table. Every UPDATE that changes an indexed column updates those indexes. Indexes consume disk space and compete for buffer cache memory. And the planner may **ignore your index entirely** if the query matches too many rows \u2014 because thousands of random heap fetches through an index are slower than one sequential scan. Understanding when an index helps and when it hurts is the actual skill."
+          },
+          {
+            "type": "phase",
+            "title": "B-Tree \u2014 The Balanced Tree That Handles Everything Except Full-Text Search",
+            "content": "A B-tree index stores keys in a balanced tree structure where each internal node contains sorted key values and pointers to child nodes. Leaf nodes hold the indexed values and **ctids** (row pointers) that tell the database exactly which heap page and offset contains the matching row. With a typical branching factor of ~200, a table with 10 million rows needs only **4 levels** of traversal to find any value \u2014 4 page reads versus scanning all 10 million rows.\n\nB-tree supports these operations efficiently:\n\n```sql\n-- Equality: direct tree traversal\nWHERE status = 'active'\n\n-- Range: walk the leaf nodes left-to-right\nWHERE created_at > '2024-01-01'\n\n-- Prefix: same as range on the prefix portion\nWHERE name LIKE 'John%'\n\n-- ORDER BY: leaves are already sorted, no extra sort needed\nORDER BY created_at DESC\n```\n\nWhat B-tree **cannot** do efficiently: infix patterns like `LIKE '%john%'` (the tree is sorted by prefix, not substring), IS NOT NULL on a column where 99% of values are non-null (too many matches \u2014 sequential scan wins), or equality on extremely low-cardinality columns like `gender` with only 2\u20133 distinct values. For these, the planner correctly ignores the index."
+          },
+          {
+            "type": "phase",
+            "title": "The Left-Prefix Rule \u2014 Why Column Order in Composite Indexes Is Make-or-Break",
+            "content": "A composite index on `(customer_id, status, created_at)` is stored as a single B-tree where the sort key is the concatenation of all three columns, in order. The tree is sorted by `customer_id` first, then by `status` within each customer_id group, then by `created_at` within each customer_id + status group.\n\nThis means the index only helps queries that filter on columns starting from the **left**:\n\n```sql\n-- Uses the index (starts from the leftmost column)\nWHERE customer_id = 42\nWHERE customer_id = 42 AND status = 'active'\nWHERE customer_id = 42 AND status = 'active' AND created_at > '2024-01-01'\n\n-- CANNOT use the index (skips customer_id)\nWHERE status = 'active'\nWHERE created_at > '2024-01-01'\n\n-- Partial use: customer_id filter uses the index, but created_at\n-- requires scanning all statuses for that customer\nWHERE customer_id = 42 AND created_at > '2024-01-01'\n```\n\nThe practical rule: **put the most selective equality column first, range columns last.** If 90% of queries filter by `customer_id` and then by date range, the index should be `(customer_id, created_at)`, not `(created_at, customer_id)`. Getting this order wrong means the planner ignores your carefully created index and falls back to a sequential scan."
+          },
+          {
+            "type": "phase",
+            "title": "Covering Indexes and Index-Only Scans \u2014 Eliminating the Heap Fetch Entirely",
+            "content": "A regular index lookup has two phases: traverse the index to find matching entries, then follow each entry\u2019s ctid to fetch the full row from the **heap** (the actual table). That heap fetch is random I/O \u2014 jumping to scattered pages on disk \u2014 and often dominates the query cost when many rows match.\n\nA covering index eliminates this by storing additional columns directly in the index via the `INCLUDE` clause. When every column the query needs is already in the index, the planner performs an **index-only scan** and never touches the heap at all.\n\n```sql\n-- Regular index: must fetch 'total' from the heap for each match\nCREATE INDEX idx_orders_customer ON orders(customer_id);\n-- Plan: Index Scan + Heap Fetch (random I/O per row)\n\n-- Covering index: 'total' and 'status' stored in the index\nCREATE INDEX idx_orders_covering ON orders(customer_id) INCLUDE (total, status);\n-- Plan: Index Only Scan (zero heap fetches)\n```\n\nThe trade-off: covering indexes are larger because they store extra column data, consuming more disk and buffer cache. Use them only on **hot query paths** where `EXPLAIN (ANALYZE, BUFFERS)` confirms significant heap fetches. The `INCLUDE` columns are not part of the sort key \u2014 they\u2019re stored in leaf nodes alongside the ctid. This means they don\u2019t help with filtering or sorting, only with avoiding the heap read.\n\n**Hash indexes** provide O(1) equality lookups but support nothing else \u2014 no ranges, no sorting, no prefix matching. PostgreSQL hash indexes were crash-unsafe until version 10 and are still rarely used because B-tree handles equality almost as fast while supporting everything else. Reserve hash indexes for columns queried exclusively with `=` where values are large strings and hashing is measurably cheaper than B-tree comparison."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **B-tree handles equality, ranges, ORDER BY \u2014 hash handles equality only** \u2014 B-tree is the correct default; hash is marginally faster for pure `=` but useless for any range or ordering access pattern\n- **Composite left-prefix rule** \u2014 `(a, b, c)` cannot serve `WHERE b = ?` alone; the leading column must appear in the filter, or the planner falls back to a full scan\n- **Covering index = index-only scan** \u2014 all selected columns in the index; database never touches the heap; highest-impact read optimization for hot query paths\n- **Expression indexes require matching expressions** \u2014 `CREATE INDEX ON users(LOWER(email))` is needed for case-insensitive lookups; a plain `email` index won't be used for `WHERE LOWER(email) = ?`\n- **Indexes slow down writes** \u2014 every insert and update must maintain all indexes on the table; validate with `EXPLAIN ANALYZE` that an index actually improves the plan before adding it to a write-heavy table"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Indexes speed up queries \u2014 but the deeper question is why some indexes accelerate certain queries and are completely ignored for others. The answer lies in the data structure the index uses.\n\n**B-tree \u2014 sorted, versatile, the default**\n- A B-tree keeps column values in sorted order across balanced tree nodes \u2014 which means it can answer equality (`= ?`), ranges (`BETWEEN`, `>`, `<`), prefix lookups (`LIKE 'foo%'`), and `ORDER BY` all from the same structure, in O(log n) time\n- PostgreSQL and MySQL InnoDB use B-tree when you run `CREATE INDEX` without specifying a type; it handles the vast majority of query patterns in production\n\n**Hash index \u2014 equality only, nothing else**\n- A hash index maps each key to a bucket via a hash function \u2014 which means `WHERE email = 'alice@example.com'` is an O(1) lookup, faster than B-tree's O(log n), but completely useless for ranges, ordering, or prefix matching\n- PostgreSQL supports hash indexes; MySQL InnoDB does not; they're useful only for very specific equality-heavy workloads\n\n**Composite indexes \u2014 column order is the decision**\n- An index on `(customer_id, status)` stores rows sorted first by `customer_id`, then by `status` within each customer \u2014 which means it serves `WHERE customer_id = ?` or both columns together, but not `WHERE status = ?` alone because status has no independent sort position in the index\n- Put the most selective equality column first; range columns last\n\n**Covering indexes \u2014 eliminate heap fetches entirely**\n- When the index contains every column a query selects, the database answers it from the index without reading the table \u2014 called an index-only scan, which removes the most expensive I/O step for read-heavy queries\n- In PostgreSQL: `CREATE INDEX ... INCLUDE (col1, col2)` adds columns to the index leaf pages without affecting the sort key"
+          }
+        ]
+      },
+      "followup_questions": [
+        "When would the query planner choose a sequential scan over using an available index?",
+        "How do you decide the column order in a composite index?",
+        "What is the difference between INCLUDE columns and regular index columns?"
+      ],
+      "seo": {
+        "metaTitle": "Database Indexes \u2014 B-Tree, Hash, Composite, Covering | Interview Guide",
+        "metaDescription": "Understand how B-Tree, hash, composite, and covering indexes work internally. Covers the left-prefix rule, index-only scans, and when planners ignore indexes."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Indexes speed up queries \u2014 but the deeper question is why some indexes accelerate certain queries and are completely ignored for others.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most developers think of indexes as \"making queries faster.\" That\u2019s the effect, but understanding why requires knowing the data structure inside the index and what happens when the planner decides it\u2019s cheaper to ignore it. Without an index, the database performs a sequential scan \u2014 reading every row from the first page to the last. For a 10-million-row table, that means reading potentially hundreds of thousands of 8KB pages from disk. An index provides a shortcut: a separate, sorted structure."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the internal structure of each index type well enough to predict when the planner will use it, ignore it, or choose a sequential scan instead."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "B-tree handles equality, ranges, ORDER BY \u2014 hash handles equality only \u2014 B-tree is the correct default; hash is marginally faster for pure = but useless for any range or ordering access pattern Composite left-prefix rule \u2014 (a, b, c) cannot serve WHERE b = ? alone; the leading column must appear in the filter, or the planner falls back to a full scan Covering index = index-only scan \u2014 all selected columns in the index; database never touches the heap; highest-impact read optimization for hot query paths Expression indexes require matching expressions \u2014 CREATE INDEX ON users(LOWER(email)) is needed for case-insensitive lookups; a plain email index won't be used for WHERE LOWER(email) = ? Indexes slow down writes \u2014 every insert and update must maintain all indexes on the table; validate with EXPLAIN ANALYZE that an index actually improves the plan before adding it to a write-heavy table"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most developers think of indexes as \"making queries faster.\" That\u2019s the effect, but understanding why requires knowing the data structure inside the index and what happens when the planner decides it\u2019s cheaper to ignore it. Without an index, the database performs a sequential scan \u2014 reading every row from the first page to the last. For a 10-million-row table, that means reading potentially hundreds of thousands of 8KB pages from disk. An index provides a shortcut: a separate, sorted structure that maps column values to the physical locations of matching rows. The database traverses this structure in O(log n) and jumps directly to the relevant pages. But indexes are not free. Every INSERT updates every index on the table. Every."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Creating a composite index on (a, b, c) and expecting it to accelerate queries filtering only on b or c \u2014 the left-prefix rule means only queries starting with column a can use it"
+            ]
+          }
+        ],
+        "cap": "INCLUDE (col1, col2) adds columns to the index leaf pages without affecting the sort key",
+        "familiarity_anchors": [
+          "Composite",
+          "Covering"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When would the query planner choose a sequential scan over using an available index?",
+          "How do you decide the column order in a composite index?",
+          "What is the difference between INCLUDE columns and regular index columns?"
+        ]
+      }
+    },
+    {
+      "id": "mysql-002",
+      "slug": "mysql-index-types-btree-fulltext-composite",
+      "question": "What index types does MySQL support, and when should you use B-tree, full-text, and composite indexes?",
+      "title": "MySQL Index Types: B-tree, Full-text, and Composite",
+      "direct_answer": "MySQL supports B-tree (default), Hash, Full-text, and Spatial indexes. B-tree indexes power most range queries and equality lookups. Full-text indexes handle natural language search across text columns. Composite indexes (multi-column B-tree) accelerate queries filtering on multiple columns, following the leftmost prefix rule.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": "Assesses knowledge of query optimization fundamentals. Interviewers want to know whether the candidate understands index selection, the leftmost prefix rule, and how Spring Data JPA queries interact with indexes.",
+      "company_tags": [
+        "E-commerce",
+        "SaaS",
+        "Fintech"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Index Landscape in MySQL",
+            "content": "Indexes in MySQL are data structures that allow the database engine to find rows without scanning the entire table. Choosing the right index type and understanding how MySQL uses them is one of the most impactful performance skills for a backend Java developer. Poorly indexed tables are the most common cause of slow queries in Spring Boot applications."
+          },
+          {
+            "type": "code_example",
+            "title": "Creating and Using Different MySQL Index Types",
+            "language": "sql",
+            "caption": "Creating and using different MySQL index types",
+            "code": "-- B-tree index (default): fast equality + range queries\nCREATE INDEX idx_email ON users(email);\nCREATE INDEX idx_status_created ON orders(status, created_at); -- composite\n\n-- Composite index: leftmost prefix rule applies\n-- This query USES the index (leftmost columns match)\nSELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n-- This query also USES the index (leftmost column alone)\nSELECT * FROM orders WHERE status = 'PENDING';\n-- This query does NOT use the composite index efficiently (skips 'status')\nSELECT * FROM orders WHERE created_at > '2024-01-01';\n\n-- Full-text index: natural language search\nCREATE FULLTEXT INDEX idx_ft_content ON articles(title, body);\nSELECT * FROM articles\nWHERE MATCH(title, body) AGAINST ('Spring Boot performance' IN NATURAL LANGUAGE MODE);\n\n-- Hash index: only in MEMORY engine, exact equality only\n-- InnoDB uses adaptive hash indexes internally (automatic)\n\n-- Covering index: all needed columns are in the index itself\nCREATE INDEX idx_covering ON orders(user_id, status, total);\n-- The following query is served entirely from the index (no table lookup)\nSELECT status, total FROM orders WHERE user_id = 42;\n\n-- Spring Data JPA: @Index annotation maps to DB index\n-- @Table(indexes = @Index(name = \"idx_email\", columnList = \"email\"))",
+            "content": "### Creating and using different MySQL index types\n\n```sql\n-- B-tree index (default): fast equality + range queries\nCREATE INDEX idx_email ON users(email);\nCREATE INDEX idx_status_created ON orders(status, created_at); -- composite\n\n-- Composite index: leftmost prefix rule applies\n-- This query USES the index (leftmost columns match)\nSELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n-- This query also USES the index (leftmost column alone)\nSELECT * FROM orders WHERE status = 'PENDING';\n-- This query does NOT use the composite index efficiently (skips 'status')\nSELECT * FROM orders WHERE created_at > '2024-01-01';\n\n-- Full-text index: natural language search\nCREATE FULLTEXT INDEX idx_ft_content ON articles(title, body);\nSELECT * FROM articles\nWHERE MATCH(title, body) AGAINST ('Spring Boot performance' IN NATURAL LANGUAGE MODE);\n\n-- Hash index: only in MEMORY engine, exact equality only\n-- InnoDB uses adaptive hash indexes internally (automatic)\n\n-- Covering index: all needed columns are in the index itself\nCREATE INDEX idx_covering ON orders(user_id, status, total);\n-- The following query is served entirely from the index (no table lookup)\nSELECT status, total FROM orders WHERE user_id = 42;\n\n-- Spring Data JPA: @Index annotation maps to DB index\n-- @Table(indexes = @Index(name = \"idx_email\", columnList = \"email\"))\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Composite left-prefix rule in MySQL** \u2014 `(status, created_at)` cannot serve `WHERE created_at > ?` alone; the leading column must appear in the filter, or MySQL falls back to a full scan\n- **InnoDB primary key is the clustered index** \u2014 all data rows live in primary key order; secondary indexes include the PK as a suffix, which means range scans on the PK are naturally fast\n- **FULLTEXT replaces LIKE '%term%'** \u2014 `MATCH ... AGAINST` uses an inverted index; `LIKE '%spring%'` cannot use any index and scans every row; FULLTEXT is available on InnoDB since MySQL 5.6\n- **Covering index eliminates heap reads** \u2014 when all columns in SELECT and WHERE are in the index, MySQL reads only the index leaf pages; `Extra: Using index` in EXPLAIN confirms this\n- **`EXPLAIN` must confirm index usage** \u2014 the optimizer may ignore an index if statistics are stale or the table is small; always verify the key column in EXPLAIN output"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "MySQL supports several index types, but B-tree covers the vast majority of production query patterns. Understanding when other index types apply \u2014 and how composite index design works \u2014 is what actually moves query performance.\n\n**B-tree \u2014 the universal default**\n- B-tree keeps index values in sorted order, which means it handles equality (`=`), ranges (`BETWEEN`, `>`, `<`), and `ORDER BY` all in one structure \u2014 O(log n) traversal to find the starting entry, then a sequential scan along the leaf pages for ranges\n- When you run `CREATE INDEX` without specifying a type, MySQL creates a B-tree; InnoDB also uses B-tree for its clustered primary key, which means secondary indexes always include the primary key as a hidden suffix\n\n**Composite indexes \u2014 design around your queries**\n- An index on `(status, created_at)` serves `WHERE status = ? AND created_at > ?` efficiently, but not `WHERE created_at > ?` alone \u2014 because the leading `status` column must be present to establish a starting position in the sorted index\n- The most selective equality filter should lead; range conditions go last; columns only in SELECT can be added with `INCLUDE` (MySQL 8.0.13+) for covering index behavior\n\n**FULLTEXT \u2014 for natural language search**\n- FULLTEXT indexes tokenize and index words, which means `MATCH(body) AGAINST('spring boot')` finds documents containing those terms without a full-table scan or `LIKE '%spring%'` which can't use any index\n- Available on InnoDB since MySQL 5.6; supports boolean mode (`+spring -python`) and natural language mode with relevance scoring\n\n**Spatial and Hash**\n- Spatial (R-tree) indexes support geometric queries \u2014 finding all locations within a bounding box; used with MySQL's geometry data types\n- Hash indexes exist only in the MEMORY engine; InnoDB's adaptive hash index is internal and automatic, not user-created\n\nAlways validate with `EXPLAIN` that MySQL actually uses the index you expect \u2014 the optimizer sometimes prefers a full table scan when the table is small or statistics are stale."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is a covering index and how does it eliminate the 'double lookup'?",
+        "How does MySQL's query optimizer decide whether to use an index?",
+        "How would you index a table for a Spring Data JPA findByStatusAndCreatedAtBetween query?"
+      ],
+      "seo": {
+        "meta_title": "MySQL Index Types B-tree Full-text Composite \u2014 Java Interview",
+        "meta_description": "Learn MySQL index types including B-tree, full-text, and composite indexes for Java Spring Boot intermediate developer interviews.",
+        "keywords": [
+          "MySQL index types",
+          "B-tree index MySQL",
+          "composite index leftmost prefix",
+          "MySQL full-text index",
+          "Spring Boot query optimization"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "MySQL supports several index types, but B-tree covers the vast majority of production query patterns.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Indexes in MySQL are data structures that allow the database engine to find rows without scanning the entire table. Choosing the right index type and understanding how MySQL uses them is one of the most impactful performance skills for a backend Java developer. Poorly indexed tables are the most common cause of slow queries in Spring Boot applications."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Indexes in MySQL are data structures that allow the database engine to find rows without scanning the entire table. Choosing the right index type and understanding how MySQL uses them is one of the most impactful performance skills for a backend Java developer. Poorly indexed tables are the most common cause of slow queries in Spring Boot applications."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Composite left-prefix rule in MySQL \u2014 (status, created_at) cannot serve WHERE created_at > ? alone; the leading column must appear in the filter, or MySQL falls back to a full scan InnoDB primary key is the clustered index \u2014 all data rows live in primary key order; secondary indexes include the PK as a suffix, which means range scans on the PK are naturally fast FULLTEXT replaces LIKE '%term%' \u2014 MATCH",
+              "AGAINST uses an inverted index; LIKE '%spring%' cannot use any index and scans every row; FULLTEXT is available on InnoDB since MySQL 5",
+              "6 Covering index eliminates heap reads \u2014 when all columns in SELECT and WHERE are in the index, MySQL reads only the index leaf pages; Extra: Using index in EXPLAIN confirms this EXPLAIN must confirm index usage \u2014 the optimizer may ignore an index if statistics are stale or the table is small; always verify the key column in EXPLAIN output"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Creating and using different MySQL index types ``sql -- B-tree index (default): fast equality + range queries CREATE INDEX idx_email ON users(email); CREATE INDEX idx_status_created ON orders(status, created_at); -- composite -- Composite index: leftmost prefix rule applies -- This query USES the index (leftmost columns match) SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01'; -- This query also USES the index (leftmost column alone) SELECT * FROM orders WHERE status = 'PENDING'; -- This query does NOT use the composite index efficiently (skips 'status') SELECT * FROM orders WHERE created_at > '2024-01-01'; -- Full-text index: natural language search CREATE FULLTEXT INDEX idx_ft_content ON articles(title, body); SELECT * FROM articles WHERE MATCH(title, body) AGAINST ('Spring Boot performance'."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Indexes in MySQL are data structures that allow the database engine to find rows without scanning the entire table",
+              "Choosing the right index type and understanding how MySQL uses them is one of the most impactful performance skills for a backend Java developer",
+              "Poorly indexed tables are the most common cause of slow queries in Spring Boot applications"
+            ]
+          }
+        ],
+        "cap": "B-tree \u2014 the universal default B-tree keeps index values in sorted order, which means it handles equality (=), ranges (BETWEEN, >, <), and ORDER BY all in one structure \u2014 O(log n) traversal to find.",
+        "familiarity_anchors": [
+          "MySQL",
+          "Spatial",
+          "Composite"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is a covering index and how does it eliminate the 'double lookup'?",
+          "How does MySQL's query optimizer decide whether to use an index?",
+          "How would you index a table for a Spring Data JPA findByStatusAndCreatedAtBetween query?"
+        ]
+      }
+    }
+  ]
+}

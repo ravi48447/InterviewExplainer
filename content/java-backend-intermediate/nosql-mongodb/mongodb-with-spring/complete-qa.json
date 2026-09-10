@@ -1,0 +1,275 @@
+{
+  "topic": "Mongodb With Spring",
+  "topicSlug": "mongodb-with-spring",
+  "questions": [
+    {
+      "id": "mdb-sp-001",
+      "slug": "spring-data-mongodb-repository-queries",
+      "question": "How do you define custom queries in Spring Data MongoDB repositories, and what are the different query mechanisms available?",
+      "title": "Spring Data MongoDB Repository Queries",
+      "direct_answer": "Spring Data MongoDB offers four query mechanisms that step up in power and complexity. **Derived query methods** let you express simple filters via method names (`findByStatusAndCreatedAtAfter`). **`@Query` annotations** take raw MQL JSON for anything the derived parser can't express (`$or`, `$elemMatch`, nested paths). **`MongoTemplate` with the `Criteria` API** builds queries programmatically for dynamic search forms. The **`Aggregation` API** handles pipelines (`$group`, `$lookup`, `$project`) that the repository layer can't. For reactive apps, swap `MongoRepository` for `ReactiveMongoRepository` to return `Flux` and `Mono`. The skill is knowing when to step down the stack rather than contorting a derived method into something illegible.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you know the full query toolkit in Spring Data MongoDB and can match mechanism to complexity",
+        "common_mistake": "Using derived methods for every query, leading to 80-character method names; or dropping to `MongoTemplate` for simple queries that a derived method would cover",
+        "to_stand_out": "Show the Criteria API for dynamic forms, `MongoTemplate.aggregate()` for pipelines, projection interfaces, and reactive repositories for WebFlux"
+      },
+      "company_tags": [
+        "spring",
+        "pivotal",
+        "mongodb",
+        "atlassian",
+        "sap"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Four Levels of Query Power",
+            "content": "Spring Data MongoDB mirrors the Spring Data JPA repository abstraction. `MongoRepository<T, ID>` gives you free CRUD; beyond that, the framework exposes a **layered query system** so you can match the tool to the complexity of the query.\n\n- **Level 1 — Derived methods**: method-name parsing for simple equality and range filters\n- **Level 2 — `@Query`**: raw MQL JSON for anything the parser can't express\n- **Level 3 — `Criteria` / `Query` via `MongoTemplate`**: programmatic, dynamic query building\n- **Level 4 — `Aggregation`**: multi-stage pipelines (`$group`, `$lookup`, `$project`, `$facet`)\n\nReactive apps swap every level for `ReactiveMongoRepository` and `ReactiveMongoTemplate`, returning `Flux<T>` / `Mono<T>` through the stack on Netty via the MongoDB Reactive Streams driver. Mixing levels is normal — repositories for 80% of reads and `MongoTemplate` for the 20% that are dynamic or pipeline-shaped."
+          },
+          {
+            "type": "step",
+            "title": "Level 1 — Derived Query Methods",
+            "content": "**When to use**\n- Simple equality, range, sorting, pagination\n- Query predicates are known at compile time\n- Method name stays readable\n\n**Entity mapping**\n\n```java\n@Document(collection = \"products\")\npublic class Product {\n  @Id String id;\n  @Indexed String skuCode;\n  String category;\n  String status;\n  double price;\n  Instant createdAt;\n}\n```\n\n**Repository**\n\n```java\npublic interface ProductRepository extends MongoRepository<Product, String> {\n\n  List<Product> findByCategoryAndStatus(String category, String status);\n\n  List<Product> findByPriceBetween(double min, double max);\n\n  boolean existsBySkuCode(String skuCode);\n\n  Page<Product> findByCategory(String category, Pageable pageable);\n\n  // Projection interface — return only a subset of fields\n  List<ProductSummary> findByStatus(String status);\n}\n\npublic interface ProductSummary {\n  String getId();\n  String getSkuCode();\n  double getPrice();\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Level 2 — `@Query` Annotation",
+            "content": "**When to use**\n- Query uses operators derived methods can't express (`$or`, `$elemMatch`, `$regex`)\n- Nested field paths or array filters\n- Method name would otherwise be 100 characters\n\n```java\npublic interface OrderRepository extends MongoRepository<Order, String> {\n\n  @Query(\"{ 'customerId': ?0, 'status': { $in: ?1 } }\")\n  List<Order> findByCustomerAndStatuses(String customerId, List<String> statuses);\n\n  @Query(\"{ 'items': { $elemMatch: { 'sku': ?0, 'qty': { $gt: ?1 } } } }\")\n  List<Order> findOrdersContainingSkuOver(String sku, int qty);\n\n  // Projection via the `fields` attribute\n  @Query(value = \"{ 'customerId': ?0 }\",\n         fields = \"{ 'status': 1, 'totalCents': 1 }\")\n  List<Order> findSummariesByCustomer(String customerId);\n\n  // Sort by a field the derived parser can't reach\n  @Query(value = \"{ 'status': ?0 }\", sort = \"{ 'createdAt': -1 }\")\n  List<Order> findLatestByStatus(String status);\n}\n```\n\n**Parameters are positional** (`?0`, `?1`) and substituted into the JSON fragment."
+          },
+          {
+            "type": "step",
+            "title": "Level 3 — `Criteria` + `MongoTemplate` for Dynamic Queries",
+            "content": "**When to use**\n- Predicates depend on runtime input (search forms, feature flags)\n- You want to skip a predicate when its parameter is null\n- You need `explain`, hints, or collation control\n\n```java\n@Service\npublic class ProductSearchService {\n\n  private final MongoTemplate mongoTemplate;\n\n  public ProductSearchService(MongoTemplate mongoTemplate) {\n    this.mongoTemplate = mongoTemplate;\n  }\n\n  public Page<Product> search(ProductFilter f, Pageable pageable) {\n    List<Criteria> and = new ArrayList<>();\n    if (f.category() != null) and.add(Criteria.where(\"category\").is(f.category()));\n    if (f.status()   != null) and.add(Criteria.where(\"status\").is(f.status()));\n    if (f.minPrice() != null) and.add(Criteria.where(\"price\").gte(f.minPrice()));\n    if (f.maxPrice() != null) and.add(Criteria.where(\"price\").lte(f.maxPrice()));\n\n    Criteria criteria = and.isEmpty()\n        ? new Criteria()\n        : new Criteria().andOperator(and.toArray(new Criteria[0]));\n\n    Query query = new Query(criteria).with(pageable);\n    query.fields().include(\"skuCode\").include(\"price\").include(\"status\");\n\n    long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), Product.class);\n    List<Product> rows = mongoTemplate.find(query, Product.class);\n    return new PageImpl<>(rows, pageable, total);\n  }\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Level 4 — `Aggregation` for Pipelines",
+            "content": "**When to use**\n- `$group`, `$lookup`, `$unwind`, `$facet`, window functions\n- Reports and derived views that repositories can't express\n\n```java\npublic OrderTotals totalsForCustomer(String customerId, Instant since) {\n\n  MatchOperation  match   = Aggregation.match(\n      Criteria.where(\"customerId\").is(customerId)\n              .and(\"createdAt\").gte(since));\n\n  GroupOperation  group   = Aggregation.group(\"customerId\")\n      .count().as(\"orderCount\")\n      .sum(\"totalCents\").as(\"totalCents\");\n\n  LookupOperation lookup  = Aggregation.lookup(\"customers\", \"_id\", \"_id\", \"customer\");\n\n  ProjectionOperation project = Aggregation.project(\"orderCount\", \"totalCents\")\n      .and(\"customer.name\").as(\"customerName\");\n\n  Aggregation agg = Aggregation.newAggregation(match, group, lookup, project);\n\n  return mongoTemplate.aggregate(agg, \"orders\", OrderTotals.class)\n                      .getUniqueMappedResult();\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Reactive Variant",
+            "content": "**`ReactiveMongoRepository` + `ReactiveMongoTemplate`**\n\n```java\npublic interface ReactiveProductRepository\n    extends ReactiveMongoRepository<Product, String> {\n\n  Flux<Product> findByCategory(String category);\n\n  @Query(\"{ 'price': { $lt: ?0 } }\")\n  Flux<Product> findCheaperThan(double maxPrice);\n\n  Mono<Long> countByStatus(String status);\n}\n\n@Service\npublic class ReactiveProductService {\n  private final ReactiveMongoTemplate rt;\n  public ReactiveProductService(ReactiveMongoTemplate rt) { this.rt = rt; }\n\n  public Flux<Product> search(String category) {\n    Query q = new Query(Criteria.where(\"category\").is(category));\n    return rt.find(q, Product.class);\n  }\n}\n```\n\n**Transactions** require `MongoTransactionManager` (blocking) or `ReactiveMongoTransactionManager` (reactive) and a replica set — single-node `mongod` cannot run multi-document transactions."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Picking the Right Level",
+            "content": "**When derived methods help:**\n- Finite, known predicates\n- Team wants zero-boilerplate\n\n**When derived methods hurt:**\n- Method names bloat past readability\n- Cannot express `$or`, `$elemMatch`, `$regex`\n\n**When `@Query` helps:**\n- Specific, static, complex MQL that you'd rather write directly\n\n**When Criteria + `MongoTemplate` helps:**\n- Dynamic predicates, optional filters\n- Programmatic sorting, projection, pagination\n\n**When `Aggregation` is mandatory:**\n- Group, join, facet, window — anything pipeline-shaped\n\n**Watch for:**\n- N+1 via repositories when `$lookup` would be cheaper\n- Derived-method name collisions after refactoring\n- `@Query` strings lose IDE refactoring support — consider Criteria when shapes change\n- Mixing reactive and blocking templates in the same request path"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Four levels**: derived methods, `@Query`, Criteria + `MongoTemplate`, `Aggregation`\n- **Use the simplest level that covers the query** — step up only as needed\n- **Criteria API** is the go-to for dynamic search forms\n- **`MongoTemplate.aggregate()`** handles pipelines that repositories can't express\n- **Projection interfaces** reduce payload size for list views\n- **Reactive variant** swaps `Mono`/`Flux` through the stack on Netty\n- **Transactions** need a replica set and a transaction manager"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Describe the four levels**\n- Derived methods — method-name parsing for simple filters\n- `@Query` — raw MQL JSON for `$or`, `$elemMatch`, nested paths\n- Criteria + `MongoTemplate` — dynamic queries and conditional predicates\n- `Aggregation` — pipelines for `$group`, `$lookup`, `$project`, `$facet`\n\n**Give the step-down rule**\n- Start with derived; step up only when it becomes illegible or impossible\n- Reach for Criteria when predicates depend on runtime input\n- Reach for Aggregation when the query is pipeline-shaped\n\n**Mention reactive**\n- `ReactiveMongoRepository` + `ReactiveMongoTemplate`\n- Non-blocking on Netty\n\n**Close with transactions**\n- `MongoTransactionManager` + `@Transactional`\n- Requires replica set"
+          }
+        ]
+      },
+      "followup_questions": [
+        "When would you use a Spring Data projection interface instead of a DTO?",
+        "How do you wire a `MongoTransactionManager` for multi-document transactions?",
+        "What does `ReactiveMongoRepository` give you that the blocking variant doesn't?",
+        "When does `$lookup` in an aggregation beat a second repository call?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data MongoDB Queries: Derived, @Query, Criteria, Aggregation",
+        "metaDescription": "Master Spring Data MongoDB queries — derived methods, @Query annotations, Criteria API, MongoTemplate, and the Aggregation pipeline for Java backend interviews."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Describe the four levels Derived methods — method-name parsing for simple filters @Query — raw MQL JSON for $or, $elemMatch, nested paths Criteria + MongoTemplate — dynamic queries and conditional pre",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Data MongoDB mirrors the Spring Data JPA repository abstraction. MongoRepository<T, ID> gives you free CRUD; beyond that, the framework exposes a layered query system so you can match the tool to the complexity of the query. Level 1 — Derived methods: method-name parsing for simple equality and range filters Level 2 — @Query: raw MQL JSON for anything the parser can't express Level 3 — Criteria / Query via MongoTemplate: programmatic, dynamic query building Level 4 — Aggregation: multi-stage."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know the full query toolkit in Spring Data MongoDB and can match mechanism to complexity"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Four levels: derived methods, @Query, Criteria + MongoTemplate, Aggregation Use the simplest level that covers the query — step up only as needed Criteria API is the go-to for dynamic search forms MongoTemplate",
+              "aggregate() handles pipelines that repositories can't express Projection interfaces reduce payload size for list views Reactive variant swaps Mono/Flux through the stack on Netty Transactions need a replica set and a transaction manager"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Data MongoDB mirrors the Spring Data JPA repository abstraction. MongoRepository<T, ID> gives you free CRUD; beyond that, the framework exposes a layered query system so you can match the tool to the complexity of the query. Level 1 — Derived methods: method-name parsing for simple equality and range filters Level 2 — @Query: raw MQL JSON for anything the parser can't express Level 3 — Criteria / Query via MongoTemplate: programmatic, dynamic query building Level 4 — Aggregation: multi-stage pipelines ($group, $lookup, $project, $facet) Reactive apps swap every level for ReactiveMongoRepository and ReactiveMongoTemplate, returning Flux<T> / Mono<T> through the stack on Netty via the MongoDB Reactive Streams driver. Mixing levels is normal — repositories for 80% of reads and."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using derived methods for every query, leading to 80-character method names",
+              "or dropping to MongoTemplate for simple queries that a derived method would cover"
+            ]
+          }
+        ],
+        "cap": "Describe the four levels Derived methods — method-name parsing for simple filters @Query — raw MQL JSON for $or, $elemMatch, nested paths Criteria + MongoTemplate — dynamic queries and conditional pre",
+        "familiarity_anchors": [
+          "Spring",
+          "MongoDB",
+          "Derived"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When would you use a Spring Data projection interface instead of a DTO?",
+          "How do you wire a `MongoTransactionManager` for multi-document transactions?",
+          "What does `ReactiveMongoRepository` give you that the blocking variant doesn't?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "mdb-sp-002",
+      "slug": "mongodb-change-streams-spring-data",
+      "question": "What are MongoDB change streams and how do you listen to real-time document changes in a Spring Boot application?",
+      "title": "MongoDB Change Streams with Spring Data",
+      "direct_answer": "**Change streams** are MongoDB's built-in Change Data Capture (CDC) — a resumable, ordered cursor over the oplog that delivers insert/update/replace/delete events to subscribers without polling. They require a **replica set or sharded cluster** (standalone `mongod` cannot emit them). In Spring Boot you listen either **imperatively** with a `MessageListenerContainer` + `ChangeStreamRequest`, or **reactively** with `ReactiveMongoTemplate.changeStream()` returning `Flux<ChangeStreamEvent<T>>`. The critical operational piece is the **resume token** — store it after each processed event so a restarted consumer picks up where it left off without replay gaps. Common uses include cache invalidation, event-driven microservices, and audit logs.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Event-driven integration patterns and understanding of MongoDB's native CDC mechanism",
+        "common_mistake": "Trying to run change streams on standalone MongoDB, or not persisting resume tokens — leading to replay gaps on restart",
+        "to_stand_out": "Show `fullDocument: UPDATE_LOOKUP`, resume-token persistence, reactive `changeStream` API, and contrast with Debezium/outbox"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "shopify",
+        "datadog",
+        "twilio"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Change Streams in One Paragraph",
+            "content": "A **change stream** is a server-side cursor over MongoDB's oplog filtered to a collection, database, or deployment.\n- Your driver reads it like any other cursor and MongoDB pushes events as writes occur — **insert, update, replace, delete, drop, rename, invalidate**.\n- Each event carries an `_id` **resume token** so a client that crashes can reopen the stream from exactly the next event.\n\nChange streams need a **replica set or sharded cluster** because the oplog is part of the replication machinery.\n- They compose naturally with aggregation — you can `$match` inside the pipeline to filter by operation type, field-level changes, or document shape.\n- In Spring you pick between an **imperative `MessageListenerContainer`** and a **reactive `ReactiveMongoTemplate.changeStream()`**; the reactive API is preferred for modern WebFlux apps because it gives backpressure and integrates with `Flux` pipelines."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Change Stream Flow",
+            "content": "```mermaid\nflowchart LR\n    write[\"Write to collection\"] --> oplog[\"oplog (replica set)\"]\n    oplog --> cursor[\"Change stream cursor (filtered pipeline)\"]\n    cursor --> driver[\"Reactive driver on Netty\"]\n    driver --> flux[\"Flux<ChangeStreamEvent<T>>\"]\n    flux --> consumer[\"Consumer (cache invalidator, event publisher, audit log)\"]\n    consumer --> tokenStore[\"Persist resume token (Redis/DB)\"]\n    tokenStore -->|\"on restart\"| cursor\n```"
+          },
+          {
+            "type": "step",
+            "title": "Imperative Listener with `MessageListenerContainer`",
+            "content": "**Define the listener**\n\n```java\n@Component\npublic class OrderChangeListener\n    implements MessageListener<ChangeStreamDocument<Document>, Order> {\n\n  @Override\n  public void onMessage(Message<ChangeStreamDocument<Document>, Order> msg) {\n    ChangeStreamDocument<Document> raw = msg.getRaw();\n    Order order = msg.getBody();\n    OperationType op = raw.getOperationType();\n    switch (op) {\n      case INSERT, REPLACE, UPDATE -> cache.put(order.getId(), order);\n      case DELETE                  -> cache.evict(raw.getDocumentKey().getString(\"_id\").getValue());\n      default                      -> { /* drop/rename/invalidate */ }\n    }\n  }\n}\n```\n\n**Wire the container**\n\n```java\n@Configuration\npublic class ChangeStreamConfig {\n\n  @Bean(destroyMethod = \"stop\")\n  MessageListenerContainer container(MongoTemplate mongoTemplate,\n                                     OrderChangeListener listener) {\n    MessageListenerContainer container =\n        new DefaultMessageListenerContainer(mongoTemplate);\n\n    ChangeStreamRequestOptions options = new ChangeStreamRequestOptions(\n        null, \"orders\",\n        ChangeStreamOptions.builder()\n            .fullDocumentLookup(FullDocument.UPDATE_LOOKUP)\n            .filter(Aggregation.newAggregation(\n                Aggregation.match(Criteria.where(\"operationType\").in(\"insert\", \"update\", \"replace\", \"delete\"))))\n            .build());\n\n    container.register(new ChangeStreamRequest<>(listener, options), Order.class);\n    container.start();\n    return container;\n  }\n}\n```\n\n**`UPDATE_LOOKUP`** rehydrates the post-change document on update events; without it, update events carry only the changed fields."
+          },
+          {
+            "type": "step",
+            "title": "Reactive Listener with `ReactiveMongoTemplate`",
+            "content": "```java\n@Service\npublic class ReactiveOrderEventService {\n\n  private final ReactiveMongoTemplate rt;\n  private final ResumeTokenStore tokens;\n  private final ApplicationEventPublisher events;\n\n  public ReactiveOrderEventService(ReactiveMongoTemplate rt,\n                                   ResumeTokenStore tokens,\n                                   ApplicationEventPublisher events) {\n    this.rt = rt; this.tokens = tokens; this.events = events;\n  }\n\n  @EventListener(ApplicationStartedEvent.class)\n  public void start() {\n    BsonDocument lastToken = tokens.load(\"orders\");\n\n    ChangeStreamOptions.ChangeStreamOptionsBuilder opts =\n        ChangeStreamOptions.builder()\n            .fullDocumentLookup(FullDocument.UPDATE_LOOKUP)\n            .filter(Aggregation.newAggregation(\n                Aggregation.match(Criteria.where(\"operationType\").in(\"insert\", \"update\", \"replace\", \"delete\"))));\n    if (lastToken != null) opts.resumeAt(lastToken);\n\n    rt.changeStream(\"orders\", opts.build(), Order.class)\n      .doOnNext(event -> {\n        Order order = event.getBody();\n        events.publishEvent(new OrderChanged(event.getRaw().getOperationType(), order));\n        BsonDocument tok = event.getRaw().getResumeToken();\n        if (tok != null) tokens.save(\"orders\", tok);\n      })\n      .retryWhen(Retry.backoff(10, Duration.ofSeconds(1)))\n      .subscribe();\n  }\n}\n```\n\n**Resume-token persistence** (Redis, Mongo collection, or Postgres) is what makes this an at-least-once consumer — combine with idempotent downstream handlers for effective-once semantics."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Imperative vs Reactive Change Streams",
+            "content": "| Aspect | `MessageListenerContainer` | `ReactiveMongoTemplate.changeStream()` |\n|---|---|---|\n| Threading | Dedicated container thread | Netty event loop |\n| Backpressure | Manual | Built into `Flux` |\n| Fits with | Blocking services, batch | WebFlux, streaming pipelines |\n| Restart | Register again + resume | `resumeAt(token)` on subscribe |\n| Error handling | Listener callback | `retryWhen`, `onErrorResume` |\n| Typical use | Cache invalidation, audit | Event-driven microservices |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Operational Notes",
+            "content": "**When change streams help:**\n- Cache invalidation driven by document writes\n- Event-driven microservices without a separate outbox table\n- Real-time dashboards and audit logs\n- Syncing MongoDB to Elasticsearch / search indexes\n\n**When they hurt:**\n- Standalone `mongod` — not supported\n- Cross-store CDC with richer semantics — Debezium MongoDB connector is usually better for pipelines into Kafka\n- Very high event rates — one consumer can fall behind the oplog retention window\n\n**Watch for:**\n- **Oplog retention window** — if your consumer is down longer than the window, the resume token becomes invalid and you get an `invalidate` event\n- **`UPDATE_LOOKUP` cost** — each update triggers an extra document fetch; design accordingly\n- **Resume-token durability** — persist synchronously with downstream side-effects to avoid duplicate or missed events\n- **Multi-consumer semantics** — change streams aren't a queue; each consumer reads independently; use Kafka via Debezium if you need fan-out with retention"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Change streams tail the oplog** — insert, update, replace, delete, plus drop/rename/invalidate\n- **Require replica set or sharded cluster** — not supported on standalone\n- **Resume tokens** make them resumable; persist them after each event\n- **`fullDocument: UPDATE_LOOKUP`** rehydrates post-change document on updates\n- **Imperative** via `MessageListenerContainer`; **reactive** via `ReactiveMongoTemplate.changeStream()`\n- **Oplog retention** defines the max safe consumer downtime\n- **Use Debezium** for Kafka-based fan-out with longer retention"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**State what they are**\n- Server-side resumable cursor over the oplog, filtered per collection/DB/deployment\n- Require replica set or sharded cluster\n\n**Show the Spring options**\n- Imperative: `MessageListenerContainer` + `ChangeStreamRequest`\n- Reactive: `ReactiveMongoTemplate.changeStream()` returning `Flux<ChangeStreamEvent<T>>`\n\n**Call out `UPDATE_LOOKUP`**\n- Needed to get the post-change document on update events\n- Costs an extra fetch per event\n\n**Emphasize resume tokens**\n- Persist after each processed event\n- Drives at-least-once delivery; pair with idempotent handlers\n\n**Close**\n- For fan-out with long retention, use Debezium MongoDB connector into Kafka\n- Oplog retention window limits safe consumer downtime"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens to a resume token if the oplog rolled past it?",
+        "How does `fullDocument: UPDATE_LOOKUP` differ from `fullDocumentBeforeChange` on MongoDB 6.0+?",
+        "When would you prefer Debezium + Kafka over native change streams?",
+        "How do you build effective-once semantics from at-least-once change streams?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Change Streams with Spring Data: Imperative and Reactive",
+        "metaDescription": "Listen to MongoDB change streams in Spring Boot — imperative MessageListenerContainer, reactive ReactiveMongoTemplate, resume tokens, and UPDATE_LOOKUP."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "State what they are Server-side resumable cursor over the oplog, filtered per collection/DB/deployment Require replica set or sharded cluster Show the Spring options Imperative: MessageListenerContain",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A change stream is a server-side cursor over MongoDB's oplog filtered to a collection, database, or deployment. Your driver reads it like any other cursor and MongoDB pushes events as writes occur — insert, update, replace, delete, drop, rename, invalidate. Each event carries an _id resume token so a client that crashes can reopen the stream from exactly the next event. Change streams need a replica set or sharded cluster because the oplog is part of the replication machinery. They."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Event-driven integration patterns and understanding of MongoDB's native CDC mechanism"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Change streams tail the oplog — insert, update, replace, delete, plus drop/rename/invalidate Require replica set or sharded cluster — not supported on standalone Resume tokens make them resumable; persist them after each event fullDocument: UPDATE_LOOKUP rehydrates post-change document on updates Imperative via MessageListenerContainer; reactive via ReactiveMongoTemplate",
+              "changeStream() Oplog retention defines the max safe consumer downtime Use Debezium for Kafka-based fan-out with longer retention"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A change stream is a server-side cursor over MongoDB's oplog filtered to a collection, database, or deployment. Your driver reads it like any other cursor and MongoDB pushes events as writes occur — insert, update, replace, delete, drop, rename, invalidate. Each event carries an _id resume token so a client that crashes can reopen the stream from exactly the next event. Change streams need a replica set or sharded cluster because the oplog is part of the replication machinery. They compose naturally with aggregation — you can $match inside the pipeline to filter by operation type, field-level changes, or document shape. In Spring you pick between an imperative MessageListenerContainer and a reactive ReactiveMongoTemplate.changeStream(); the reactive API is preferred for modern."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Trying to run change streams on standalone MongoDB, or not persisting resume tokens",
+              "leading to replay gaps on restart"
+            ]
+          }
+        ],
+        "cap": "State what they are Server-side resumable cursor over the oplog, filtered per collection/DB/deployment Require replica set or sharded cluster Show the Spring options Imperative: MessageListenerContain",
+        "familiarity_anchors": [
+          "Change",
+          "MongoDB",
+          "Capture"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens to a resume token if the oplog rolled past it?",
+          "How does `fullDocument: UPDATE_LOOKUP` differ from `fullDocumentBeforeChange` on MongoDB 6.0+?",
+          "When would you prefer Debezium + Kafka over native change streams?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    }
+  ]
+}

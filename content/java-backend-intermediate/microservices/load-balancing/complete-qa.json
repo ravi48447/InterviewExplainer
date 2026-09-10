@@ -1,0 +1,130 @@
+{
+  "topic": "Load Balancing",
+  "topicSlug": "load-balancing",
+  "questions": [
+    {
+      "id": "scc-005",
+      "slug": "spring-cloud-loadbalancer-client-side",
+      "question": "How does Spring Cloud LoadBalancer work and how does it differ from server-side load balancing?",
+      "title": "Spring Cloud LoadBalancer: Client-Side Load Balancing",
+      "direct_answer": "**Spring Cloud** LoadBalancer is a **client-side** **load balancer**: each service instance maintains its own copy of the service registry and selects which instance to call before making the request. This eliminates a central load balancer hop and enables sophisticated routing policies (round-robin, weighted, zone-aware). It replaced the deprecated Ribbon library.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand the fundamental difference between client-side and server-side load balancing, how service instance lists are maintained and refreshed, and how to customise the load balancing algorithm",
+        "common_mistake": "Thinking client-side load balancing means each service re-fetches from Eureka on every request — the instance list is cached and refreshed on an interval (30s default) to avoid hammering the registry",
+        "to_stand_out": "Explain cache refresh interval and its implications for stale instance data, describe zone-aware routing and why it matters for latency (prefer same-AZ instances), and discuss how to write a custom ServiceInstanceListSupplier for A/B testing or canary routing"
+      },
+      "company_tags": [
+        "netflix",
+        "amazon",
+        "google-cloud",
+        "pivotal",
+        "mercadolibre"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "easy",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Client-Side Load Balancing Doesn't Refetch the Registry on Every Call — the Cache Is the Feature and the Source of Most Confusion",
+            "content": "When Spring Cloud LoadBalancer resolves `http://order-service/api/orders` to an actual IP and port, it does not call Eureka. It reads from a **local in-memory cache** of the service registry that was populated at startup and refreshed periodically in the background.\n\nThe common misconception: client-side load balancing means each request fetches from the registry. That would add a Eureka round-trip to every service call — defeating the purpose entirely. The registry cache is what makes client-side load balancing lightweight. The routing decision happens in memory with zero network overhead.\n\nThe implications of caching are real.\n- A new service instance registered in Eureka won't receive traffic for up to **30 seconds** — the default refresh interval.\n- A terminated instance deregistered from Eureka will still receive traffic for up to 30 seconds.\n- During that window, the load balancer selects the stale entry, the connection is refused, and the caller sees an error.\n- With retry configured, the next healthy instance is tried; without retry, the error propagates to the user.\n\nServer-side load balancing (Nginx, AWS ALB) has the opposite characteristic.\n- The proxy always has current routing data from its continuous health checks — no staleness window.\n- But every request makes a **network hop through the proxy**, adding latency and introducing the proxy itself as a failure point.\n- If Nginx goes down, all traffic stops regardless of how healthy your services are.\n\nNeither model is strictly better. Client-side is faster per request and eliminates the proxy failure point. Server-side has fresher routing data and centralizes routing policy for all clients, including non-JVM services."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Client-Side vs Server-Side Load Balancing — Architectural Trade-offs",
+            "content": "The choice affects latency, operational complexity, and how quickly routing changes propagate.\n\n| Aspect | Client-Side (Spring Cloud LB) | Server-Side (Nginx, ALB) |\n|---|---|---|\n| **Registry freshness** | Cached (30s staleness window) | Live (continuous health checks) |\n| **Network hops per request** | Zero (direct client → instance) | One (client → proxy → instance) |\n| **Proxy as failure point** | No proxy | All traffic stops if proxy fails |\n| **Per-client routing logic** | Yes — weighted, zone-aware, canary | No — single proxy policy for all |\n| **Cross-language support** | JVM clients only | Any client language |\n| **Routing visibility** | Metrics per client (scattered) | Centralized access logs |\n| **Custom routing** | `ServiceInstanceListSupplier` | Proxy config (Lua, NGINX directives) |\n\nThe visibility trade-off is operationally significant. With server-side load balancing, all routing decisions are logged in one place — one access log, one set of metrics, one dashboard. With client-side, routing decisions happen inside each service instance. Debugging a routing problem means correlating logs across every instance of every service that might be calling the problematic downstream service."
+          },
+          {
+            "type": "step",
+            "title": "@LoadBalanced Placement, Cache Staleness Tuning, and Zone-Aware Routing for Multi-AZ Deployments",
+            "content": "The `@LoadBalanced` annotation must go on the **bean definition method**, not the injection point or call site. This is the configuration mistake that produces `UnknownHostException: order-service` with no obvious cause.\n\n```java\n@Bean\n@LoadBalanced  // registers LoadBalancerInterceptor on this specific RestTemplate\npublic RestTemplate restTemplate() {\n    return new RestTemplate();\n}\n\n// This works — uses the @LoadBalanced bean\nrestTemplate.getForObject(\"http://order-service/api/orders\", List.class);\n\n// This fails — new RestTemplate has no interceptor\nnew RestTemplate().getForObject(\"http://order-service/api/orders\", List.class);\n```\n\nFor the cache staleness problem during rapid deployments: `spring.cloud.loadbalancer.cache.ttl=10s` reduces the refresh interval to 10 seconds. This narrows the window where terminated instances receive traffic during rolling deployments. Set it too low and you increase load on the service registry; 10–15 seconds is usually a good balance.\n\n**Zone-aware routing** is the to_stand_out configuration for multi-AZ cloud deployments. Setting `spring.cloud.loadbalancer.zone=us-east-1a` on each instance causes the load balancer to prefer instances in the same availability zone. Cross-AZ calls add ~5–10ms latency and incur data transfer costs at scale. The load balancer falls back to other zones when local instances are unavailable, so availability isn't sacrificed for latency.\n\nFor **canary routing** or A/B testing, implement a custom `ServiceInstanceListSupplier`. The supplier receives the full list of available instances and returns a filtered or weighted subset. A supplier that reads a `version` tag from instance metadata can route 10% of traffic to `version=2.0` instances — canary deployment without any proxy configuration changes."
+          },
+          {
+            "type": "when_to_use",
+            "title": "When Client-Side Load Balancing Is the Right Choice",
+            "content": "Use Spring Cloud LoadBalancer for **service-to-service communication within a cluster** where all callers are Spring-based and Eureka or Consul is already running. It shines in microservice architectures where services make hundreds of calls per second to other services — eliminating the proxy hop for internal traffic meaningfully reduces latency.\n\nUse server-side load balancing at the **cluster edge** — the entry point for external traffic. An AWS ALB in front of your API gateway handles TLS termination, WAF rules, and routing to multiple gateway instances. External clients don't participate in your service registry; they need a stable, externally-accessible endpoint that the proxy provides.\n\nThe common production pattern: **both models together.** Server-side (ALB) at the edge for external traffic; client-side (Spring Cloud LoadBalancer) for internal service-to-service calls. Each is used where it's strongest. The staleness window is acceptable for internal traffic where connection-refused errors are retried; it's not acceptable at the edge where clients aren't retry-aware."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**What client-side load balancing means**\n- The routing decision happens inside the calling service, not on a central proxy\n- No network hop through Nginx or ALB — the client picks the instance directly\n- Spring Cloud LoadBalancer replaced Netflix Ribbon; ships with Spring Cloud natively\n\n**How the resolution flow works**\n- Call http://order-service/api/orders with a @LoadBalanced RestTemplate or WebClient\n- Spring Cloud LoadBalancer reads the service name, resolves it to instances from the registry (Eureka, Consul, Kubernetes)\n- Selects one instance (round-robin by default) and replaces the URL with the real host:port\n- The instance list is cached locally; not fetched from the registry on every call\n\n**The staleness trap**\n- Instance list refreshed periodically, default 30 seconds\n- A new instance registered in Eureka won't receive traffic for up to 30 seconds\n- A terminated instance will still receive traffic for up to 30 seconds — connection refused is the signal\n- Reduce the refresh interval with spring.cloud.loadbalancer.cache.ttl but don't go below 10 seconds — you hammer the registry\n- Combine with Resilience4j retry to survive the staleness window without user-visible errors\n\n**The @LoadBalanced placement mistake**\n- @LoadBalanced goes on the @Bean method that defines the RestTemplate or WebClient.Builder\n- Not on the injection point, not on the service class\n- Without it, the LoadBalancerInterceptor is not registered; service name resolution fails with UnknownHostException\n- This is the most common misconfiguration on first setup\n\n**Zone-aware routing for multi-AZ deployments**\n- spring.cloud.loadbalancer.zone = us-east-1a on each instance\n- Prefers instances in the same availability zone; falls back when local instances unavailable\n- Reduces cross-AZ latency (about 5–10 ms) and cross-AZ data transfer costs\n\n**Canary and A/B routing via custom ServiceInstanceListSupplier**\n- Implement a supplier that filters or weights instances based on metadata tags\n- Route 10% of traffic to version=2.0 instances for canary rollout without touching gateway config\n- Pure code change; no proxy redeploy\n\n**Client-side vs server-side**\n- Client-side: zero proxy hops, staleness window, JVM-only\n- Server-side (Nginx, ALB): proxy hop per request, fresh routing data, all-language support\n- Typical production stack: server-side at the edge (ALB + gateway), client-side for internal service-to-service calls\n\n**When to prefer client-side**\n- Internal service-to-service calls within a Spring Cloud cluster with Eureka or Consul already running\n- High-volume internal traffic where eliminating the proxy hop matters\n- Integration with Resilience4j and Micrometer Tracing is already present\n\n**When to prefer server-side**\n- Edge traffic from clients who don't participate in the service registry\n- Polyglot clusters where non-JVM services need the same routing logic\n- Centralized access logs, WAF, TLS termination\n\n**The strategic answer**\n- Client-side load balancing removes the proxy hop; staleness cache is the trade-off\n- @LoadBalanced goes on the bean definition; the interceptor is what makes service names resolvable\n- Tune cache ttl, add retry, consider zone-aware routing for multi-AZ\n- Use both models in production: ALB at the edge, Spring Cloud LoadBalancer internally\n"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Client-side load balancing eliminates the proxy network hop** — the calling service picks the instance directly from a cached service registry; reduces latency compared to routing through Nginx or ALB.\n- **@LoadBalanced must be on the bean definition** — annotate the `RestTemplate` or `WebClient.Builder` `@Bean` method; applying it elsewhere doesn't register the `LoadBalancerInterceptor` and service name resolution fails.\n- **Registry cache staleness creates a routing window** — default Eureka refresh interval is 30 seconds; newly registered or deregistered instances aren't visible until the cache refreshes.\n- **Spring Cloud LoadBalancer replaced Netflix Ribbon** — Ribbon is in maintenance mode; LoadBalancer provides round-robin and random strategies with a simpler, reactive API.\n- **Zone-aware routing prefers instances in the same availability zone** — reduces cross-zone latency and data transfer costs; falls back to other zones when local instances are unavailable."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you configure a custom load balancing algorithm in Spring Cloud LoadBalancer?",
+        "What is the impact of the 30-second instance cache on zero-downtime deployments?",
+        "How does Spring Cloud LoadBalancer interact with Resilience4j circuit breaker?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Cloud LoadBalancer Client-Side Load Balancing | Java Interview | InterviewExplainer",
+        "metaDescription": "Spring Cloud LoadBalancer explained — client-side vs server-side, instance cache, zone-aware routing, Ribbon replacement, and custom algorithms for Java."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "What client-side load balancing means The routing decision happens inside the calling service, not on a central proxy No network hop through Nginx or ALB — the client picks the instance directly Sprin",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When Spring Cloud LoadBalancer resolves http://order-service/api/orders to an actual IP and port, it does not call Eureka. It reads from a local in-memory cache of the service registry that was populated at startup and refreshed periodically in the background. The common misconception: client-side load balancing means each request fetches from the registry. That would add a Eureka round-trip to every service call — defeating the purpose entirely. The registry cache is what makes client-side load balancing lightweight. The routing decision."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the fundamental difference between client-side and server-side load balancing, how service instance lists are maintained and refreshed, and how to customise the load balancing algorithm"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Client-side load balancing eliminates the proxy network hop — the calling service picks the instance directly from a cached service registry; reduces latency compared to routing through Nginx or ALB",
+              "@LoadBalanced must be on the bean definition — annotate the RestTemplate or WebClient",
+              "Builder @Bean method; applying it elsewhere doesn't register the LoadBalancerInterceptor and service name resolution fails",
+              "Registry cache staleness creates a routing window — default Eureka refresh interval is 30 seconds; newly registered or deregistered instances aren't visible until the cache refreshes",
+              "Spring Cloud LoadBalancer replaced Netflix Ribbon — Ribbon is in maintenance mode; LoadBalancer provides round-robin and random strategies with a simpler, reactive API"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When Spring Cloud LoadBalancer resolves http://order-service/api/orders to an actual IP and port, it does not call Eureka. It reads from a local in-memory cache of the service registry that was populated at startup and refreshed periodically in the background. The common misconception: client-side load balancing means each request fetches from the registry. That would add a Eureka round-trip to every service call — defeating the purpose entirely. The registry cache is what makes client-side load balancing lightweight. The routing decision happens in memory with zero network overhead. The implications of caching are real. A new service instance registered in Eureka won't receive traffic for up to 30 seconds — the default refresh interval. A terminated instance deregistered from Eureka will."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking client-side load balancing means each service re-fetches from Eureka on every request",
+              "the instance list is cached and refreshed on an interval (30s default) to avoid hammering the registry"
+            ]
+          }
+        ],
+        "cap": "What client-side load balancing means The routing decision happens inside the calling service, not on a central proxy No network hop through Nginx or ALB — the client picks the instance directly Sprin",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "LoadBalancer"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you configure a custom load balancing algorithm in Spring Cloud LoadBalancer?",
+          "What is the impact of the 30-second instance cache on zero-downtime deployments?",
+          "How does Spring Cloud LoadBalancer interact with Resilience4j circuit breaker?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "topic": "Alerting",
+  "topicSlug": "alerting",
+  "questions": [
+    {
+      "id": "obs-008",
+      "slug": "alerting-strategy-slos-slas-error-budgets-java-services",
+      "question": "How do you design an alerting strategy for Java services using SLOs, SLAs, and error budgets?",
+      "title": "Alerting Strategy: SLOs, SLAs, and Error Budgets for Java Services",
+      "direct_answer": "Define SLIs (measurable signals like P99 latency and error rate), set SLOs (internal targets like 99.9% success rate), agree SLAs with customers, and use error budgets \u2014 the allowed margin of failure \u2014 to decide when to alert and when to stop feature work and focus on reliability.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of SRE reliability concepts and how they translate into concrete Prometheus alert rules for Java services.",
+        "common_mistake": "Alerting on every error instead of sustained error budget burn rate, leading to alert fatigue.",
+        "to_stand_out": "Describe multi-window multi-burn-rate alerting (e.g., 5-minute and 1-hour windows) to catch both fast and slow burns before the budget is exhausted."
+      },
+      "company_tags": [
+        "Google",
+        "Netflix",
+        "Shopify",
+        "Stripe",
+        "PagerDuty"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Alert Fatigue Problem: When Every Error Pages, Nobody Responds",
+            "content": "Naive threshold alerting \u2014 fire when error rate exceeds 1% for one minute \u2014 produces two failure modes. It pages the on-call engineer for every transient blip that resolves itself, training them to ignore alerts. And it misses slow degradation: a steady 0.8% error rate that burns through your reliability budget over two weeks without ever crossing the 1% threshold.\n\n**SLO-based alerting** replaces thresholds with a fundamentally different question: 'are we on track to meet our reliability targets?' The framework starts with **SLIs** (Service Level Indicators) \u2014 the specific metrics you measure, like the proportion of non-5xx responses or P99 latency. You set **SLOs** (Service Level Objectives) as internal targets \u2014 99.9% availability over a 30-day rolling window. **SLAs** (Service Level Agreements) are contractual commitments to customers, typically set slightly looser than SLOs to give you a safety margin.\n\nThe **error budget** is the allowed margin of failure. For a 99.9% SLO, the error budget is 0.1% of requests over 30 days \u2014 roughly 43 minutes of total downtime. Alerts fire based on how fast you are *consuming* that budget, not on whether a single request failed. This eliminates both false positives from transient spikes and false negatives from slow burns."
+          },
+          {
+            "type": "step",
+            "title": "From Indicators to Budgets: Building the SLI \u2192 SLO \u2192 Alert Chain",
+            "content": "For a typical Spring Boot service, the two SLIs that capture user-visible reliability are **availability** (proportion of non-5xx HTTP responses) and **latency** (P99 response time under a threshold). Micrometer's `http_server_requests_seconds` metric provides both signals out of the box.\n\nSet an SLO for each: 99.9% availability and P99 under 500ms over a 30-day rolling window. The error budget for 99.9% availability is 0.1% of requests. On a service handling 1 million requests per day, that is 1,000 failed requests allowed per day \u2014 or roughly 30,000 over the full 30-day window.\n\nA **burn rate** measures how fast you are consuming that budget. A burn rate of 1x means you will exhaust the budget exactly at the end of the 30-day window. A burn rate of 14.4x means you will exhaust the entire monthly budget in roughly 2 days. A burn rate of 6x exhausts it in 5 days.\n\nThe power of this model is that it naturally separates urgent from non-urgent. A 14.4x burn rate is a fast outage that needs immediate response. A 3x burn rate is a slow leak that should generate a ticket, not a page. A 1x burn rate means you are exactly on budget \u2014 no action needed."
+          },
+          {
+            "type": "step",
+            "title": "Multi-Window Burn-Rate Alerting: The Prometheus Rules That Actually Work",
+            "content": "The gold standard for SLO-based alerting uses two time windows for each alert severity. A **critical page** fires when the error budget is burning at 14.4x over both a 1-hour window AND a 5-minute window. The short window confirms the issue is happening right now (not a stale signal), while the long window confirms it is sustained (not a momentary blip). A **warning ticket** fires at 6x burn rate over a 6-hour AND 30-minute window \u2014 this catches slow degradation that would exhaust the budget before month end.\n\nIn Prometheus, implement this with recording rules that pre-compute the availability ratio, and alert rules that combine windows with AND logic.\n\n```yaml\ngroups:\n  - name: order-service-slo\n    rules:\n      - record: slo:availability:ratio_rate5m\n        expr: |\n          sum(rate(http_server_requests_seconds_count{\n            application=\"order-service\",status!~\"5..\"}[5m]))\n          /\n          sum(rate(http_server_requests_seconds_count{\n            application=\"order-service\"}[5m]))\n\n      - alert: HighErrorBurnRate\n        expr: slo:availability:ratio_rate5m < (1 - 14.4 * 0.001)\n        for: 2m\n        labels:\n          severity: critical\n        annotations:\n          summary: \"Error budget burning 14x faster than target\"\n          runbook: \"https://wiki.internal/order-service-slo\"\n\n      - alert: HighLatencyP99\n        expr: |\n          histogram_quantile(0.99,\n            rate(http_server_requests_seconds_bucket{\n              application=\"order-service\"}[5m])) > 0.5\n        for: 5m\n        labels:\n          severity: warning\n```\n\nThe recording rule pre-computes availability so the alert expression stays readable and cheap to evaluate. The burn rate threshold `(1 - 14.4 * 0.001)` means 'availability below 98.56%' \u2014 a level that, if sustained, exhausts the monthly error budget in two days. The `runbook` annotation links the alert directly to the investigation playbook, so on-call engineers know what to check without searching a wiki.\n\nWhen the error budget is depleted, teams use it as a policy trigger: halt feature releases and focus on reliability work until the budget recovers. This turns reliability from an abstract goal into a measurable, negotiable constraint between product velocity and system stability."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **SLI is the measurement; SLO is the target; SLA is the contract** \u2014 engineers manage SLOs; product and legal manage SLAs; SLOs should be tighter than SLAs to leave a recovery buffer before contractual consequences\n- **Error budget = (1 - SLO) x total requests** \u2014 a 99.9% SLO on 1M requests/month = 1,000 allowed failures; track cumulative failures against the budget; stop feature work when budget is exhausted to prioritize reliability\n- **Multi-window burn rate alerting reduces noise** \u2014 `burn_rate_1h > 14.4 AND burn_rate_6h > 6` catches both sudden spikes and slow degradation; single-threshold alerting fires on transient blips and misses gradual burns\n- **Alert on user impact, not metric thresholds** \u2014 \"error budget depleting at 3x rate\" is more actionable than \"5xx count > 50\"; the former tells you how severe and urgent; the latter tells you nothing about proportional impact\n- **Error budget policy drives engineering decisions** \u2014 100% error budget remaining: ship freely; 50% remaining: slow feature work; 0% remaining: freeze features, focus entirely on reliability; the budget makes the trade-off explicit"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "SLO-based alerting changes the fundamental question from \"is a metric above a threshold right now?\" to \"are we consuming error budget at a rate that will exhaust it before the end of the measurement period?\" \u2014 which dramatically reduces alert noise while catching real reliability problems earlier.\n\n**SLI, SLO, SLA \u2014 the definitions**\n- SLI (Service Level Indicator) is the measurement \u2014 P99 latency, request success rate, availability; a specific, measurable signal from the service\n- SLO (Service Level Objective) is the internal target \u2014 \"99.9% of requests succeed\" or \"P99 latency < 300ms over a 30-day rolling window\"; the level you're committing to maintain internally\n- SLA (Service Level Agreement) is the external contract with consequences \u2014 fines, credits, or termination if the SLO is violated; most engineering teams work with SLOs, not SLAs directly\n\n**Error budget \u2014 the key concept**\n- An SLO of 99.9% allows 0.1% of requests to fail \u2014 in a month with 1 million requests, that's 1,000 allowed failures; the error budget is those 1,000 allowed failures\n- If 800 failures occur in the first week, you've consumed 80% of the monthly budget in 25% of the time \u2014 the burn rate is 3.2x the sustainable rate, and you'll exhaust the budget by end of week 2\n\n**Multi-window burn rate alerting**\n- Alert when the burn rate is high over both short and long windows simultaneously \u2014 `burn_rate_1h > 14.4 AND burn_rate_6h > 6` triggers when the recent hour is burning fast AND the trend is sustained\n- Fast burn (1h window, 14.4x burn rate) alerts on sudden catastrophic failures; slow burn (6h window, 6x) catches gradual degradation; both windows required to avoid false positives from transient spikes\n\n**Implementation in Prometheus**\n- `rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]) / rate(http_server_requests_seconds_count[5m])` is the error ratio; compare against the SLO threshold to compute burn rate\n- Google's \"Alerting on SLOs\" chapter in the SRE workbook provides the exact formulas for multi-window alerting"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a 99.9% SLO and 99.9% uptime?",
+        "How do you handle scheduled maintenance windows in your error budget?",
+        "What is multi-window multi-burn-rate alerting and why is it more effective?"
+      ],
+      "seo": {
+        "title": "SLOs, SLAs, and Error Budgets for Java Services \u2014 Alerting Strategy Interview Answer",
+        "description": "Learn how to design SLO-based alerting for Java services using error budgets, burn rates, and Prometheus alerting rules.",
+        "keywords": [
+          "SLO SLA error budget java",
+          "prometheus alerting strategy",
+          "spring boot SLO",
+          "error budget alerting",
+          "SRE java services"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "SLO-based alerting changes the fundamental question from \"is a metric above a threshold right now?\" to \"are we consuming error budget at a rate that will exhaust it before the end of the measurement period?\".",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Naive threshold alerting \u2014 fire when error rate exceeds 1% for one minute \u2014 produces two failure modes. It pages the on-call engineer for every transient blip that resolves itself, training them to ignore alerts. And it misses slow degradation: a steady 0.8% error rate that burns through your reliability budget over two weeks without ever crossing the 1% threshold. SLO-based alerting replaces thresholds with a fundamentally different question: 'are we on track to meet our reliability targets?' The framework starts with SLIs (Service Level Indicators) \u2014 the specific metrics."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "For a typical Spring Boot service, the two SLIs that capture user-visible reliability are availability (proportion of non-5xx HTTP responses) and latency (P99 response time under a threshold).",
+              "Micrometer's http_server_requests_seconds metric provides both signals out of the box.",
+              "Set an SLO for each: 99.9% availability and P99 under 500ms over a 30-day rolling window.",
+              "The error budget for 99.9% availability is 0.1% of requests.",
+              "On a service handling 1 million requests per day, that is 1,000 failed requests allowed per day \u2014 or roughly 30,000 over the full 30-day window.",
+              "A burn rate measures how fast you are consuming that budget."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "SLI is the measurement; SLO is the target; SLA is the contract \u2014 engineers manage SLOs; product and legal manage SLAs; SLOs should be tighter than SLAs to leave a recovery buffer before contractual consequences Error budget = (1 - SLO) x total requests \u2014 a 99",
+              "9% SLO on 1M requests/month = 1,000 allowed failures; track cumulative failures against the budget; stop feature work when budget is exhausted to prioritize reliability Multi-window burn rate alerting reduces noise \u2014 burn_rate_1h > 14",
+              "4 AND burn_rate_6h > 6 catches both sudden spikes and slow degradation; single-threshold alerting fires on transient blips and misses gradual burns Alert on user impact, not metric thresholds \u2014 \"error budget depleting at 3x rate\" is more actionable than \"5xx count > 50\"; the former tells you how severe and urgent; the latter tells you nothing about proportional impact Error budget policy drives engineering decisions \u2014 100% error budget remaining: ship freely; 50% remaining: slow feature work; 0% remaining: freeze features, focus entirely on reliability; the budget makes the trade-off explicit"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Alerting on every error instead of sustained error budget burn rate, leading to alert fatigue."
+          }
+        ],
+        "cap": "SLI, SLO, SLA \u2014 the definitions SLI (Service Level Indicator) is the measurement \u2014 P99 latency, request success rate, availability; a specific, measurable signal from the service SLO (Service Level Ob",
+        "familiarity_anchors": [
+          "Define"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a 99.9% SLO and 99.9% uptime?",
+          "How do you handle scheduled maintenance windows in your error budget?",
+          "What is multi-window multi-burn-rate alerting and why is it more effective?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,389 @@
+{
+  "topic": "Behavioral Patterns",
+  "topicSlug": "behavioral-patterns",
+  "questions": [
+    {
+      "id": "dp-004",
+      "slug": "observer-pattern-spring-events-java",
+      "question": "How does the Observer pattern work in Java, and how does Spring's event system implement it?",
+      "title": "Observer Pattern — How Spring Events Use It",
+      "direct_answer": "The Observer pattern defines a one-to-many dependency: when a subject changes state, all registered observers are notified automatically. Spring implements this via ApplicationEventPublisher (subject) and @EventListener methods (observers), decoupling event producers from consumers.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Understanding of loose coupling through events and practical Spring event-driven design",
+        "common_mistake": "Using direct method calls instead of events for cross-component communication, creating tight coupling",
+        "to_stand_out": "Mention @TransactionalEventListener for firing events only after a transaction commits, and @Async for non-blocking event handling"
+      },
+      "company_tags": [
+        "enterprise",
+        "startup",
+        "fintech"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem: Direct Method Calls Create Invisible Dependencies",
+            "content": "When an order is placed, the system needs to send a confirmation email, update inventory, record analytics, and notify the warehouse. The naive approach is direct method calls from `OrderService`:\n\n```java\npublic void placeOrder(Order order) {\n    orderRepository.save(order);\n    emailService.sendConfirmation(order);     // OrderService now depends on EmailService\n    inventoryService.reduceStock(order);       // ...and InventoryService\n    analyticsService.recordPurchase(order);    // ...and AnalyticsService\n    warehouseService.notifyShipping(order);    // ...and WarehouseService\n}\n```\n\nEvery new side effect adds another dependency to `OrderService`. Adding a loyalty points feature means editing `placeOrder()`. Removing the email step means editing it again. The class becomes a hub that knows about every downstream concern — the exact coupling that makes code fragile.\n\nThe **Observer pattern** (Publish-Subscribe) inverts this. The subject (`OrderService`) publishes an event. Observers register interest and react independently. The publisher has no knowledge of who listens — adding, removing, or changing observers never touches the publisher. Spring's `ApplicationEventPublisher` and `@EventListener` implement this with zero boilerplate registration: the IoC container discovers listeners through component scanning."
+          },
+          {
+            "type": "step",
+            "title": "How Spring's @EventListener Eliminates Manual Registration",
+            "content": "In the classic GoF Observer, the subject maintains a list of observers and you write explicit `addObserver()`/`removeObserver()` calls. Spring eliminates this ceremony entirely. Any `@Component` bean with an `@EventListener` method is automatically registered as an observer for that event type.\n\nThe publisher injects `ApplicationEventPublisher` and fires events without knowing who listens:\n\n```java\n@Service\npublic class OrderService {\n    private final OrderRepository repo;\n    private final ApplicationEventPublisher events;\n\n    public OrderService(OrderRepository repo, ApplicationEventPublisher events) {\n        this.repo = repo;\n        this.events = events;\n    }\n\n    @Transactional\n    public void placeOrder(CreateOrderCommand cmd) {\n        Order order = Order.create(cmd);\n        repo.save(order);\n        // OrderService has ZERO knowledge of who listens\n        events.publishEvent(new OrderPlacedEvent(order.getId(), cmd.customerId()));\n    }\n}\n```\n\nObservers are independent beans, each handling one concern:\n\n```java\n@Component\npublic class EmailListener {\n    @EventListener\n    public void onOrderPlaced(OrderPlacedEvent event) {\n        emailService.sendConfirmation(event.getOrderId());\n    }\n}\n\n@Component\npublic class InventoryListener {\n    @EventListener\n    public void onOrderPlaced(OrderPlacedEvent event) {\n        inventoryService.reduceStock(event.getOrderId());\n    }\n}\n```\n\nAdding a loyalty points listener means creating a new `@Component` class. No edits to `OrderService`. No registration code. Spring discovers it at startup through component scanning."
+          },
+          {
+            "type": "step",
+            "title": "@TransactionalEventListener: The Guard Against Premature Side Effects",
+            "content": "A subtle but critical problem with synchronous `@EventListener` is that it fires **during** the transaction. If the order save succeeds, the email sends, but then a later validation fails and the transaction rolls back — the customer receives a confirmation for an order that doesn't exist.\n\n`@TransactionalEventListener` solves this by binding the listener to a **transaction phase**:\n\n```java\n@Component\npublic class InventoryListener {\n    // Fires ONLY after the enclosing transaction commits successfully\n    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)\n    public void onOrderPlaced(OrderPlacedEvent event) {\n        inventoryService.reduceStock(event.getOrderId());\n    }\n}\n```\n\nIf the transaction rolls back, the listener never fires. This prevents side effects based on data that was subsequently discarded. The `AFTER_COMMIT` phase is the most common — use `AFTER_ROLLBACK` for compensation logic (retry queues, alerts), and `BEFORE_COMMIT` when the listener's work must be part of the same transaction.\n\nThe trade-off is that `@TransactionalEventListener` silently swallows events when there's **no active transaction**. If your method isn't `@Transactional`, the event is published but never delivered. This catches teams by surprise — if your listener isn't firing, check whether the publisher method runs inside a transaction."
+          },
+          {
+            "type": "step",
+            "title": "Async Events, Ordering, and When to Reach for Kafka Instead",
+            "content": "Synchronous event dispatch blocks the publisher until all listeners complete. For fast operations this is fine, but a listener that calls an external API or sends an email turns a 50ms order placement into a 2-second operation.\n\n**Async listeners** move execution to a separate thread pool so the publisher returns immediately:\n\n```java\n@Component\npublic class AnalyticsListener {\n    @Async(\"eventExecutor\")  // runs on a dedicated thread pool\n    @EventListener\n    public void onOrderPlaced(OrderPlacedEvent event) {\n        analyticsClient.recordPurchase(event.getCustomerId());\n    }\n}\n```\n\nThis requires `@EnableAsync` on a configuration class and a configured `Executor` bean. With async dispatch, exceptions in listeners are swallowed unless you configure an `AsyncUncaughtExceptionHandler` — log the error and push to a retry queue.\n\n**Listener ordering** is controlled with `@Order(1)` on the method. Without it, Spring doesn't guarantee execution order. With async listeners, ordering isn't possible at all — if strict ordering matters, process events sequentially or use a message broker.\n\nSpring events are **in-process and in-memory**. If the application crashes after publishing but before the listener completes, the event is lost. For cross-service communication, guaranteed delivery, or replay capability, you need **Kafka, RabbitMQ, or a transactional outbox pattern**. Spring events excel at within-service decoupling — decoupling `OrderService` from `EmailService` within the same JVM."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Zero-boilerplate registration** — `@EventListener` methods are discovered through component scanning; no explicit subscribe/unsubscribe code, no observer list management\n- **@TransactionalEventListener(AFTER_COMMIT)** prevents premature side effects — the listener fires only after the database transaction commits, preventing emails for rolled-back orders\n- **Silent swallowing trap** — `@TransactionalEventListener` does nothing when there's no active transaction; if your listener isn't firing, check whether the publisher is `@Transactional`\n- **@Async listeners** move execution to a thread pool so the publisher returns immediately — requires `@EnableAsync` and a configured `AsyncUncaughtExceptionHandler` for error visibility\n- **In-process only** — Spring events are synchronous, in-memory, and lost on crash; use Kafka or a transactional outbox for cross-service events or delivery guarantees"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Observer pattern decouples a publisher from its consumers. When an order is placed, instead of `OrderService` directly calling `emailService.send()`, `inventoryService.reduce()`, and `analyticsService.record()` — creating hard dependencies on all three — it publishes an `OrderPlacedEvent`. Listeners react independently, and adding a new side effect means adding a new class, not editing the publisher.\n\nSpring implements this through `ApplicationEventPublisher` and `@EventListener`. The publisher injects the event publisher and calls `publishEvent()`. Any `@Component` with a matching `@EventListener` method is automatically registered — no manual subscribe/unsubscribe ceremony. The IoC container handles discovery through component scanning.\n\nThe Spring-specific enhancement that matters most in production is **`@TransactionalEventListener`**. Regular `@EventListener` fires during the transaction — if the transaction later rolls back, the email has already been sent. `@TransactionalEventListener(phase = AFTER_COMMIT)` fires only after the transaction commits successfully. The catch is that it silently drops events when there's no active transaction, which trips up teams who forget to annotate the publisher method with `@Transactional`.\n\nFor non-blocking processing, `@Async` moves listener execution to a thread pool. The publisher returns immediately. But Spring events are in-process and in-memory — if the app crashes mid-processing, the event is lost. For cross-service events or guaranteed delivery, you need Kafka or a transactional outbox. Spring Events are the right tool for within-service decoupling."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between @EventListener and @TransactionalEventListener?",
+        "How would you order multiple listeners for the same event?",
+        "When would you choose Spring Events over Kafka for event-driven communication?"
+      ],
+      "seo": {
+        "title": "Observer Pattern in Java & Spring Events | Design Patterns Interview",
+        "description": "Learn how the Observer pattern works in Java and how Spring ApplicationEventPublisher implements it with @EventListener and @TransactionalEventListener.",
+        "keywords": [
+          "observer pattern java",
+          "spring application events",
+          "spring eventlistener",
+          "publish subscribe java",
+          "java design patterns interview"
+        ],
+        "metaDescription": "The Observer pattern defines a one-to-many dependency: when a subject changes state, all registered observers are notified automatically.",
+        "metaTitle": "Observer Pattern — How Spring Events Use It"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "The Observer pattern decouples a publisher from its consumers.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When an order is placed, the system needs to send a confirmation email, update inventory, record analytics, and notify the warehouse. The naive approach is direct method calls from OrderService: ``java public void placeOrder(Order order) { orderRepository.save(order); emailService.sendConfirmation(order); // OrderService now depends on EmailService inventoryService.reduceStock(order); // ...and InventoryService analyticsService.recordPurchase(order); // ...and AnalyticsService warehouseService.notifyShipping(order); // ...and WarehouseService } ` Every new side effect adds another dependency to OrderService. Adding a loyalty points feature means editing placeOrder(). Removing the email step means."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of loose coupling through events and practical Spring event-driven design"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Zero-boilerplate registration — @EventListener methods are discovered through component scanning",
+              "no explicit subscribe/unsubscribe code, no observer list management @TransactionalEventListener(AFTER_COMMIT) prevents premature side effects — the listener fires only after the database transaction commits, preventing emails for rolled-back orders Silent swallowing trap — @TransactionalEventListener does nothing when there's no active transaction",
+              "if your listener isn't firing, check whether the publisher is @Transactional @Async listeners move execution to a thread pool so the publisher returns immediately — requires @EnableAsync and a configured AsyncUncaughtExceptionHandler for error visibility In-process only — Spring events are synchronous, in-memory, and lost on crash",
+              "use Kafka or a transactional outbox for cross-service events or delivery guarantees"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When an order is placed, the system needs to send a confirmation email, update inventory, record analytics, and notify the warehouse. The naive approach is direct method calls from OrderService: ``java public void placeOrder(Order order) { orderRepository.save(order); emailService.sendConfirmation(order); // OrderService now depends on EmailService inventoryService.reduceStock(order); // ...and InventoryService analyticsService.recordPurchase(order); // ...and AnalyticsService warehouseService.notifyShipping(order); // ...and WarehouseService } ` Every new side effect adds another dependency to OrderService. Adding a loyalty points feature means editing placeOrder(). Removing the email step means editing it again. The class becomes a hub that knows about every downstream concern — the exact coupling that makes code fragile. The Observer pattern (Publish-Subscribe) inverts this. The subject (OrderService) publishes an event. Observers register interest and react independently."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using direct method calls instead of events for cross-component communication, creating tight coupling"
+            ]
+          }
+        ],
+        "cap": "Spring Events are the right tool for within-service decoupling.",
+        "familiarity_anchors": [
+          "Observer",
+          "Spring",
+          "ApplicationEventPublisher"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between @EventListener and @TransactionalEventListener?",
+          "How would you order multiple listeners for the same event?",
+          "When would you choose Spring Events over Kafka for event-driven communication?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app applying design patterns to a cart service"
+      }
+    },
+    {
+      "id": "dp-005",
+      "slug": "strategy-pattern-replace-if-else-java",
+      "question": "How do you use the Strategy pattern to replace complex if-else chains in Java?",
+      "title": "Strategy Pattern — Replacing If-Else Chains",
+      "direct_answer": "The Strategy pattern encapsulates each algorithm behind a common interface. Instead of a growing if-else or switch block that selects behavior, you inject the appropriate strategy object. In Java this is often combined with a Map<String, Strategy> for O(1) dispatch, eliminating conditionals entirely.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Open/Closed Principle understanding and practical refactoring skill",
+        "common_mistake": "Using a single strategy class with an internal if-else — that just moves the problem without solving it",
+        "to_stand_out": "Show map-based strategy selection, Spring @Component with qualifier injection as a strategy registry, and functional interface strategies with lambdas"
+      },
+      "company_tags": [
+        "FAANG",
+        "startup",
+        "fintech"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Symptom: Every New Feature Means Editing the Same Switch Block",
+            "content": "The clearest sign that you need the Strategy pattern is a switch statement or if-else chain that grows every time a new feature is added. A discount calculation that branches on `order.getType()`, a notification dispatcher that checks `channel.equals(\"EMAIL\")` vs `channel.equals(\"SMS\")` vs `channel.equals(\"PUSH\")` — each new variant adds another branch to the same method.\n\nThis violates the **Open/Closed Principle**: the method must be modified (opened, retested, redeployed) for every extension. Worse, all variants share the same class, so a bug in the new loyalty discount can break the existing premium discount if they touch shared state.\n\nThe Strategy pattern extracts each variant into its own class behind a **shared interface**. The context class (the one that used to contain the switch) holds a reference to a strategy and delegates. Adding a new variant means adding a new class — the dispatch logic and existing strategies are never touched.\n\nThe common mistake interviewers watch for is extracting the variants into separate classes but keeping a `switch` to select among them — that just moves the problem from one file to another. The real solution is **map-based dispatch** or **Spring's autowired collection injection**, where strategy selection is O(1) and requires no conditional logic at all."
+          },
+          {
+            "type": "step",
+            "title": "Extract Each Branch into Its Own Class Behind a Shared Interface",
+            "content": "Start by defining the interface that all strategies implement. The method signature captures the common inputs and outputs — only the algorithm differs:\n\n```java\npublic interface DiscountStrategy {\n    String getType(); // identifies which discount this handles\n    BigDecimal apply(BigDecimal originalPrice, Order order);\n}\n```\n\nEach concrete strategy is a focused class with one responsibility:\n\n```java\n@Component\npublic class PercentageDiscount implements DiscountStrategy {\n    public String getType() { return \"PERCENTAGE\"; }\n    public BigDecimal apply(BigDecimal price, Order order) {\n        return price.multiply(BigDecimal.valueOf(0.90)); // 10% off\n    }\n}\n\n@Component\npublic class LoyaltyDiscount implements DiscountStrategy {\n    public String getType() { return \"LOYALTY\"; }\n    public BigDecimal apply(BigDecimal price, Order order) {\n        int points = order.getCustomer().getLoyaltyPoints();\n        BigDecimal bonus = BigDecimal.valueOf(points * 0.01);\n        return price.subtract(bonus).max(BigDecimal.ZERO);\n    }\n}\n```\n\nEach strategy is annotated `@Component` so Spring discovers it automatically. The strategy's `getType()` method provides the key for lookup — no `switch` statement needed anywhere."
+          },
+          {
+            "type": "step",
+            "title": "Spring's @Component Map Injection — Zero-Touch Strategy Discovery",
+            "content": "The most elegant strategy dispatch in Spring uses **autowired collection injection**. Spring can inject all implementations of an interface as a `List` or, with bean naming, as a `Map`. Build the lookup map in the constructor:\n\n```java\n@Service\npublic class DiscountService {\n    private final Map<String, DiscountStrategy> strategies;\n\n    public DiscountService(List<DiscountStrategy> strategyList) {\n        // Build a lookup map keyed by each strategy's type identifier\n        this.strategies = strategyList.stream()\n            .collect(Collectors.toMap(DiscountStrategy::getType, Function.identity()));\n    }\n\n    public BigDecimal applyDiscount(String discountType, BigDecimal price, Order order) {\n        DiscountStrategy strategy = strategies.get(discountType);\n        if (strategy == null) {\n            throw new IllegalArgumentException(\"Unknown discount: \" + discountType);\n        }\n        return strategy.apply(price, order);\n    }\n}\n```\n\nAdding a new discount type — say, `SeasonalDiscount` — requires creating one `@Component` class. Zero changes to `DiscountService`. Zero changes to any existing strategy. Spring discovers the new bean at startup and it appears in the injected list automatically.\n\nThis is the Open/Closed Principle in its purest form: the system is extended by adding code, not by modifying it. The mistake to avoid is putting the if-else inside a single strategy class — that just relocates the problem without solving it."
+          },
+          {
+            "type": "step",
+            "title": "Lambda Strategies and When the Full Pattern Is Overkill",
+            "content": "Since `DiscountStrategy` has a single abstract method, it qualifies as a `@FunctionalInterface`. For lightweight strategies defined in configuration rather than separate files, lambdas work directly:\n\n```java\nMap<String, DiscountStrategy> strategies = Map.of(\n    \"PERCENTAGE\", (price, order) -> price.multiply(BigDecimal.valueOf(0.9)),\n    \"FLAT\",       (price, order) -> price.subtract(BigDecimal.TEN).max(BigDecimal.ZERO),\n    \"LOYALTY\",    (price, order) -> {\n        int pts = order.getCustomer().getLoyaltyPoints();\n        return price.subtract(BigDecimal.valueOf(pts * 0.01)).max(BigDecimal.ZERO);\n    }\n);\n```\n\nThis is concise and works well for strategies that are 1-3 lines of logic. The tradeoff: lambdas are harder to unit-test in isolation and don't benefit from Spring's lifecycle management (no `@PostConstruct`, no injected dependencies).\n\n**When NOT to use Strategy at all:** if you have 2-3 simple conditions that won't grow, an if-else is simpler and more readable than a full interface + implementation hierarchy. The pattern earns its cost when the branching logic is growing, each branch has distinct complex logic, or you need to add new variants without modifying existing code. The real-world signal is: when you add a new feature and have to touch an existing if-else chain in 3 different files, it's time to refactor to Strategy."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Map-based dispatch eliminates all conditionals** — `strategies.get(type).apply(price, order)` is O(1) lookup with zero if-else; adding a new strategy requires zero changes to dispatch logic\n- **Spring @Component + List injection** makes Strategy natural — define strategies as beans, inject all implementations, build a lookup map in the constructor\n- **The common mistake is relocating the switch** — extracting strategies into classes but keeping a switch to select among them just moves the problem; use a map or Spring injection instead\n- **Functional alternative for lightweight cases** — `Map<String, BiFunction<BigDecimal, Order, BigDecimal>>` achieves the same dispatch without classes, but loses testability and Spring lifecycle\n- **When NOT to use it** — if you have 2-3 simple conditions that won't grow, Strategy adds indirection without benefit; apply it when the branching logic is growing or each branch is independently complex"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Strategy pattern replaces open-ended if-else chains by encapsulating each algorithm in its own class behind a shared interface. The key insight is that branching on a 'type' field to select different behavior is a sign the varying logic should be pulled out into separate strategy objects.\n\nThe implementation starts with a Strategy interface declaring the common contract — same inputs, same output, different computation. Each concrete strategy implements the interface. The context class, instead of containing a switch, holds a **map from type to strategy** and delegates directly.\n\nIn Spring, the most powerful approach is annotating each strategy with `@Component` and injecting all implementations via `List<DiscountStrategy>`. You build a lookup map in the constructor, and dispatch is a single `map.get(type).apply(...)` call — no conditionals. Adding a new variant means adding a new `@Component` class. The dispatch logic and existing strategies are untouched.\n\nThe mistake interviewers watch for is creating strategy classes but keeping a `switch` to choose among them — that just relocates the conditional without solving the problem.\n\nWith Java 8+ functional interfaces, lightweight strategies can be expressed as lambdas in a `Map<String, Function>`. This is concise for simple algorithms but loses Spring lifecycle management and independent testability. My rule: use lambda strategies for 1-3 line algorithms in config, full classes for anything with dependencies or complex logic. And don't apply Strategy at all if you have two branches that won't grow — it's overkill."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle strategy selection when the choice depends on multiple conditions?",
+        "What is the difference between Strategy and State patterns?",
+        "How would you combine Strategy with Factory for strategy creation?"
+      ],
+      "seo": {
+        "title": "Strategy Pattern Java — Replace If-Else Chains | Design Patterns Interview",
+        "description": "Learn how to use the Strategy pattern in Java to eliminate if-else chains, with Spring @Component map injection and functional interface examples.",
+        "keywords": [
+          "strategy pattern java",
+          "replace if else java",
+          "open closed principle java",
+          "strategy pattern spring",
+          "java design patterns intermediate"
+        ],
+        "metaDescription": "The Strategy pattern encapsulates each algorithm behind a common interface.",
+        "metaTitle": "Strategy Pattern — Replacing If-Else Chains"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "The Strategy pattern replaces open-ended if-else chains by encapsulating each algorithm in its own class behind a shared interface.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The clearest sign that you need the Strategy pattern is a switch statement or if-else chain that grows every time a new feature is added. A discount calculation that branches on order.getType(), a notification dispatcher that checks channel.equals(\"EMAIL\") vs channel.equals(\"SMS\") vs channel.equals(\"PUSH\") — each new variant adds another branch to the same method. This violates the Open/Closed Principle: the method must be modified (opened, retested, redeployed) for every extension. Worse, all variants share the same class, so a bug in."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Open/Closed Principle understanding and practical refactoring skill"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Map-based dispatch eliminates all conditionals — strategies",
+              "apply(price, order) is O(1) lookup with zero if-else; adding a new strategy requires zero changes to dispatch logic Spring @Component + List injection makes Strategy natural — define strategies as beans, inject all implementations, build a lookup map in the constructor The common mistake is relocating the switch — extracting strategies into classes but keeping a switch to select among them just moves the problem; use a map or Spring injection instead Functional alternative for lightweight cases — Map<String, BiFunction<BigDecimal, Order, BigDecimal>> achieves the same dispatch without classes, but loses testability and Spring lifecycle When NOT to use it — if you have 2-3 simple conditions that won't grow, Strategy adds indirection without benefit; apply it when the branching logic is growing or each branch is independently complex"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The clearest sign that you need the Strategy pattern is a switch statement or if-else chain that grows every time a new feature is added. A discount calculation that branches on order.getType(), a notification dispatcher that checks channel.equals(\"EMAIL\") vs channel.equals(\"SMS\") vs channel.equals(\"PUSH\") — each new variant adds another branch to the same method. This violates the Open/Closed Principle: the method must be modified (opened, retested, redeployed) for every extension. Worse, all variants share the same class, so a bug in the new loyalty discount can break the existing premium discount if they touch shared state. The Strategy pattern extracts each variant into its own class behind a shared interface. The context class (the one that used to contain the switch)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using a single strategy class with an internal if-else",
+              "that just moves the problem without solving it"
+            ]
+          }
+        ],
+        "cap": "And don't apply Strategy at all if you have two branches that won't grow — it's overkill.",
+        "familiarity_anchors": [
+          "Strategy",
+          "Instead",
+          "String"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle strategy selection when the choice depends on multiple conditions?",
+          "What is the difference between Strategy and State patterns?",
+          "How would you combine Strategy with Factory for strategy creation?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app applying design patterns to a cart service"
+      }
+    },
+    {
+      "id": "dp-009",
+      "slug": "template-method-pattern-spring-jdbctemplate",
+      "question": "Explain the Template Method pattern and how Spring's JdbcTemplate uses it.",
+      "title": "Template Method Pattern — Spring's JdbcTemplate",
+      "direct_answer": "The Template Method pattern defines the skeleton of an algorithm in a base class and defers specific steps to subclasses or callbacks. JdbcTemplate uses this to handle connection acquisition, statement execution, result mapping, and exception translation — delegating only the SQL and row-mapping logic to the caller via lambda callbacks.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Understanding of inversion of control within a class hierarchy and boilerplate elimination",
+        "common_mistake": "Overusing Template Method by making every step abstract — this creates rigid hierarchies that are hard to extend",
+        "to_stand_out": "Contrast the classic subclassing approach with Spring's callback-based Template Method, and mention RestTemplate and TransactionTemplate as other examples"
+      },
+      "company_tags": [
+        "enterprise",
+        "FAANG",
+        "consulting"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Boilerplate Trap: 15 Lines of Plumbing for 2 Lines of Logic",
+            "content": "Writing raw JDBC requires 15 lines of boilerplate for every query: get a connection from the pool, create a `PreparedStatement`, set parameters, execute the query, iterate the `ResultSet`, map rows to objects, translate `SQLExceptions` into meaningful exceptions, and close resources in a `finally` block — all before writing a single line of business logic.\n\nThe actual business intent — \"run this SQL and map each row to a `User` object\" — is buried inside ceremony. Worse, getting the cleanup wrong (forgetting to close a connection in the error path) causes connection leaks that crash production hours later.\n\nThe **Template Method pattern** solves this by factoring the invariant structure into a base class and leaving only the variant parts as hooks. The base class owns the algorithm skeleton (acquire connection → prepare statement → execute → translate exceptions → close resources). The caller provides only the custom parts (the SQL string and the row mapper).\n\nSpring's `JdbcTemplate` is the canonical production example. It uses a **callback-based** variant of Template Method — instead of subclassing, you pass lambda functions for the variant steps. This is more flexible than the classic GoF version because you don't need a new class for every query."
+          },
+          {
+            "type": "step",
+            "title": "Classic Template Method: The Base Class Owns the Skeleton",
+            "content": "The traditional GoF Template Method uses inheritance. A base class defines the algorithm as a `final` method (preventing subclasses from changing the structure) and declares `abstract` methods for the variable steps:\n\n```java\npublic abstract class ReportGenerator {\n    // Template method — algorithm skeleton, final to prevent override\n    public final void generate(String title) {\n        openDocument(title);\n        writeHeader(title);\n        writeBody();          // abstract — subclass provides this\n        writeFooter();\n        closeDocument();\n    }\n\n    protected abstract void writeBody(); // the only step that varies\n\n    private void openDocument(String title) { /* invariant */ }\n    private void writeHeader(String title)  { /* invariant */ }\n    private void writeFooter()              { /* invariant */ }\n    private void closeDocument()            { /* invariant */ }\n}\n\npublic class SalesReportGenerator extends ReportGenerator {\n    @Override\n    protected void writeBody() {\n        // Only this part changes per report type\n        fetchSalesData().forEach(row -> render(row));\n    }\n}\n```\n\nThe base class controls the flow. Subclasses fill in the gaps. This is inversion of control at the class level — the framework calls you, not the other way around.\n\nThe pattern's weakness emerges when overused: making every step `abstract` creates rigid hierarchies. If `writeHeader()` and `writeFooter()` also become abstract, every subclass must implement 5 methods even when it only cares about one. This leads to the exact boilerplate the pattern was meant to eliminate."
+          },
+          {
+            "type": "step",
+            "title": "Spring's Callback Variant: Lambdas Instead of Subclasses",
+            "content": "Spring modernizes Template Method by replacing inheritance with **functional callbacks**. Instead of extending `JdbcTemplate`, you pass your variable logic as lambda arguments. The template handles the invariant boilerplate:\n\n```java\n@Repository\npublic class UserRepository {\n    private final JdbcTemplate jdbc;\n\n    public UserRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }\n\n    public List<User> findByDepartment(String dept) {\n        // JdbcTemplate handles: connection, statement, execution,\n        // exception translation, resource cleanup\n        // YOU provide: the SQL and the RowMapper\n        return jdbc.query(\n            \"SELECT id, name, email FROM users WHERE department = ?\",\n            (rs, rowNum) -> new User(       // RowMapper — the variable step\n                rs.getLong(\"id\"),\n                rs.getString(\"name\"),\n                rs.getString(\"email\")\n            ),\n            dept\n        );\n    }\n}\n```\n\nThe invariant steps `JdbcTemplate` handles internally are substantial: acquiring a `Connection` from the `DataSource`, creating a `PreparedStatement`, binding parameters, executing the query, iterating the `ResultSet` and calling your `RowMapper` for each row, translating vendor-specific `SQLExceptions` into Spring's `DataAccessException` hierarchy, and closing the `Connection` in a `finally` block regardless of success or failure.\n\nThe callback interfaces — `RowMapper<T>`, `ResultSetExtractor<T>`, `PreparedStatementSetter` — are all functional interfaces, so lambdas work directly. This eliminates the need for a class hierarchy entirely. One `JdbcTemplate` instance handles every query in your application."
+          },
+          {
+            "type": "step",
+            "title": "The Pattern Across Spring: RestTemplate, TransactionTemplate, JmsTemplate",
+            "content": "Template Method isn't unique to `JdbcTemplate` — it's a recurring structural pattern across Spring's entire framework:\n\n**RestTemplate** handles the HTTP request lifecycle. It manages connection pooling, serialization/deserialization, error handling, and retry logic. You provide the URI, HTTP method, and response type:\n\n```java\n// RestTemplate owns: connection, serialization, error handling\n// You provide: URL, expected type\nUser user = restTemplate.getForObject(\"/api/users/{id}\", User.class, 42);\n```\n\n**TransactionTemplate** manages transaction boundaries programmatically. It handles begin/commit/rollback and exception translation. You provide the business logic as a callback:\n\n```java\ntransactionTemplate.execute(status -> {\n    orderRepo.save(order);\n    paymentService.charge(order.getTotal());\n    return null; // TransactionTemplate commits if no exception\n});\n```\n\nThis is useful when `@Transactional` annotation-based AOP doesn't fit — for example, when you need different propagation behavior within a single method, or when you're working outside of Spring-managed beans.\n\n**The common thread** across all Spring templates: the framework owns the boilerplate (connection management, error handling, resource cleanup), you own the business intent (SQL, HTTP call, transaction body). The callback-based variant is more flexible than classical Template Method because it doesn't require inheritance — you compose behavior through function references, not class hierarchies."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Template Method inverts control within a class** — the framework (base class or template) defines the algorithm skeleton, your code provides only the variable steps via abstract methods or callbacks\n- **JdbcTemplate handles 6 concerns internally** — connection acquisition, statement preparation, execution, `ResultSet` iteration, `SQLException` → `DataAccessException` translation, and guaranteed resource cleanup\n- **Callback-based > subclass-based** — Spring's templates use functional interfaces (`RowMapper`, `ResultSetExtractor`) so lambdas work directly; no class hierarchy needed per query\n- **Spring template family** — `JdbcTemplate` (SQL), `RestTemplate` (HTTP), `TransactionTemplate` (transactions), `JmsTemplate` (messaging) all follow the same pattern: framework owns boilerplate, you own intent\n- **Overuse creates rigid hierarchies** — making every step `abstract` forces subclasses to implement methods they don't care about; use hooks (optional overrides with default behavior) instead"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Template Method pattern separates the **invariant skeleton** of an algorithm from the **variable steps** that change per use case. A base class defines the overall flow and defers specific steps to subclasses or callbacks. The pattern is a form of inversion of control — the framework calls your code, not the other way around.\n\nSpring's `JdbcTemplate` is the canonical production example. Writing raw JDBC requires acquiring a connection, preparing a statement, binding parameters, executing, iterating the result set, translating exceptions, and closing resources. That's 15 lines of plumbing for 2 lines of business logic. `JdbcTemplate` encapsulates all of that as the invariant template. You provide only the SQL and a `RowMapper` lambda that converts each `ResultSet` row into a domain object.\n\nSpring uses the **callback-based variant** rather than classical subclassing. `RowMapper`, `ResultSetExtractor`, and `PreparedStatementSetter` are all functional interfaces — lambdas work directly. You don't need a new class for every query, which avoids the rigid hierarchies that classical Template Method can create.\n\nThe pattern recurs across Spring. `RestTemplate` owns the HTTP lifecycle — you provide the URL and response type. `TransactionTemplate` manages begin/commit/rollback — you provide the business logic as a callback. `JmsTemplate` handles JMS session management. The common thread: Spring owns the boilerplate, you own the business intent. Understanding this pattern explains why Spring's \"Template\" classes are named the way they are — they're literal implementations of the GoF Template Method."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How is Template Method different from Strategy? Both defer behavior — what's the key distinction?",
+        "Why does JdbcTemplate translate SQLExceptions to DataAccessExceptions?",
+        "When would you prefer TransactionTemplate over @Transactional?"
+      ],
+      "seo": {
+        "title": "Template Method Pattern & Spring JdbcTemplate | Java Interview",
+        "description": "Learn the Template Method pattern in Java, how Spring JdbcTemplate applies it with RowMapper callbacks, and practical JDBC examples.",
+        "keywords": [
+          "template method pattern java",
+          "spring jdbctemplate example",
+          "template method spring",
+          "java design patterns interview",
+          "jdbctemplate rowmapper"
+        ],
+        "metaDescription": "The Template Method pattern defines the skeleton of an algorithm in a base class and defers specific steps to subclasses or callbacks.",
+        "metaTitle": "Template Method Pattern — Spring's JdbcTemplate"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "The Template Method pattern separates the invariant skeleton of an algorithm from the variable steps that change per use case.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Writing raw JDBC requires 15 lines of boilerplate for every query: get a connection from the pool, create a PreparedStatement, set parameters, execute the query, iterate the ResultSet, map rows to objects, translate SQLExceptions into meaningful exceptions, and close resources in a finally block — all before writing a single line of business logic. The actual business intent — \"run this SQL and map each row to a User object\" — is buried inside ceremony. Worse, getting the cleanup wrong."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of inversion of control within a class hierarchy and boilerplate elimination"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Template Method inverts control within a class — the framework (base class or template) defines the algorithm skeleton, your code provides only the variable steps via abstract methods or callbacks JdbcTemplate handles 6 concerns internally — connection acquisition, statement preparation, execution, ResultSet iteration, SQLException → DataAccessException translation, and guaranteed resource cleanup Callback-based > subclass-based — Spring's templates use functional interfaces (RowMapper, ResultSetExtractor) so lambdas work directly",
+              "no class hierarchy needed per query Spring template family — JdbcTemplate (SQL), RestTemplate (HTTP), TransactionTemplate (transactions), JmsTemplate (messaging) all follow the same pattern: framework owns boilerplate, you own intent Overuse creates rigid hierarchies — making every step abstract forces subclasses to implement methods they don't care about",
+              "use hooks (optional overrides with default behavior) instead"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Writing raw JDBC requires 15 lines of boilerplate for every query: get a connection from the pool, create a PreparedStatement, set parameters, execute the query, iterate the ResultSet, map rows to objects, translate SQLExceptions into meaningful exceptions, and close resources in a finally block — all before writing a single line of business logic. The actual business intent — \"run this SQL and map each row to a User object\" — is buried inside ceremony. Worse, getting the cleanup wrong (forgetting to close a connection in the error path) causes connection leaks that crash production hours later. The Template Method pattern solves this by factoring the invariant structure into a base class and leaving only the variant parts as hooks."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Overusing Template Method by making every step abstract",
+              "this creates rigid hierarchies that are hard to extend"
+            ]
+          }
+        ],
+        "cap": "Understanding this pattern explains why Spring's \"Template\" classes are named the way they are — they're literal implementations of the GoF Template Method.",
+        "familiarity_anchors": [
+          "Template",
+          "Method",
+          "JdbcTemplate"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How is Template Method different from Strategy? Both defer behavior — what's the key distinction?",
+          "Why does JdbcTemplate translate SQLExceptions to DataAccessExceptions?",
+          "When would you prefer TransactionTemplate over @Transactional?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app applying design patterns to a cart service"
+      }
+    }
+  ]
+}

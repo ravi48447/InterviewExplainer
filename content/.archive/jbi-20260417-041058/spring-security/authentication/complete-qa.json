@@ -1,0 +1,355 @@
+{
+  "topic": "Authentication",
+  "topicSlug": "authentication",
+  "questions": [
+    {
+      "id": "ss-009",
+      "slug": "userdetailsservice-userdetails-custom-implementation",
+      "question": "How do you implement a custom UserDetailsService and UserDetails in Spring Security?",
+      "title": "UserDetailsService and UserDetails \u2014 Custom Implementation",
+      "direct_answer": "UserDetailsService is a single-method interface that loads user data by username; Spring Security calls it during authentication. UserDetails is an interface describing the loaded user \u2014 credentials, account status flags, and granted authorities. You implement both to connect Spring Security to your own database or user store, replacing the default in-memory user management.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can wire Spring Security to a real user database \u2014 the most common integration task.",
+        "common_mistake": "Returning a plain Spring Security User object without implementing account expiry or lock flags, causing confusing authentication failures.",
+        "to_stand_out": "Discuss caching UserDetails to avoid database hits on every request, UserDetailsPasswordService for password upgrade, and the difference between isEnabled() and isAccountNonLocked()."
+      },
+      "company_tags": [
+        "Amazon",
+        "Intuit",
+        "HubSpot",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "UserDetailsService Is the Bridge Between Your Database and Spring Security's Authentication Engine",
+            "content": "Spring Security doesn't care where your users live \u2014 a relational database, LDAP, a REST API, an in-memory map. It only needs one thing: a `UserDetailsService` that takes a username string and returns a `UserDetails` object. **Your entire user model gets filtered through this one-method interface.**\n\nThe `UserDetails` contract carries everything Spring Security needs: username, hashed password, four account-status booleans, and a collection of `GrantedAuthority` objects representing roles and permissions. `DaoAuthenticationProvider` calls `loadUserByUsername()`, receives the `UserDetails`, and then uses `PasswordEncoder` to verify the submitted password against the stored hash.\n\nThe relationship between `UserDetailsService` and your domain model is intentional separation. Spring Security's authentication engine never sees your `User` entity directly \u2014 it sees only `UserDetails`. This means you can evolve your domain model without breaking authentication, and you can provide exactly the subset of user data that authentication needs.\n\nThe common mistake surfaces weeks into a project: developers implement the minimum (username, password, one role) and hardcode the four status booleans to return `true`. Later, when the product needs account lockout or forced password expiration, those hardcoded returns mean the security flags do nothing \u2014 the column exists in the database, but `isAccountNonLocked()` always returns `true` regardless. **Map these flags to real entity fields from the start**, even if you initialize them all to `true` in the initial migration."
+          },
+          {
+            "type": "step",
+            "title": "The Four Status Flags That Cause Silent Authentication Failures",
+            "content": "The `UserDetails` interface has four boolean methods beyond username and password. Each one can silently block authentication even when credentials are correct, and each throws a different `AuthenticationException` subclass:\n\n- `isEnabled()` \u2014 `false` throws `DisabledException`. Use for soft-deleted or email-unverified accounts.\n- `isAccountNonExpired()` \u2014 `false` throws `AccountExpiredException`. Use for time-limited accounts (contractors, trial users).\n- `isAccountNonLocked()` \u2014 `false` throws `LockedException`. Use for brute-force lockout.\n- `isCredentialsNonExpired()` \u2014 `false` throws `CredentialsExpiredException`. Use for mandatory password rotation policies.\n\nBy default, `DaoAuthenticationProvider` converts all four exceptions to a generic \"Bad credentials\" message \u2014 intentionally, to prevent user enumeration. This means a locked account looks identical to a wrong password from the outside, but from inside the logs you can distinguish them.\n\nImplement these by mapping to real entity columns:\n\n```java\npublic class AppUserDetails implements UserDetails {\n    private final AppUser user;\n\n    @Override\n    public boolean isEnabled() { return user.isActive(); }\n\n    @Override\n    public boolean isAccountNonLocked() { return !user.isLocked(); }\n\n    @Override\n    public boolean isCredentialsNonExpired() {\n        // null means no expiry; non-null means check the date\n        return user.getPasswordExpiresAt() == null ||\n               user.getPasswordExpiresAt().isAfter(Instant.now());\n    }\n\n    @Override\n    public boolean isAccountNonExpired() { return true; } // adjust as needed\n}\n```\n\nWith this implementation, flipping `user.setLocked(true)` in the database immediately blocks the account on the next login attempt \u2014 no application code change needed."
+          },
+          {
+            "type": "step",
+            "title": "Connecting UserDetailsService to Spring Security \u2014 The ROLE_ Prefix and Correct Wiring",
+            "content": "The `loadUserByUsername` implementation loads the entity and maps it to `UserDetails`. The `ROLE_` prefix convention is the most common source of silent authorization failures:\n\n```java\n@Service\npublic class DatabaseUserDetailsService implements UserDetailsService {\n    private final UserRepository userRepo;\n\n    @Override\n    public UserDetails loadUserByUsername(String username) {\n        AppUser user = userRepo.findByEmail(username)\n            .orElseThrow(() -> new UsernameNotFoundException(\"User not found: \" + username));\n\n        return new AppUserDetails(user); // custom class implementing UserDetails\n    }\n}\n```\n\nWhen building `GrantedAuthority` objects, prefix role names with `ROLE_`. Spring Security's `hasRole(\"ADMIN\")` internally looks for `ROLE_ADMIN`. Without the prefix, role checks silently fail \u2014 the user authenticates successfully, but `hasRole()` returns false on every check because it looks for `ROLE_ADMIN` and finds only `ADMIN`.\n\n```java\n@Override\npublic Collection<? extends GrantedAuthority> getAuthorities() {\n    return user.getRoles().stream()\n        .map(role -> new SimpleGrantedAuthority(\"ROLE_\" + role.getName()))\n        .toList();\n}\n```\n\nSpring Boot auto-detects your `UserDetailsService` bean and wires it into `DaoAuthenticationProvider` \u2014 no explicit configuration needed in most cases. If you define multiple `UserDetailsService` beans (for different authentication mechanisms), you must configure `DaoAuthenticationProvider` explicitly to specify which one to use."
+          },
+          {
+            "type": "step",
+            "title": "Caching UserDetails and UserDetailsPasswordService \u2014 Production-Level Optimizations",
+            "content": "For session-based applications, Spring Security calls `loadUserByUsername()` once at login and stores the result in the session. For stateless JWT applications, it's called only at token generation \u2014 subsequent requests don't touch the database. **The per-request database hit is only a concern for specific patterns**, like re-loading the user on every request to check current role assignments.\n\nWhen caching is needed, Spring's `@Cacheable` works directly on `loadUserByUsername`:\n\n```java\n@Cacheable(value = \"userDetails\", key = \"#username\")\n@Override\npublic UserDetails loadUserByUsername(String username) {\n    return userRepo.findByEmail(username)\n        .map(AppUserDetails::new)\n        .orElseThrow(() -> new UsernameNotFoundException(username));\n}\n```\n\nSet a short TTL (1\u20135 minutes) and evict the cache entry when the user's roles or status change: `@CacheEvict(value = \"userDetails\", key = \"#user.email\")` on any update method.\n\n**`UserDetailsPasswordService`** is the interface for transparent password algorithm upgrades. When a user logs in successfully and `DelegatingPasswordEncoder` detects the stored hash uses an outdated algorithm (e.g., BCrypt with cost factor 10 when you've moved to Argon2), Spring calls `updatePassword()` with the re-hashed value. You implement this to persist the new hash, and users are migrated lazily on login \u2014 no bulk migration, no forced password reset. Implement it on the same class as `UserDetailsService` and Spring wires it automatically."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`UserDetailsService.loadUserByUsername()` is called on every request when session-based auth is used** \u2014 cache the result with `@Cacheable` or in a Redis session to avoid a database query per request.\n- **`UserDetails` interface requires `isAccountNonExpired`, `isAccountNonLocked`, `isCredentialsNonExpired`, `isEnabled`** \u2014 returning `true` for all four accepts every user; returning `false` for any one causes `DisabledException` or `LockedException`.\n- **`UsernameNotFoundException` should not distinguish 'user not found' from 'wrong password'** \u2014 throwing `UsernameNotFoundException` with a different message for each case leaks username enumeration information to attackers.\n- **`UserDetailsPasswordService` supports automatic password rehashing** \u2014 implement it to upgrade BCrypt work factor on next login without requiring users to reset passwords.\n- **`DaoAuthenticationProvider` can be replaced** \u2014 implement `AuthenticationProvider` for OAuth2 tokens, LDAP, SAML, or API key authentication; multiple providers are tried in order by `ProviderManager`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`UserDetailsService` is the bridge between Spring Security and your user database. Its `loadUserByUsername()` method is the customization point for how Spring loads user details during authentication.\n\n**The interface**\n```java\n@Service\npublic class CustomUserDetailsService implements UserDetailsService {\n    @Override\n    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {\n        return userRepo.findByEmail(username)\n            .map(CustomUserDetails::new)\n            .orElseThrow(() -> new UsernameNotFoundException(\"User not found\"));\n    }\n}\n```\n\n**`UserDetails` \u2014 what it represents**\n- `getUsername()` and `getPassword()` \u2014 credentials\n- `getAuthorities()` \u2014 list of `GrantedAuthority` (roles, permissions)\n- `isAccountNonExpired()`, `isAccountNonLocked()`, `isCredentialsNonExpired()`, `isEnabled()` \u2014 four account state flags; all must return `true` for authentication to succeed\n\n**Security considerations**\n- Return the same error message for 'user not found' and 'wrong password' \u2014 different messages leak username existence to attackers (username enumeration)\n- Do not log the password or the full `UserDetails` object\n\n**Performance**\n- With session-based authentication, `loadUserByUsername()` is called on every request to restore the `UserDetails`\n- Cache with `@Cacheable` or use Spring Session with Redis to store the `UserDetails` in the session"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What exception does Spring Security throw when isEnabled() returns false, and how would you handle it in a custom AuthenticationFailureHandler?",
+        "How would you cache UserDetails to avoid a database query on every authenticated request?",
+        "What is UserDetailsPasswordService and when would you use it?"
+      ],
+      "seo": {
+        "metaTitle": "Custom UserDetailsService and UserDetails in Spring Security \u2014 Java Guide",
+        "metaDescription": "Learn how to implement a custom UserDetailsService and UserDetails in Spring Security to connect authentication to your database, with entity implementation and auto-wiring examples."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "UserDetailsService is the bridge between Spring Security and your user database.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Spring Security doesn't care where your users live \u2014 a relational database, LDAP, a REST API, an in-memory map. It only needs one thing: a UserDetailsService that takes a username string and returns a UserDetails object. Your entire user model gets filtered through this one-method interface. The UserDetails contract carries everything Spring Security needs: username, hashed password, four account-status booleans, and a collection of GrantedAuthority objects representing roles and permissions. DaoAuthenticationProvider calls loadUserByUsername(), receives the UserDetails, and then uses PasswordEncoder to verify the submitted password against the stored hash. The."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The UserDetails interface has four boolean methods beyond username and password.",
+              "Each one can silently block authentication even when credentials are correct, and each throws a different AuthenticationException subclass: isEnabled() \u2014 false throws DisabledException.",
+              "Use for soft-deleted or email-unverified accounts.",
+              "isAccountNonExpired() \u2014 false throws AccountExpiredException.",
+              "Use for time-limited accounts (contractors, trial users).",
+              "isAccountNonLocked() \u2014 false throws LockedException."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "UserDetailsService",
+              "loadUserByUsername() is called on every request when session-based auth is used \u2014 cache the result with @Cacheable or in a Redis session to avoid a database query per request",
+              "UserDetails interface requires isAccountNonExpired, isAccountNonLocked, isCredentialsNonExpired, isEnabled \u2014 returning true for all four accepts every user; returning false for any one causes DisabledException or LockedException",
+              "UsernameNotFoundException should not distinguish 'user not found' from 'wrong password' \u2014 throwing UsernameNotFoundException with a different message for each case leaks username enumeration information to attackers",
+              "UserDetailsPasswordService supports automatic password rehashing \u2014 implement it to upgrade BCrypt work factor on next login without requiring users to reset passwords"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Returning a plain Spring Security User object without implementing account expiry or lock flags, causing confusing authentication failures."
+          }
+        ],
+        "cap": "The interface `java @Service public class CustomUserDetailsService implements UserDetailsService { @Override public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException { r",
+        "familiarity_anchors": [
+          "UserDetailsService",
+          "Spring",
+          "Security"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What exception does Spring Security throw when isEnabled() returns false, and how would you handle it in a custom AuthenticationFailureHandler?",
+          "How would you cache UserDetails to avoid a database query on every authenticated request?",
+          "What is UserDetailsPasswordService and when would you use it?"
+        ]
+      }
+    },
+    {
+      "id": "ss-004",
+      "slug": "session-vs-token-based-authentication",
+      "question": "What are the trade-offs between session-based and token-based authentication in Spring Security?",
+      "title": "Session-Based vs Token-Based Authentication",
+      "direct_answer": "Session-based authentication stores user state server-side in a session tied to a cookie, making revocation instant but requiring sticky sessions or a shared session store in clustered deployments. Token-based authentication (typically JWT) is stateless \u2014 all user data is encoded in the token \u2014 which scales horizontally with no shared state, but revocation is difficult until the token expires. The right choice depends on scalability requirements and how critical immediate revocation is.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands stateful vs stateless architecture trade-offs, not just syntax.",
+        "common_mistake": "Claiming JWTs are always better \u2014 missing that revocation, token size, and secret management are real drawbacks.",
+        "to_stand_out": "Discuss opaque tokens with an introspection endpoint as a middle ground, or refresh token rotation as a revocation strategy."
+      },
+      "company_tags": [
+        "Stripe",
+        "Twilio",
+        "GitHub",
+        "Okta"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "JWTs Aren't Always Better \u2014 Revocation and Token Size Are Real Problems You'll Hit in Production",
+            "content": "Developers default to JWTs because \"stateless is better.\" The missing nuance: stateless means the server **cannot invalidate a token until it expires.** If a user's account is compromised, you cannot force logout \u2014 the JWT remains valid until its expiry, potentially for hours or days. Implementing a token blocklist to solve this reintroduces server-side state, which negates much of the stateless advantage. You've now built a worse session system.\n\nSession-based authentication stores only a session ID in the cookie (32 bytes). The server holds the session data \u2014 or a shared store like Redis does. The server has full control: `session.invalidate()` immediately renders the session ID useless. The trade-off is that **sessions require coordination** in clustered deployments \u2014 either sticky sessions (routing all requests from a user to the same server) or a shared session store (adding a network round-trip per request).\n\nToken-based authentication (JWT) embeds claims in the token itself and sends it on every request. The server validates the signature without server-side storage \u2014 no database lookup, no Redis round-trip. The token is self-contained. The real trade-offs that tutorials skip: **JWTs are large** (a typical JWT with roles is 800+ bytes; a session ID is 32 bytes), the payload is encoded (not encrypted, anyone with the token can read the claims), and they can't be revoked.\n\nThe choice should follow the architecture. Single-server web app with a database? Sessions are simpler and correct. Microservices where each service independently validates tokens? JWT or opaque tokens with introspection. The trend toward JWT is driven by microservices architectures \u2014 not by JWT being inherently superior."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Sessions vs JWTs \u2014 Every Trade-off That Matters in Production",
+            "content": "Neither approach is universally correct. The trade-offs are genuine.\n\n| Aspect | Session-Based | Token-Based (JWT) |\n|---|---|---|\n| **State location** | Server-side (memory or Redis) | Client-side (inside the token) |\n| **Scaling** | Requires sticky sessions or shared store | Stateless \u2014 any server validates |\n| **Revocation** | Instant \u2014 `session.invalidate()` | Not possible without a blocklist |\n| **Token size** | 32-byte session ID cookie | 800+ bytes per request |\n| **Secret management** | Session store access credentials | Signing key (symmetric or key pair) |\n| **XSS risk** | Low \u2014 cookie with HttpOnly/Secure | High if stored in localStorage |\n| **CSRF risk** | Yes \u2014 cookies sent automatically | No \u2014 Authorization header requires JS |\n| **Cross-domain** | Difficult \u2014 cookie domain restrictions | Easy \u2014 Authorization header works anywhere |\n| **Best for** | Web apps, admin panels, monoliths | APIs, microservices, mobile clients |\n| **Spring config** | Default \u2014 `SessionCreationPolicy.IF_REQUIRED` | `SessionCreationPolicy.STATELESS` |\n\n**The 401 vs 403 distinction disappears** when JWTs expire \u2014 an expired token produces 401 (unauthenticated) even if the user's account is active. This is expected but surprises developers who test with long-lived tokens in development and see different behavior in production.\n\n**CSRF and sessions together:** if you store a JWT in a cookie instead of the `Authorization` header, you gain the HttpOnly security benefit but reintroduce CSRF risk \u2014 the cookie is sent automatically by the browser. Spring Security's CSRF protection must be re-enabled in this case."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Opaque Tokens and Refresh Rotation \u2014 When You Need Revocation Without Server-Side Sessions",
+            "content": "Sessions and JWTs represent opposite ends of the revocation spectrum. **Opaque tokens** occupy the middle ground that most tutorials ignore.\n\nAn opaque token is a random string with no embedded claims \u2014 it looks like a session ID. When a resource server receives an opaque token, it sends it to the authorization server's introspection endpoint, which validates the token and returns the associated claims. Revoking an opaque token means marking it invalid at the authorization server \u2014 the next introspection call reflects that immediately. This gives you JWT-like stateless APIs (no shared session store between services) with session-like revocation (instant, at the authorization server).\n\nThe cost is a network call per authenticated request. Caching introspection responses for 30\u201360 seconds reduces load while maintaining near-real-time revocation. This is the pattern services like Stripe and Twilio use \u2014 tokens are opaque to callers, the authorization server validates them with full revocation support.\n\n**Refresh token rotation** is the practical revocation mechanism within the JWT model. Access tokens expire in 15\u201330 minutes (short enough that a stolen token has limited window). Refresh tokens are longer-lived but rotate on each use \u2014 a new refresh token is issued every time the old one is used. If an attacker steals a refresh token and uses it, the legitimate user's next refresh attempt uses the now-invalidated token, and the server detects the reuse. This is automatic compromise detection with no blocklist needed.\n\nMy recommendation: use sessions for web applications where server control matters; use JWTs with short expiry and refresh rotation for APIs; consider opaque tokens when you're running an OAuth2 authorization server that needs API-level revocation control."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Sessions are server-side state; tokens are client-side state** \u2014 sessions require shared storage (Redis) in multi-instance deployments; tokens (JWT) are self-contained and require no server state.\n- **JWTs cannot be revoked before expiry without a blocklist** \u2014 a stolen JWT is valid until its `exp` claim; implement a Redis blocklist of revoked token IDs to enable logout and revocation.\n- **JWT payload is base64-encoded, not encrypted** \u2014 anyone can decode the payload without the signing key; never put passwords, PII, or sensitive data in JWT claims.\n- **Opaque tokens with introspection are a middle ground** \u2014 the token is a random string stored in Redis; every request introspects it (one Redis lookup per request); revocable without a blocklist.\n- **`SameSite=Strict` on session cookies prevents CSRF without CSRF tokens** \u2014 modern browsers refuse to send `SameSite=Strict` cookies on cross-origin requests, eliminating the attack vector."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Session-based and token-based authentication have fundamentally different scaling and revocation characteristics. Choosing between them is an architectural decision, not just a library choice.\n\n**Session-based (stateful)**\n- User logs in; server creates a session and stores it (in memory or Redis); client gets a session cookie\n- On each request, the server looks up the session in storage to authenticate\n- Revocation is instant \u2014 delete the session from storage\n- Requires sticky sessions or shared storage (Redis) in multi-instance deployments\n\n**JWT-based (stateless)**\n- User logs in; server issues a signed JWT; client stores it and sends it in `Authorization: Bearer` header\n- On each request, the server verifies the signature \u2014 no storage lookup\n- Scales horizontally with no shared state between instances\n- Revocation requires a blocklist (Redis set of revoked JTI claims) \u2014 adds a storage lookup per request\n\n**The JWT payload is not secret**\n- Base64 decoding reveals the payload \u2014 it is signed, not encrypted\n- Do not put sensitive data in claims; use a separate endpoint to fetch user details if needed\n\n**Opaque tokens**\n- Random string stored server-side (Redis); each request exchanges it for user data via introspection\n- Instantly revocable; one Redis lookup per request \u2014 the performance trade-off between sessions and JWTs"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement session clustering in a Spring Boot application using Spring Session and Redis?",
+        "What is token rotation and how does it help mitigate JWT theft?",
+        "How does Spring Security's OAuth2 Resource Server handle opaque token introspection?"
+      ],
+      "seo": {
+        "metaTitle": "Session vs Token Authentication in Spring Security \u2014 Java Interview",
+        "metaDescription": "Compare session-based and JWT token-based authentication in Spring Security across scalability, revocation, CSRF, and XSS with a detailed trade-off table."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Session-based and token-based authentication have fundamentally different scaling and revocation characteristics.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Developers default to JWTs because \"stateless is better.\" The missing nuance: stateless means the server cannot invalidate a token until it expires. If a user's account is compromised, you cannot force logout \u2014 the JWT remains valid until its expiry, potentially for hours or days. Implementing a token blocklist to solve this reintroduces server-side state, which negates much of the stateless advantage. You've now built a worse session system. Session-based authentication stores only a session ID in the cookie (32."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands stateful vs stateless architecture trade-offs, not just syntax."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Sessions are server-side state; tokens are client-side state \u2014 sessions require shared storage (Redis) in multi-instance deployments; tokens (JWT) are self-contained and require no server state",
+              "JWTs cannot be revoked before expiry without a blocklist \u2014 a stolen JWT is valid until its exp claim; implement a Redis blocklist of revoked token IDs to enable logout and revocation",
+              "JWT payload is base64-encoded, not encrypted \u2014 anyone can decode the payload without the signing key; never put passwords, PII, or sensitive data in JWT claims",
+              "Opaque tokens with introspection are a middle ground \u2014 the token is a random string stored in Redis; every request introspects it (one Redis lookup per request); revocable without a blocklist",
+              "SameSite=Strict on session cookies prevents CSRF without CSRF tokens \u2014 modern browsers refuse to send SameSite=Strict cookies on cross-origin requests, eliminating the attack vector"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Developers default to JWTs because \"stateless is better.\" The missing nuance: stateless means the server cannot invalidate a token until it expires. If a user's account is compromised, you cannot force logout \u2014 the JWT remains valid until its expiry, potentially for hours or days. Implementing a token blocklist to solve this reintroduces server-side state, which negates much of the stateless advantage. You've now built a worse session system. Session-based authentication stores only a session ID in the cookie (32 bytes). The server holds the session data \u2014 or a shared store like Redis does. The server has full control: session.invalidate() immediately renders the session ID useless. The trade-off is that sessions require coordination in clustered deployments \u2014 either sticky."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Claiming JWTs are always better \u2014 missing that revocation, token size, and secret management are real drawbacks"
+            ]
+          }
+        ],
+        "cap": "Session-based (stateful) User logs in; server creates a session and stores it (in memory or Redis); client gets a session cookie On each request, the server looks up the session in storage to authenti",
+        "familiarity_anchors": [
+          "Session",
+          "Token"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement session clustering in a Spring Boot application using Spring Session and Redis?",
+          "What is token rotation and how does it help mitigate JWT theft?",
+          "How does Spring Security's OAuth2 Resource Server handle opaque token introspection?"
+        ]
+      }
+    },
+    {
+      "id": "sec-007",
+      "slug": "password-hashing-bcrypt-vs-argon2",
+      "question": "How should passwords be stored, and what are the differences between BCrypt and Argon2?",
+      "title": "Password Hashing \u2014 BCrypt vs Argon2",
+      "direct_answer": "Passwords must never be stored in plaintext or with reversible encryption \u2014 only one-way adaptive hashing functions designed for passwords should be used. BCrypt is the widely-deployed standard with a configurable cost factor; Argon2 is the 2015 Password Hashing Competition winner with better resistance to GPU and memory attacks. Spring Security's PasswordEncoder abstraction supports both.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands why general-purpose hash functions (MD5, SHA-256) are inappropriate for passwords and what makes a password hashing function secure.",
+        "common_mistake": "Suggesting SHA-256 with a salt as sufficient for password storage \u2014 it is orders of magnitude faster than BCrypt and vulnerable to GPU attacks.",
+        "to_stand_out": "Mention the importance of cost factor tuning to target ~100ms hash time, how DelegatingPasswordEncoder handles algorithm migration, and the risk of pepper vs salt."
+      },
+      "company_tags": [
+        "enterprise",
+        "saas",
+        "fintech",
+        "healthcare",
+        "e-commerce"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "SHA-256 With a Salt Is Not Password Hashing \u2014 It's Fast Enough to Crack Billions Per Second",
+            "content": "The fundamental problem with using SHA-256, MD5, or any general-purpose hash function for password storage is **speed**. SHA-256 was designed to hash data as fast as possible \u2014 a modern GPU can compute billions of SHA-256 hashes per second. An attacker who steals a database of SHA-256-hashed passwords can test billions of password guesses per second against each hash. Salting prevents rainbow table lookups (pre-computed hash tables) but doesn't slow down brute force at all \u2014 the attacker adds the known salt to each guess and hashes at full GPU speed.\n\n**Password hashing functions are intentionally slow.** BCrypt, Argon2, and scrypt are designed to consume configurable amounts of time and resources per hash, making brute force computationally impractical regardless of hardware. BCrypt takes ~100ms per hash with appropriate settings \u2014 a billion times slower than SHA-256. An attacker who steals a BCrypt database needs 100ms per guess per GPU, making even a modest offline attack impractically expensive.\n\nSpring Security's `DelegatingPasswordEncoder` solves the migration problem: it encodes the algorithm identifier in the hash string (`{bcrypt}$2a$...` or `{argon2}$argon2id$...`). The application can accept passwords hashed with multiple algorithms simultaneously \u2014 users with old BCrypt hashes continue to authenticate while new passwords use Argon2. **When a user logs in with a BCrypt hash and Argon2 is the current default**, `UserDetailsPasswordService.updatePassword()` re-hashes with Argon2 and updates the database \u2014 lazy migration on login, no bulk migration or forced password reset needed."
+          },
+          {
+            "type": "comparison_table",
+            "title": "BCrypt vs Argon2 \u2014 Speed, Memory Hardness, and GPU Resistance",
+            "content": "The security advantage of Argon2 over BCrypt is memory-hardness \u2014 GPUs can't parallelize memory-intensive operations the way they parallelize compute-intensive ones.\n\n| Aspect | BCrypt | Argon2id |\n|---|---|---|\n| **Year** | 1999 | 2015 (PHC winner) |\n| **Cost dimensions** | Time only (work factor, 2^N iterations) | Time + Memory + Parallelism |\n| **Memory hardness** | None | Yes \u2014 configurable RAM per hash |\n| **GPU resistance** | Moderate | High \u2014 GPU parallelism limited by RAM bandwidth |\n| **Password length** | Max 72 bytes (silent truncation) | No practical limit |\n| **Spring class** | `BCryptPasswordEncoder` (default) | `Argon2PasswordEncoder` |\n| **NIST recommendation** | Acceptable | Preferred (SP 800-63B) |\n| **Encoding prefix** | `{bcrypt}` | `{argon2}` |\n\n**BCrypt's 72-byte limit** is a subtle security concern: passwords longer than 72 characters are silently truncated before hashing. A password of 73 characters hashes identically to the same first 72 characters with any suffix appended \u2014 meaning two different long passwords can be equivalent under BCrypt. For applications that allow passphrases longer than 72 characters, Argon2 or a pre-hashing approach (using SHA-256 to compress the password to 32 bytes before BCrypt) is necessary.\n\nArgon2id's memory cost (recommended: 64MB or more) is what makes GPU attacks impractical. A GPU with thousands of compute cores but shared memory bandwidth can't parallelize Argon2id effectively \u2014 each parallel hash attempt requires 64MB of RAM, and the aggregate RAM bandwidth becomes the bottleneck rather than compute throughput. An attacker with ten GPUs gains ten times the compute but cannot overcome the memory bottleneck at scale."
+          },
+          {
+            "type": "step",
+            "title": "Cost Factor Tuning and Lazy Migration With DelegatingPasswordEncoder",
+            "content": "Password hashing strength should match your hardware and threat model. The target: **~100ms per hash on your production hardware.** Fast enough that login latency is acceptable; slow enough that offline brute force is impractical. This target shifts as hardware improves \u2014 revisit the cost factor yearly.\n\nFor BCrypt, benchmark cost factors on your production-equivalent hardware:\n\n```java\n// Find the right cost factor for your hardware\nfor (int cost = 10; cost <= 16; cost++) {\n    BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(cost);\n    long start = System.nanoTime();\n    encoder.encode(\"benchmark-password\");\n    long elapsed = (System.nanoTime() - start) / 1_000_000;\n    System.out.printf(\"Cost %d: %dms%n\", cost, elapsed);\n    if (elapsed >= 100) break; // found the right cost factor\n}\n```\n\nFor Argon2id, configure memory (64MB recommended), time (3 iterations recommended), and parallelism (2 threads) and benchmark similarly. Spring Boot's `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()` provides sensible starting defaults.\n\n**DelegatingPasswordEncoder** for production use:\n\n```java\n@Bean\npublic PasswordEncoder passwordEncoder() {\n    // Argon2 for new passwords, accept BCrypt for existing\n    Map<String, PasswordEncoder> encoders = new HashMap<>();\n    encoders.put(\"bcrypt\", new BCryptPasswordEncoder(12));\n    encoders.put(\"argon2\", Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8());\n    return new DelegatingPasswordEncoder(\"argon2\", encoders);\n}\n```\n\nWith `UserDetailsPasswordService` implemented, users who log in with a BCrypt hash are automatically re-hashed with Argon2 and their hash is updated in the database \u2014 no user action, no bulk migration script, no downtime."
+          },
+          {
+            "type": "step",
+            "title": "Argon2 vs BCrypt in 2024 \u2014 When to Upgrade and How to Migrate Existing Password Hashes",
+            "content": "BCrypt dominated password hashing for 20 years. Argon2 won the 2015 Password Hashing Competition and is the current academic recommendation. Understanding the difference demonstrates current security awareness.\n\n**BCrypt's limitation:** its cost factor only scales time, not memory. GPU-based password crackers can parallelize BCrypt efficiently across thousands of cores. With modern GPUs, cracking BCrypt at cost factor 10 takes milliseconds per guess in a distributed setup.\n\n**Argon2** introduces a **memory parameter** that makes GPU cracking economically impractical. Argon2id (the recommended variant) requires gigabytes of RAM per operation \u2014 scaling this to millions of parallel GPU threads is prohibitively expensive. The three tuning parameters: `memory` (amount of RAM), `iterations` (time cost), and `parallelism` (number of concurrent lanes).\n\nSpring Security supports both: `new BCryptPasswordEncoder(12)` for BCrypt, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()` for Argon2. Both are compatible with Spring's `DelegatingPasswordEncoder`, which prefixes hashes with the algorithm identifier (`{bcrypt}...`, `{argon2}...`).\n\n**Migration without forcing users to re-enter passwords** \u2014 the standard approach: at login, after successfully validating the current hash, check if the stored hash uses the old algorithm, and if so, re-hash the password with the new algorithm and update the database. The user logs in normally; the upgrade is transparent. After migration completes, disable the old algorithm.\n\nIn practice, BCrypt at cost factor 12-14 remains acceptable for most applications \u2014 the switch to Argon2 is a security-depth improvement, not an urgent vulnerability. Prioritize Argon2 for new applications; migration for existing ones can be planned without emergency timelines."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Never use MD5, SHA-1, or SHA-256 for passwords \u2014 they are fast by design** \u2014 a GPU can compute 10+ billion SHA-256 hashes per second; BCrypt/Argon2 are deliberately slow.\n- **BCrypt work factor 10-12 is the current standard; tune to ~100ms on your hardware** \u2014 `new BCryptPasswordEncoder(12)` applies 2^12 iterations; increasing by 1 doubles computation time.\n- **Argon2id is the OWASP-recommended algorithm as of 2023** \u2014 resistant to GPU and side-channel attacks; three parameters: memory, iterations, parallelism; `Argon2PasswordEncoder` is available in Spring Security.\n- **`DelegatingPasswordEncoder` supports algorithm migration** \u2014 stores `{bcrypt}hash` or `{argon2}hash` in the database; new passwords use the current algorithm; old passwords are verified by their algorithm and re-encoded on next login.\n- **`PasswordEncoderFactories.createDelegatingPasswordEncoder()` is the Spring Boot default** \u2014 always use a `PasswordEncoder` bean; never call `encode()` without one."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Password hashing is not encryption \u2014 you cannot decrypt it. The goal is to make brute-force attacks computationally impractical. Fast hash functions (MD5, SHA-256) are entirely the wrong tool for this job.\n\n**Why fast hashes fail for passwords**\n- SHA-256: a consumer GPU computes ~10 billion hashes per second\n- An 8-character password has ~200 trillion combinations \u2014 crackable in hours with a dictionary attack on SHA-256\n- BCrypt with work factor 12: ~100ms per hash \u2192 10 hashes per second per GPU \u2192 decades for the same search space\n\n**BCrypt**\n- Work factor (`cost`) is configurable: `new BCryptPasswordEncoder(12)`\n- Each increment doubles computation time \u2014 tune to ~100ms on your server hardware\n- Includes a random salt automatically \u2014 no two BCrypt hashes of the same password are identical\n\n**Argon2id \u2014 the modern choice**\n- Winner of the Password Hashing Competition (2015); OWASP recommendation\n- Resists GPU attacks via memory-hardness (memory-intensive algorithm)\n- Three tuning parameters: memory (64MB+), iterations, parallelism\n\n**Migration without breaking logins**\n- `DelegatingPasswordEncoder` prefixes the hash with the algorithm: `{bcrypt}$2a$12$...`\n- Existing BCrypt passwords verify correctly; new passwords are hashed with Argon2\n- On next login of an old-hash user, re-encode with the new algorithm and update the stored hash"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a salt and a pepper, and which is more important?",
+        "How does Spring Security's DelegatingPasswordEncoder handle migrating from BCrypt to Argon2?",
+        "Why is bcrypt's 72-byte password truncation a potential security concern?"
+      ],
+      "seo": {
+        "title": "BCrypt vs Argon2 Password Hashing \u2014 Java Spring Security Interview",
+        "description": "Compare BCrypt and Argon2 for password storage in Spring Boot. Understand cost factors, memory hardness, and DelegatingPasswordEncoder for algorithm migration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Password hashing is not encryption \u2014 you cannot decrypt it.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The fundamental problem with using SHA-256, MD5, or any general-purpose hash function for password storage is speed. SHA-256 was designed to hash data as fast as possible \u2014 a modern GPU can compute billions of SHA-256 hashes per second. An attacker who steals a database of SHA-256-hashed passwords can test billions of password guesses per second against each hash. Salting prevents rainbow table lookups (pre-computed hash tables) but doesn't slow down brute force at all \u2014 the attacker adds the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands why general-purpose hash functions (MD5, SHA-256) are inappropriate for passwords and what makes a password hashing function secure."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Never use MD5, SHA-1, or SHA-256 for passwords \u2014 they are fast by design \u2014 a GPU can compute 10+ billion SHA-256 hashes per second; BCrypt/Argon2 are deliberately slow",
+              "BCrypt work factor 10-12 is the current standard; tune to ~100ms on your hardware \u2014 new BCryptPasswordEncoder(12) applies 2^12 iterations; increasing by 1 doubles computation time",
+              "Argon2id is the OWASP-recommended algorithm as of 2023 \u2014 resistant to GPU and side-channel attacks; three parameters: memory, iterations, parallelism; Argon2PasswordEncoder is available in Spring Security",
+              "DelegatingPasswordEncoder supports algorithm migration \u2014 stores {bcrypt}hash or {argon2}hash in the database; new passwords use the current algorithm; old passwords are verified by their algorithm and re-encoded on next login",
+              "PasswordEncoderFactories"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The fundamental problem with using SHA-256, MD5, or any general-purpose hash function for password storage is speed. SHA-256 was designed to hash data as fast as possible \u2014 a modern GPU can compute billions of SHA-256 hashes per second. An attacker who steals a database of SHA-256-hashed passwords can test billions of password guesses per second against each hash. Salting prevents rainbow table lookups (pre-computed hash tables) but doesn't slow down brute force at all \u2014 the attacker adds the known salt to each guess and hashes at full GPU speed. Password hashing functions are intentionally slow. BCrypt, Argon2, and scrypt are designed to consume configurable amounts of time and resources per hash, making brute force computationally impractical regardless of."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Suggesting SHA-256 with a salt as sufficient for password storage \u2014 it is orders of magnitude faster than BCrypt and vulnerable to GPU attacks"
+            ]
+          }
+        ],
+        "cap": "Existing BCrypt passwords verify correctly; new passwords are hashed with Argon2 On next login of an old-hash user, re-encode with the new algorithm and update the stored hash",
+        "familiarity_anchors": [
+          "Passwords",
+          "BCrypt",
+          "Password"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a salt and a pepper, and which is more important?",
+          "How does Spring Security's DelegatingPasswordEncoder handle migrating from BCrypt to Argon2?",
+          "Why is bcrypt's 72-byte password truncation a potential security concern?"
+        ]
+      }
+    }
+  ]
+}
