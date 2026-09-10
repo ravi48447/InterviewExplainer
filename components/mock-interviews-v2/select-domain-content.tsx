@@ -107,18 +107,18 @@ export function SelectDomainContent() {
       return;
     }
 
-    // Preserve the COMPLETE session configuration through to the audio page.
+    // Preserve the complete selection while returning to the configurable studio.
     // The engine's mode vocabulary is mixed|behavioral|technical|coding; the
     // mock-type cards map onto it (full-mock => mixed multi-mode session,
     // partial => mixed standard length) — duration/count derive from preset.
     if (mockType === 'audio') {
-      router.push(`/mock-interviews/audio?domain=${selectedDomain}&difficulty=${difficulty}&mode=technical`);
+      router.push(`/mock-interviews?domain=${selectedDomain}&difficulty=${difficulty}&mode=technical`);
     } else if (mockType === 'full-mock') {
       // 12-15 questions, 45-60 min → the deep preset matches the card's promise
-      router.push(`/mock-interviews/audio?domain=${selectedDomain}&difficulty=${difficulty}&mode=mixed&preset=deep`);
+      router.push(`/mock-interviews?domain=${selectedDomain}&difficulty=${difficulty}&mode=mixed&preset=deep`);
     } else {
       // partial-mock: 5-7 questions, 15-25 min → standard preset
-      router.push(`/mock-interviews/audio?domain=${selectedDomain}&difficulty=${difficulty}&mode=mixed&preset=standard`);
+      router.push(`/mock-interviews?domain=${selectedDomain}&difficulty=${difficulty}&mode=mixed&preset=standard`);
     }
   };
 

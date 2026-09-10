@@ -9,11 +9,27 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTurn } from '@/lib/engine/ave.mjs';
-import { loadRubrics } from '@/lib/engine/server.mjs';
+import { getQuestion } from '@/lib/engine/server.mjs';
 import { getUserIdFromRequest } from '@/lib/server/crypto';
 import { saveSession, recordEvidence } from '@/lib/server/engine-store';
+import { completeMockSession } from '@/lib/server/mock-session-gate';
+import { interviewPrompt } from '@/lib/engine/studioConfig';
 
 export const dynamic = 'force-dynamic';
+
+function conceptIdsForLabels(rubric: any, labels: unknown): string[] {
+  if (!Array.isArray(labels)) return [];
+  const conceptLabels = Array.isArray(rubric?.conceptLabels) ? rubric.conceptLabels : [];
+  const conceptIds = Array.isArray(rubric?.concepts) ? rubric.concepts : [];
+
+  return labels.map((label) => {
+    const value = String(label);
+    const index = conceptLabels.findIndex(
+      (candidate: unknown) => String(candidate).toLowerCase() === value.toLowerCase(),
+    );
+    return index >= 0 && conceptIds[index] ? String(conceptIds[index]) : value;
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,28 +37,44 @@ export async function POST(req: NextRequest) {
     const turns = Array.isArray(body?.turns) ? body.turns : [];
     if (!turns.length) return NextResponse.json({ error: 'no_turns' }, { status: 400 });
 
-    const rubrics = loadRubrics();
     const perQuestion = [];
     const conceptAgg = new Map();
 
     for (const t of turns) {
-      const rubric = rubrics[t.questionId];
+      const rubric = getQuestion(t.questionId);
       if (!rubric) continue;
-      const ave = verifyTurn(String(t.transcript ?? ''), rubric, { isBehavioral: false });
-      for (const h of ave.coverage.hit ?? []) {
-        const k = h;
-        conceptAgg.set(k, { hit: (conceptAgg.get(k)?.hit ?? 0) + 1, label: h });
+      const transcript = String(t.transcript ?? '');
+      const isBehavioral = !!t.isBehavioral || body?.clientState?.mode === 'behavioral' || !!rubric?.isBehavioral;
+      const ave = verifyTurn(transcript, rubric, { isBehavioral, meta: t.meta });
+      const hasConceptChecklist = Array.isArray(rubric?.conceptLabels) && rubric.conceptLabels.length > 0;
+      const visibleHits = hasConceptChecklist ? (ave.coverage.hit ?? []) : [];
+      const visibleMisses = hasConceptChecklist ? (ave.coverage.missed ?? []) : [];
+      const hitIds = conceptIdsForLabels(rubric, visibleHits);
+      const missedIds = conceptIdsForLabels(rubric, visibleMisses);
+      for (const [index, label] of visibleHits.entries()) {
+        const id = hitIds[index] ?? String(label);
+        conceptAgg.set(id, { hit: (conceptAgg.get(id)?.hit ?? 0) + 1, label: String(label) });
       }
-      for (const m of ave.coverage.missed ?? []) {
-        if (!conceptAgg.has(m)) conceptAgg.set(m, { hit: 0, label: m });
+      for (const [index, label] of visibleMisses.entries()) {
+        const id = missedIds[index] ?? String(label);
+        if (!conceptAgg.has(id)) conceptAgg.set(id, { hit: 0, label: String(label) });
       }
       perQuestion.push({
         questionId: t.questionId,
-        question: rubric.question,
+        question: interviewPrompt(rubric.question),
         title: rubric.title,
+        transcript,
+        isBehavioral,
         move: t.move ?? null,
         score: ave.score,
-        coverage: ave.coverage,
+        coverage: {
+          ...ave.coverage,
+          hit: visibleHits,
+          missed: visibleMisses,
+          hitIds,
+          missedIds,
+          basis: hasConceptChecklist ? 'concept-checklist' : 'expert-answer-alignment',
+        },
         mistakeFlags: ave.mistakeFlags,
         suggested: {
           spoken: ave.suggested.spoken,
@@ -74,11 +106,15 @@ export async function POST(req: NextRequest) {
           savedAt: Date.now(),
         });
         // spoken evidence for covered concepts
-        const hitIds = new Set<string>();
-        for (const p of perQuestion) for (const h of p.coverage?.hit ?? []) hitIds.add(String(h));
-        if (hitIds.size) recordEvidence(uid, [...hitIds], 'spoken');
+        const coveredConceptIds = new Set<string>();
+        for (const p of perQuestion) {
+          for (const id of p.coverage?.hitIds ?? []) coveredConceptIds.add(String(id));
+        }
+        if (coveredConceptIds.size) recordEvidence(uid, [...coveredConceptIds], 'spoken');
       } catch {}
     }
+
+    completeMockSession(String(body?.sessionId ?? ''));
 
     return NextResponse.json({
       sessionId: body?.sessionId ?? null,

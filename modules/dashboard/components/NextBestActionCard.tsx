@@ -18,6 +18,15 @@ interface DomainConcepts {
   conceptIds: string[];
 }
 
+function studioHref(domain?: string, concepts: string[] = [], count?: number) {
+  const params = new URLSearchParams();
+  if (domain) params.set('domain', domain);
+  if (concepts.length) params.set('concepts', concepts.join(','));
+  if (count) params.set('count', String(count));
+  const query = params.toString();
+  return `/mock-interviews${query ? `?${query}` : ''}`;
+}
+
 export function NextBestActionCard() {
   const [nba, setNba] = useState<{
     domain: string;
@@ -72,12 +81,13 @@ export function NextBestActionCard() {
     })();
   }, []);
 
-  const href =
-    nba?.kind === 'weakness-drill'
-      ? `/mock-interviews/audio?domain=${nba.domain}&count=6`
-      : nba
-        ? `/mock-interviews/audio?domain=${nba.domain}`
-        : '/mock-interviews';
+  const href = nba
+    ? studioHref(
+        nba.domain,
+        nba.kind === 'weakness-drill' ? nba.concepts : [],
+        nba.kind === 'weakness-drill' ? 6 : undefined,
+      )
+    : '/mock-interviews';
 
   return (
     <Card className={cn('relative overflow-hidden border-white/10')}>

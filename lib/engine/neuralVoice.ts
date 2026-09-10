@@ -23,6 +23,35 @@ const PERSONA_VOICE: Record<string, { voice: string; gapMs: number }> = {
 
 let audioCtx: AudioContext | null = null;
 const cache = new Map<string, HTMLAudioElement>();
+let playbackSerial = 0;
+let activeEndTimer: ReturnType<typeof setTimeout> | null = null;
+let settleActivePlayback: (() => void) | null = null;
+const activeSources = new Set<AudioBufferSourceNode>();
+
+/** Stop whichever neural or browser voice line is active and settle its promise. */
+export function stopNeuralSpeech() {
+  playbackSerial += 1;
+  if (activeEndTimer) clearTimeout(activeEndTimer);
+  activeEndTimer = null;
+  for (const source of activeSources) {
+    try { source.stop(); } catch {}
+  }
+  activeSources.clear();
+  try { window.speechSynthesis?.cancel(); } catch {}
+  const settle = settleActivePlayback;
+  settleActivePlayback = null;
+  settle?.();
+}
+
+export function pauseNeuralSpeech() {
+  try { window.speechSynthesis?.pause(); } catch {}
+  void audioCtx?.suspend().catch(() => {});
+}
+
+export function resumeNeuralSpeech() {
+  try { window.speechSynthesis?.resume(); } catch {}
+  void audioCtx?.resume().catch(() => {});
+}
 
 function ensureCtx(): AudioContext | null {
   try {
@@ -74,6 +103,8 @@ export async function speakNeural(
 
   const persona = opts.persona ?? 'mentor';
   const cfg = PERSONA_VOICE[persona] ?? PERSONA_VOICE.mentor;
+  stopNeuralSpeech();
+  const serial = playbackSerial;
 
   // try neural first
   try {
@@ -87,17 +118,30 @@ export async function speakNeural(
       for (const s of sentences) {
         const blob = await fetchVoiceWav(s, cfg.voice);
         if (!blob) throw new Error('voice fetch failed');
+        if (serial !== playbackSerial) return;
         const buf = await blob.arrayBuffer();
         const audio = await ctx.decodeAudioData(buf);
+        if (serial !== playbackSerial) return;
         const src = ctx.createBufferSource();
         src.buffer = audio;
         src.connect(ctx.destination);
+        src.onended = () => activeSources.delete(src);
+        activeSources.add(src);
         src.start(ctx.currentTime + offset);
         offset += audio.duration + cfg.gapMs / 1000;
       }
-      // fire onEnd after the last sentence
-      const totalMs = offset * 1000;
-      setTimeout(() => opts.onEnd?.(), totalMs);
+      await new Promise<void>((resolve) => {
+        const settle = () => {
+          if (settleActivePlayback === settle) settleActivePlayback = null;
+          resolve();
+        };
+        settleActivePlayback = settle;
+        activeEndTimer = setTimeout(() => {
+          activeEndTimer = null;
+          if (serial === playbackSerial) opts.onEnd?.();
+          settle();
+        }, offset * 1000);
+      });
       return;
     }
   } catch {
@@ -105,7 +149,12 @@ export async function speakNeural(
   }
 
   // fallback: browser TTS with persona tuning
-  speakBrowser(t, cfg.voice === 'ryan' ? { rate: opts.rate ?? 0.95, pitch: 0.9 } : { rate: opts.rate ?? 0.98, pitch: 1.02 }, opts.onEnd);
+  await speakBrowser(
+    t,
+    cfg.voice === 'ryan' ? { rate: opts.rate ?? 0.95, pitch: 0.9 } : { rate: opts.rate ?? 0.98, pitch: 1.02 },
+    serial,
+    opts.onEnd,
+  );
 }
 
 function splitSentences(text: string): string[] {
@@ -121,9 +170,10 @@ function splitSentences(text: string): string[] {
   return out.slice(0, 6); // cap: protect latency on long prompts
 }
 
-function speakBrowser(text: string, v: { rate: number; pitch: number }, onEnd?: () => void) {
-  try {
-    if (!('speechSynthesis' in window)) { onEnd?.(); return; }
+async function speakBrowser(text: string, v: { rate: number; pitch: number }, serial: number, onEnd?: () => void) {
+  await new Promise<void>((resolve) => {
+    try {
+      if (!('speechSynthesis' in window)) { onEnd?.(); resolve(); return; }
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = v.rate;
@@ -137,12 +187,24 @@ function speakBrowser(text: string, v: { rate: number; pitch: number }, onEnd?: 
       voices.find((x) => /^en/i.test(x.lang));
     if (pick) u.voice = pick;
     u.lang = pick?.lang ?? 'en-US';
-    u.onend = () => onEnd?.();
-    u.onerror = () => onEnd?.();
+      let finished = false;
+      const finish = (notify: boolean) => {
+        if (finished) return;
+        finished = true;
+        if (settleActivePlayback === cancel) settleActivePlayback = null;
+        if (notify && serial === playbackSerial) onEnd?.();
+        resolve();
+      };
+      const cancel = () => finish(false);
+      settleActivePlayback = cancel;
+      u.onend = () => finish(true);
+      u.onerror = () => finish(true);
     window.speechSynthesis.speak(u);
-  } catch {
-    onEnd?.();
-  }
+    } catch {
+      if (serial === playbackSerial) onEnd?.();
+      resolve();
+    }
+  });
 }
 
 /** Is the neural path active? (for UI: show the "natural voice" badge) */

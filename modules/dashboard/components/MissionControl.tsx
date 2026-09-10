@@ -29,10 +29,25 @@ interface Profile {
   targetDomains?: string[]; interviewDate?: string; displayName?: string;
 }
 
+interface DomainCoverage {
+  domain: string;
+  covered: number;
+  total: number;
+  conceptIds: string[];
+}
+
+function studioHref(domain?: string, concepts: string[] = []) {
+  const params = new URLSearchParams();
+  if (domain) params.set('domain', domain);
+  if (concepts.length) params.set('concepts', concepts.join(','));
+  const query = params.toString();
+  return `/mock-interviews${query ? `?${query}` : ''}`;
+}
+
 export function MissionControl() {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [coverage, setCoverage] = useState<{ domain: string; covered: number; total: number }[]>([]);
+  const [coverage, setCoverage] = useState<DomainCoverage[]>([]);
   const [nba, setNba] = useState<{ domain: string; kind: string; cta: string; concepts: string[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,7 +66,7 @@ export function MissionControl() {
           ? prof.targetDomains
           : ['ruby-backend-fresher', 'java-backend-fresher', 'frontend-fresher', 'dsa'];
         // concept universe from the coverage API
-        const cov: { domain: string; covered: number; total: number }[] = [];
+        const cov: DomainCoverage[] = [];
         for (const d of domains.slice(0, 5)) {
           try {
             const res = await fetch('/api/engine/coverage', {
@@ -60,15 +75,18 @@ export function MissionControl() {
             });
             if (res.ok) {
               const data = await res.json();
-              const total = data.concepts?.length ?? 0;
+              const conceptIds = Array.isArray(data.concepts)
+                ? data.concepts.filter((concept: unknown): concept is string => typeof concept === 'string')
+                : [];
+              const total = conceptIds.length;
               const { coverageOf: co } = await import('@/lib/engine/mastery.mjs');
-              const cc = co(data.concepts ?? []);
-              cov.push({ domain: d, covered: cc.ratio ? Math.round(cc.ratio * total) : 0, total });
+              const cc = co(conceptIds);
+              cov.push({ domain: d, covered: cc.ratio ? Math.round(cc.ratio * total) : 0, total, conceptIds });
             }
           } catch {}
         }
         setCoverage(cov);
-        const map = Object.fromEntries(cov.map((c) => [c.domain, Array(c.total).fill(0).map((_, i) => `c${i}`)]));
+        const map = Object.fromEntries(cov.map((c) => [c.domain, c.conceptIds]));
         const action = nextBestAction(map);
         if (action) setNba(action);
       } catch {}
@@ -98,6 +116,9 @@ export function MissionControl() {
 
   const interviewDate = profile?.interviewDate;
   const daysTo = interviewDate ? Math.ceil((new Date(interviewDate).getTime() - Date.now()) / 86400000) : null;
+  const activeDomain = profile?.targetDomains?.[0];
+  const newMockHref = studioHref(activeDomain);
+  const nextActionHref = nba ? studioHref(nba.domain, nba.concepts) : '/mock-interviews';
 
   if (loading) {
     return (
@@ -127,7 +148,7 @@ export function MissionControl() {
             )}
           </div>
           <div className="flex gap-2">
-            <Link href="/mock-interviews" className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-foreground hover:bg-muted">
+            <Link href={newMockHref} className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-foreground hover:bg-muted">
               <Mic className="h-3.5 w-3.5" /> New mock
             </Link>
             <Link href="/offer-ready/start" className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90">
@@ -140,18 +161,20 @@ export function MissionControl() {
       {/* ============ next best action ============ */}
       {nba ? (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-surface p-4 ring-1 ring-primary/15">
-          <div className="mb-2 flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-primary">
-            <Zap className="h-3 w-3" /> Next best action
-          </div>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-foreground">{nba.cta}</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {nba.domain.replace(/-/g, ' ')} · weakest: {nba.concepts?.slice(0, 3).join(', ') || 'coverage gaps'}
-              </div>
+          <Link href={nextActionHref} className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <div className="mb-2 flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-primary">
+              <Zap className="h-3 w-3" /> Next best action
             </div>
-            <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-primary" />
-          </div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-foreground">{nba.cta}</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {nba.domain.replace(/-/g, ' ')} · weakest: {nba.concepts?.slice(0, 3).join(', ') || 'coverage gaps'}
+                </div>
+              </div>
+              <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-primary" />
+            </div>
+          </Link>
         </motion.div>
       ) : sessions.length === 0 ? (
         <div className="rounded-lg border border-border bg-surface p-5">
@@ -162,7 +185,7 @@ export function MissionControl() {
           <div className="mt-1 text-sm text-muted-foreground">
             One session calibrates the engine: your weak concepts become your plan.
           </div>
-          <Link href="/mock-interviews" className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
+          <Link href={newMockHref} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
             Enter the interview room <ArrowRight className="h-3 w-3" />
           </Link>
         </div>

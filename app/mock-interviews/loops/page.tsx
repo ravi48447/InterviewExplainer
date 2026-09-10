@@ -18,17 +18,44 @@ interface Loop {
   id: string;
   name: string;
   tagline: string;
-  rounds: { label: string; minutes: number; mode: string }[];
+  rounds: PracticeRound[];
   emphasis: string;
   plan: string;
+}
+
+interface PracticeRound {
+  label: string;
+  minutes: number;
+  mode: string;
+  domain?: string;
+  preset?: string;
+  tier?: number;
+  persona?: string;
+  personas?: string[];
+  count?: number;
 }
 
 interface Sched {
   loopName: string;
   interviewDate: string;
-  days: { date: string; label: string; rounds: { label: string; minutes: number; mode: string }[]; minutes: number }[];
+  days: { date: string; label: string; rounds: PracticeRound[]; minutes: number }[];
   emphasis: string;
   note: string;
+}
+
+function preparedRoundHref(round: PracticeRound, fallbackDomain: string) {
+  const preset = round.preset ?? (round.minutes <= 20 ? 'quick' : round.minutes <= 30 ? 'standard' : 'deep');
+  const params = new URLSearchParams({
+    domain: round.domain ?? fallbackDomain,
+    mode: round.mode,
+    preset,
+    tier: String(round.tier ?? 2),
+    persona: round.persona ?? round.personas?.[0] ?? 'skeptic',
+    count: String(round.count ?? Math.max(3, Math.round(round.minutes / 8))),
+    minutes: String(round.minutes),
+    prepared: '1',
+  });
+  return `/mock-interviews/audio?${params.toString()}`;
 }
 
 export default function LoopsPage() {
@@ -38,6 +65,12 @@ export default function LoopsPage() {
   const [sched, setSched] = useState<Sched | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [practiceDomain, setPracticeDomain] = useState('java-backend-fresher');
+
+  useEffect(() => {
+    const requestedDomain = new URLSearchParams(window.location.search).get('domain');
+    if (requestedDomain) setPracticeDomain(requestedDomain);
+  }, []);
 
   useEffect(() => {
     fetch('/api/engine/loops').then((r) => r.json()).then((d) => setLoops(d.loops ?? [])).catch(() => {});
@@ -152,7 +185,7 @@ export default function LoopsPage() {
                       {d.rounds.map((r) => (
                         <a
                           key={r.label}
-                          href={`/mock-interviews/audio?mode=${r.mode}&preset=${r.minutes <= 20 ? 'quick' : r.minutes <= 30 ? 'standard' : 'deep'}&domain=`}
+                          href={preparedRoundHref(r, practiceDomain)}
                           className="flex items-center gap-3 rounded-lg bg-surface hover:bg-muted px-3 py-2.5 transition"
                         >
                           <Play className="h-3.5 w-3.5 text-blue-400 shrink-0" />

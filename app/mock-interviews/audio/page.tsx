@@ -16,7 +16,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap, Target, Brain, Code2, MessageSquare, Play, Bot, Send, Keyboard,
-  Mic, Sparkles, ArrowRight, Wind, Timer as TimerIcon, Lock, Trophy,
+  Mic, Sparkles, ArrowRight, Timer as TimerIcon, Lock, Trophy, CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEngineSync } from '@/lib/engine/useEngineSync';
@@ -30,9 +30,14 @@ import {
 import {
   VoiceController, type VoicePhase, type DeliveryMetrics,
 } from '@/lib/engine/voiceController';
-import { saveSessionRecord } from '@/lib/engine/persist.mjs';
+import { saveFullReport, saveSessionRecord } from '@/lib/engine/persist.mjs';
 import { recordEvidence } from '@/lib/engine/mastery.mjs';
 import { getSessionRecords } from '@/lib/engine/persist.mjs';
+import {
+  STUDIO_MODES,
+  STUDIO_PERSONAS,
+  STUDIO_PRESETS,
+} from '@/lib/engine/studioConfig';
 
 interface PublicQuestion {
   id: string; question: string; title: string; difficulty?: string;
@@ -45,27 +50,34 @@ interface PublicQuestion {
   constraints?: string;
 }
 
-const PRESETS = [
-  { key: 'quick', mins: 15, qs: 5, label: '15 min', sub: 'Quick warm-up · 5 questions', icon: Zap },
-  { key: 'standard', mins: 30, qs: 10, label: '30 min', sub: 'Standard mock · 10 questions', icon: Target },
-  { key: 'deep', mins: 60, qs: 20, label: '60 min', sub: 'Full interview · 20 questions', icon: Brain },
-];
+const PRESET_ICONS = { quick: Zap, standard: Target, deep: Brain } as const;
+const MODE_ICONS = { mixed: Brain, technical: Code2, behavioral: MessageSquare, coding: Play } as const;
 
-const MODES = [
-  { key: 'mixed', label: 'Full mix', icon: Brain, desc: 'Technical + behavioral — the real loop' },
-  { key: 'technical', label: 'Technical', icon: Code2, desc: 'Adaptive Q&A with follow-up probes' },
-  { key: 'behavioral', label: 'Behavioral', icon: MessageSquare, desc: 'STAR-tracked storytelling' },
-  { key: 'coding', label: 'Coding / DSA', icon: Play, desc: 'Real problems with editor + verification' },
-];
+const PRESETS = STUDIO_PRESETS.map((item) => ({
+  key: item.id,
+  mins: item.minutes,
+  qs: item.questions,
+  label: `${item.minutes} min`,
+  sub: `${item.label} · ${item.questions} questions`,
+  icon: PRESET_ICONS[item.id],
+}));
 
-const PERSONAS: Record<string, RoomPersona & { voice: { rate: number; pitch: number } }> = {
-  mentor: { id: 'mentor', name: 'Aisha', role: 'Senior Engineer', vibe: 'warm but thorough', voice: { rate: 0.96, pitch: 1.05 } },
-  skeptic: { id: 'skeptic', name: 'Marcus', role: 'Staff Engineer', vibe: 'doubts every claim', voice: { rate: 0.98, pitch: 0.92 } },
-  rapid: { id: 'rapid', name: 'Priya', role: 'Hiring Manager', vibe: 'fast, interrupting', voice: { rate: 1.12, pitch: 1.0 } },
-  architect: { id: 'architect', name: 'Dana', role: 'Principal Architect', vibe: 'systems-scale thinking', voice: { rate: 0.92, pitch: 0.95 } },
-  detail: { id: 'detail', name: 'Elena', role: 'Tech Lead', vibe: 'depth over breadth', voice: { rate: 0.94, pitch: 1.1 } },
-  silent: { id: 'silent', name: 'The Panel', role: 'Silent Judge', vibe: 'minimal reactions', voice: { rate: 1.0, pitch: 1.0 } },
-};
+const MODES = STUDIO_MODES.map((item) => ({
+  key: item.id,
+  label: item.shortLabel,
+  icon: MODE_ICONS[item.id],
+  desc: item.description,
+}));
+
+const PERSONAS = Object.fromEntries(
+  STUDIO_PERSONAS.map((item) => [item.id, {
+    id: item.id,
+    name: item.name,
+    role: item.role,
+    vibe: item.style,
+    voice: item.voice,
+  }]),
+) as Record<string, RoomPersona & { voice: { rate: number; pitch: number } }>;
 const FALLBACK_PERSONA = PERSONAS.skeptic;
 
 const STAR_PARTS = [
@@ -82,26 +94,52 @@ export default function PremiumMockPage() {
   const presetParam = searchParams?.get('preset');
   const modeParam = searchParams?.get('mode');
   const personaParam = searchParams?.get('persona');
+  const preparedParam = searchParams?.get('prepared');
+  const preferredInput = searchParams?.get('input') === 'type' ? 'type' : 'voice';
+  const seedParam = searchParams?.get('seed');
+  const minutesParam = searchParams?.get('minutes');
+  const requestedSeed = seedParam ? Number(seedParam) : Number.NaN;
+  const requestedMinutes = minutesParam ? Number(minutesParam) : Number.NaN;
+  const targetConceptParam = searchParams?.get('concepts') || '';
+  const targetConcepts = useMemo(
+    () => targetConceptParam
+      .split(',')
+      .map((concept) => concept.trim())
+      .filter(Boolean)
+      .slice(0, 8),
+    [targetConceptParam],
+  );
 
   const { authed, pushLocal } = useEngineSync();
 
   // setup
   const [preset, setPreset] = useState(presetParam && ['quick', 'standard', 'deep'].includes(presetParam) ? presetParam : 'standard');
-  const [mode, setMode] = useState(modeParam && ['mixed', 'technical', 'behavioral', 'coding'].includes(modeParam) ? modeParam : 'technical');
-  const [domain, setDomain] = useState(domainSlug || 'ruby-backend-fresher');
+  const [mode, setMode] = useState(
+    domainSlug === 'dsa'
+      ? 'coding'
+      : (modeParam && ['mixed', 'technical', 'behavioral', 'coding'].includes(modeParam) ? modeParam : 'technical'),
+  );
+  const [domain, setDomain] = useState(domainSlug || 'java-backend-fresher');
   const [tier, setTier] = useState(Number(searchParams?.get('tier')) || 2);
   const [personaChoice, setPersonaChoice] = useState<string>(personaParam && PERSONAS[personaParam] ? personaParam : 'skeptic');
+  const [sessionMinutes, setSessionMinutes] = useState(
+    Number.isFinite(requestedMinutes) && requestedMinutes >= 5 && requestedMinutes <= 90
+      ? Math.round(requestedMinutes)
+      : (PRESETS.find((item) => item.key === presetParam)?.mins ?? 30),
+  );
   const countParam = Number(searchParams?.get('count')) || 0;
 
   // session
-  const [phase, setPhase] = useState<'setup' | 'ritual' | 'starting' | 'asking' | 'listening' | 'thinking' | 'coding' | 'review' | 'done' | 'gated'>('setup');
+  const [phase, setPhase] = useState<'setup' | 'ritual' | 'locked' | 'starting' | 'asking' | 'listening' | 'thinking' | 'coding' | 'review' | 'done' | 'gated'>(preparedParam === '1' ? 'ritual' : 'setup');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionSeed, setSessionSeed] = useState<number | null>(null);
   const [current, setCurrent] = useState<PublicQuestion | null>(null);
   const [interviewerLine, setInterviewerLine] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [askedCount, setAskedCount] = useState(0);
-  const totalPlanned = countParam >= 3 ? countParam : (PRESETS.find((p) => p.key === preset)?.qs ?? 10);
+  const totalPlanned = countParam >= 3
+    ? Math.min(Math.max(Math.round(countParam), 3), 24)
+    : (PRESETS.find((p) => p.key === preset)?.qs ?? 10);
 
   // voice (the ONE controller)
   const voiceRef = useRef<VoiceController | null>(null);
@@ -167,6 +205,7 @@ export default function PremiumMockPage() {
   // listen flow: interviewer stops → you answer → submit
   const beginAnswer = useCallback(async () => {
     const v = ensureVoice(persona.id);
+    v.stopSpeech();
     setFinalTranscript('');
     setInterim('');
     setDelivery(null);
@@ -174,6 +213,15 @@ export default function PremiumMockPage() {
     setPhase('listening');
     await v.startListening();
   }, [ensureVoice, persona.id]);
+
+  const beginTypedAnswer = useCallback(() => {
+    voiceRef.current?.stopSpeech();
+    setFinalTranscript('');
+    setInterim('');
+    setDelivery(null);
+    setTyped('');
+    setPhase('listening');
+  }, []);
 
   const submitAnswer = useCallback(async () => {
     const v = voiceRef.current;
@@ -189,14 +237,17 @@ export default function PremiumMockPage() {
     sessionSeed,
     domain: domainRef.current,
     questionCount: totalPlanned,
+    targetConcepts,
     askedIds: [...askedIdsRef.current],
     usedProbeIds: [...usedProbeIdsRef.current],
     dodged: dodgedRef.current,
     recentSignals: recentSignalsRef.current.slice(-6),
     moveLog: moveLogRef.current,
     persona: persona.id,
-    minutes: PRESETS.find((p) => p.key === preset)?.mins ?? 30,
-    plan: 'free',
+    preset,
+    mode,
+    tier,
+    minutes: sessionMinutes,
   });
 
   const startSession = useCallback(async () => {
@@ -204,7 +255,7 @@ export default function PremiumMockPage() {
     setPhase('starting');
     try {
       const v = ensureVoice(persona.id);
-      const pre = await v.preflight();
+      const pre = await v.preflight({ testMic: preferredInput === 'voice' });
       setNeural(pre.neural);
       if (!pre.micOk) setVoiceError(pre.micError ?? 'mic_error');
 
@@ -218,12 +269,15 @@ export default function PremiumMockPage() {
           tier,
           persona: personaChoice ?? undefined,
           questionCount: totalPlanned,
+          sessionSeed: Number.isFinite(requestedSeed) ? requestedSeed : undefined,
+          minutes: sessionMinutes,
+          targetConcepts,
         }),
       });
       const data = await res.json();
       if (res.status === 403) {
         setUpsell({ ...data, plans: undefined });
-        setPhase('setup');
+        setPhase(preparedParam === '1' ? 'locked' : 'setup');
         return;
       }
       if (!res.ok || !data.first?.question) throw new Error(data.error || 'start failed');
@@ -236,7 +290,7 @@ export default function PremiumMockPage() {
       setAskedCount(1);
       askedIdsRef.current = new Set([firstQ.id]);
       setRubricChecks(new Array(Math.min(6, firstQ.conceptLabels?.length ?? 0)).fill(false));
-      setTimeLeft(countParam >= 3 ? Math.round(countParam * 4.5) * 60 : (PRESETS.find((p) => p.key === preset)?.mins ?? 30) * 60);
+      setTimeLeft(sessionMinutes * 60);
 
       // greeting + first question in one voice flow
       await say(data.opener ? `${data.opener} ${data.first.rendered}` : data.first.rendered);
@@ -245,7 +299,7 @@ export default function PremiumMockPage() {
       setError(e?.message || 'Could not start.');
       setPhase('setup');
     }
-  }, [domain, preset, mode, tier, personaChoice, persona.id, ensureVoice, say, totalPlanned, countParam]);
+  }, [domain, preset, mode, tier, personaChoice, persona.id, ensureVoice, say, totalPlanned, requestedSeed, sessionMinutes, preferredInput, targetConcepts, preparedParam]);
 
   const advance = useCallback(async (answerText: string, meta?: any) => {
     if (!current || !sessionId) return;
@@ -265,17 +319,47 @@ export default function PremiumMockPage() {
       });
       const data = await res.json();
       if (data.gated) {
+        if (data.ave && data.ave.signal !== 'gated') {
+          setLastAve(data.ave);
+          recentSignalsRef.current.push(data.ave.signal);
+          turnsRef.current.push({
+            questionId: current.id,
+            transcript: answerText,
+            isBehavioral: !!current.isBehavioral || mode === 'behavioral',
+            meta,
+            move: 'gate',
+            score: data.ave.score,
+          });
+          moveLogRef.current.push({
+            turn: turnsRef.current.length,
+            move: 'gate',
+            questionId: null,
+            reason: 'free preview boundary after four scored answers',
+          });
+        }
         setGateInfo(data);
         setUpsell(data.upsell);
         setPhase('review');
         return;
       }
-      if (!res.ok) throw new Error(data.error || 'turn failed');
+      if (!res.ok) throw new Error(data.message || data.error || 'Turn failed.');
 
       setLastAve(data.ave);
       recentSignalsRef.current.push(data.ave?.signal);
-      turnsRef.current.push({ questionId: current.id, transcript: answerText, move: data.next?.move ?? 'answer', score: data.ave?.score });
-      moveLogRef.current.push({ turn: turnsRef.current.length, move: data.next?.move, questionId: data.next?.question?.id ?? null });
+      turnsRef.current.push({
+        questionId: current.id,
+        transcript: answerText,
+        isBehavioral: !!current.isBehavioral || mode === 'behavioral',
+        meta,
+        move: data.next?.move ?? 'answer',
+        score: data.ave?.score,
+      });
+      moveLogRef.current.push({
+        turn: turnsRef.current.length,
+        move: data.next?.move,
+        questionId: data.next?.question?.id ?? null,
+        reason: data.next?.reason ?? null,
+      });
 
       // brief reaction, then next question
       const line = data.next?.reaction
@@ -292,13 +376,13 @@ export default function PremiumMockPage() {
       setAskedCount((n) => n + 1);
       askedIdsRef.current.add(data.next.question.id);
       setRubricChecks(new Array(Math.min(6, data.next.question.conceptLabels?.length ?? 0)).fill(false));
-      setPhase(data.next.question.isCoding ? 'coding' : 'asking');
       await say(line);
+      setPhase(data.next.question.isCoding ? 'coding' : 'asking');
     } catch (e: any) {
       setError(e?.message || 'Turn failed.');
       setPhase('asking');
     }
-  }, [current, sessionId, sessionSeed, say, totalPlanned, preset, persona.id]);
+  }, [current, sessionId, sessionSeed, say, totalPlanned, preset, persona.id, mode, tier, sessionMinutes, targetConcepts]);
 
   const finishSession = useCallback(async (finalAve?: any) => {
     if (!sessionId) return;
@@ -307,35 +391,55 @@ export default function PremiumMockPage() {
       const res = await fetch('/api/engine/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, clientState: { moveLog: moveLogRef.current }, turns: turnsRef.current }),
+        body: JSON.stringify({
+          sessionId,
+          clientState: {
+            moveLog: moveLogRef.current,
+            domain: domainRef.current,
+            mode,
+            preset,
+            presetMinutes: sessionMinutes,
+            persona: persona.id,
+            tier,
+          },
+          turns: turnsRef.current,
+        }),
       });
-      const report = res.ok ? await res.json() : null;
+      const report = await res.json().catch(() => null);
+      if (!res.ok || !report) throw new Error(report?.message || report?.error || 'Could not build the report.');
       if (report) {
         sessionStorage.setItem(`ie_mock_report_${sessionId}`, JSON.stringify(report));
+        saveFullReport(sessionId, report);
         saveSessionRecord({
           sessionId,
           domain: domainRef.current,
           mode,
           preset,
-          presetMinutes: PRESETS.find((p) => p.key === preset)?.mins,
+          presetMinutes: sessionMinutes,
           overallScore: report.overallScore,
           turnsCount: report.turnsCount,
-          weakConcepts: report.weakConcepts?.slice(0, 8) ?? [],
+          weakConcepts: (report.weakConcepts ?? [])
+            .slice(0, 8)
+            .map((concept: any) => concept?.label ?? concept?.id ?? String(concept)),
         });
-        if (authed) pushLocal();
         try {
           for (const q of report.perQuestion ?? []) {
-            if (q.coverage?.hit?.length) recordEvidence(q.coverage.hit, 'spoken');
+            const ids = q.coverage?.hitIds ?? q.coverage?.hit ?? [];
+            if (ids.length) recordEvidence(ids, 'spoken');
           }
         } catch {}
+        if (authed) pushLocal();
         router.push(`/mock-interviews/results?session=${sessionId}`);
       }
-    } catch {}
-  }, [sessionId, mode, preset, router, authed, pushLocal]);
+    } catch (e: any) {
+      setError(e?.message || 'Could not build the report. Your session is still available in this tab.');
+      setPhase(turnsRef.current.length ? 'review' : 'asking');
+    }
+  }, [sessionId, mode, preset, sessionMinutes, persona.id, tier, router, authed, pushLocal]);
 
   // countdown
   useEffect(() => {
-    if (['setup', 'done', 'gated'].includes(phase) || timeLeft <= 0) return;
+    if (['setup', 'locked', 'review', 'done', 'gated'].includes(phase) || timeLeft <= 0) return;
     const t = window.setTimeout(() => setTimeLeft((v) => v - 1), 1000);
     return () => window.clearTimeout(t);
   }, [phase, timeLeft]);
@@ -345,7 +449,7 @@ export default function PremiumMockPage() {
       nudgedRef.current = true;
       say('One minute left — start wrapping up.');
     }
-    if (timeLeft === 0 && sessionId && !['setup', 'done', 'thinking', 'gated'].includes(phase)) {
+    if (timeLeft === 0 && sessionId && !['setup', 'locked', 'review', 'done', 'thinking', 'gated'].includes(phase)) {
       voiceRef.current?.stopSpeech();
       say("That's all the time we have today. Let's look at your report.");
       finishSession();
@@ -362,6 +466,21 @@ export default function PremiumMockPage() {
   );
 
   const modeLabel = MODES.find((m) => m.key === mode)?.label ?? 'Technical';
+  const changeSetupHref = useMemo(() => {
+    const params = new URLSearchParams({
+      domain,
+      mode,
+      preset,
+      persona: personaChoice,
+      tier: String(tier),
+      minutes: String(sessionMinutes),
+      count: String(totalPlanned),
+      input: preferredInput,
+    });
+    if (Number.isFinite(requestedSeed)) params.set('seed', String(requestedSeed));
+    if (targetConcepts.length) params.set('concepts', targetConcepts.join(','));
+    return `/mock-interviews?${params.toString()}`;
+  }, [domain, mode, preset, personaChoice, tier, sessionMinutes, totalPlanned, preferredInput, requestedSeed, targetConcepts]);
 
   // ============================ SETUP SCREEN ============================
   if (phase === 'setup') {
@@ -393,7 +512,10 @@ export default function PremiumMockPage() {
               {PRESETS.map((p) => (
                 <button
                   key={p.key}
-                  onClick={() => setPreset(p.key)}
+                  onClick={() => {
+                    setPreset(p.key);
+                    setSessionMinutes(p.mins);
+                  }}
                   className={`rounded-lg border p-3 text-left transition-all ${preset === p.key ? 'border-foreground/50 bg-muted ring-1 ring-foreground/20' : 'border-border bg-surface hover:bg-muted'}`}
                 >
                   <p.icon className={`mb-1.5 h-4 w-4 ${preset === p.key ? 'text-foreground' : 'text-muted-foreground'}`} />
@@ -484,18 +606,145 @@ export default function PremiumMockPage() {
   // ============================ PRE-SESSION RITUAL ============================
   if (phase === 'ritual') {
     return (
-      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-background px-4 text-foreground">
-        <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md w-full text-center">
-          <Wind className="mx-auto mb-6 h-10 w-10 text-primary" />
-          <h2 className="mb-2 font-display text-title tracking-tight">Before you begin</h2>
-          <p className="mb-8 text-base leading-relaxed text-muted-foreground">
-            Interviews reward composure, not just knowledge. Box-breathe with the ring:
-            in 4 · hold 4 · out 4. Reframe the arousal as readiness — same body, different story.
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 text-foreground">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl rounded-xl border border-border bg-surface p-5 shadow-lg sm:p-7">
+          <div className="flex items-center gap-2 text-sm font-semibold text-success">
+            <CheckCircle2 className="h-4 w-4" /> Session prepared
+          </div>
+          <div className="mt-5 flex items-center gap-3 border-b border-border pb-5">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary">
+              {persona.name[0]}
+            </span>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Your interview with {persona.name} is ready</h1>
+              <p className="mt-0.5 text-sm text-content-secondary">{persona.role} · {persona.vibe}</p>
+            </div>
+          </div>
+          <dl className="grid gap-3 py-5 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-content-muted">Round</dt>
+              <dd className="mt-1 font-semibold text-foreground">{modeLabel}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-content-muted">Length</dt>
+              <dd className="mt-1 font-semibold text-foreground">{sessionMinutes} min</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-content-muted">Questions</dt>
+              <dd className="mt-1 font-semibold text-foreground">{totalPlanned}</dd>
+            </div>
+          </dl>
+          <div className="rounded-lg border border-border bg-surface-subtle px-4 py-3 text-sm leading-6 text-content-secondary">
+            {preferredInput === 'voice'
+              ? 'We will check microphone access, play the interviewer voice, and transcribe your answer live. Typing remains available at any time.'
+              : 'The interviewer voice will still play, but no microphone is required. You can type every answer in the room.'}
+          </div>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Link href={changeSetupHref} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium text-content-secondary hover:bg-muted hover:text-foreground">
+              Change setup
+            </Link>
+            <button onClick={startSession} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+              {preferredInput === 'voice' ? <Mic className="h-4 w-4" /> : <Keyboard className="h-4 w-4" />}
+              Enter interview room
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ============================ LOCKED CONFIGURATION ============================
+  if (phase === 'locked') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 text-foreground">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl rounded-xl border border-border bg-surface p-5 shadow-lg sm:p-7">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Lock className="h-5 w-5" />
+          </span>
+          <p className="mt-5 text-xs font-semibold tracking-[0.12em] text-primary">Interview Pass</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">This interview setup is a Pass feature</h1>
+          <p className="mt-2 text-sm leading-6 text-content-secondary">
+            {upsell?.message || `${modeLabel}, ${sessionMinutes} minutes, or the ${persona.name} interviewer goes beyond the free practice setup.`}
           </p>
-          <BreathingRing />
-          <button onClick={startSession} className="mt-8 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
-            I&apos;m ready
-          </button>
+          <dl className="mt-5 grid gap-3 border-y border-border py-4 text-sm sm:grid-cols-3">
+            <div><dt className="text-xs text-content-muted">Interviewer</dt><dd className="mt-1 font-semibold">{persona.name}</dd></div>
+            <div><dt className="text-xs text-content-muted">Round</dt><dd className="mt-1 font-semibold">{modeLabel}</dd></div>
+            <div><dt className="text-xs text-content-muted">Length</dt><dd className="mt-1 font-semibold">{sessionMinutes} min</dd></div>
+          </dl>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Link href={changeSetupHref} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium text-content-secondary hover:bg-muted hover:text-foreground">
+              Choose a free setup
+            </Link>
+            <Link href="/pricing" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+              See Interview Pass <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ============================ PREVIEW COMPLETE / REPORT RETRY ============================
+  if (phase === 'review') {
+    const previewComplete = !!gateInfo;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 text-foreground">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl rounded-xl border border-border bg-surface p-5 shadow-lg sm:p-7">
+          <div className={`flex items-center gap-2 text-sm font-semibold ${previewComplete ? 'text-primary' : 'text-destructive'}`}>
+            {previewComplete ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+            {previewComplete ? 'Free preview complete' : 'Your report needs one more try'}
+          </div>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
+            {previewComplete ? 'Your practice still produced useful feedback.' : 'Your answers are safe in this tab.'}
+          </h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-content-secondary">
+            {previewComplete
+              ? `You completed ${turnsRef.current.length} scored ${turnsRef.current.length === 1 ? 'answer' : 'answers'}. Open the report to see the concepts you covered, what you missed, and the best next study step.`
+              : 'The interview finished, but the report request did not complete. Retry it now without repeating the interview.'}
+          </p>
+
+          {error && (
+            <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-3 border-y border-border py-5 sm:grid-cols-3">
+            <div>
+              <div className="text-xs text-content-muted">Interviewer</div>
+              <div className="mt-1 text-sm font-semibold">{persona.name}</div>
+            </div>
+            <div>
+              <div className="text-xs text-content-muted">Round</div>
+              <div className="mt-1 text-sm font-semibold">{modeLabel}</div>
+            </div>
+            <div>
+              <div className="text-xs text-content-muted">Answers scored</div>
+              <div className="mt-1 text-sm font-semibold">{turnsRef.current.length}</div>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              onClick={() => { setError(null); finishSession(); }}
+              disabled={!turnsRef.current.length}
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trophy className="h-4 w-4" /> {previewComplete ? 'View my feedback' : 'Retry report'}
+            </button>
+            {previewComplete ? (
+              <Link href="/pricing" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-5 text-sm font-medium text-content-secondary hover:bg-muted hover:text-foreground">
+                <Lock className="h-4 w-4" /> Unlock full interviews
+              </Link>
+            ) : (
+              <button onClick={() => { setError(null); setPhase(current?.isCoding ? 'coding' : 'asking'); }} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-5 text-sm font-medium text-content-secondary hover:bg-muted hover:text-foreground">
+                Return to room
+              </button>
+            )}
+          </div>
+          <Link href="/mock-interviews" className="mt-4 inline-flex text-xs font-medium text-content-muted hover:text-foreground">
+            Back to Interview Studio
+          </Link>
         </motion.div>
       </div>
     );
@@ -509,7 +758,7 @@ export default function PremiumMockPage() {
       phase={voicePhase === 'idle' ? phase : voicePhase}
       voiceError={voiceError}
       timeLeftSec={timeLeft}
-      totalSec={countParam >= 3 ? countParam * 270 : (PRESETS.find((p) => p.key === preset)?.mins ?? 30) * 60}
+      totalSec={sessionMinutes * 60}
       questionIndex={askedCount}
       questionTotal={totalPlanned}
       modeLabel={modeLabel}
@@ -548,6 +797,12 @@ export default function PremiumMockPage() {
         />
       ) : null}
 
+      {error && (
+        <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* action bar */}
       <div className="mt-5 flex flex-col sm:flex-row gap-2">
         {phase === 'asking' && (
@@ -559,7 +814,7 @@ export default function PremiumMockPage() {
               <Mic className="h-4 w-4" /> Answer by voice
             </button>
             <button
-              onClick={() => setPhase('listening')}
+              onClick={beginTypedAnswer}
               className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
               <Keyboard className="h-4 w-4" /> Type instead
@@ -628,26 +883,6 @@ function SetupSection({ title, children }: { title: string; children: React.Reac
     <div className="mb-6">
       <div className="mb-2.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">{title}</div>
       {children}
-    </div>
-  );
-}
-
-function BreathingRing() {
-  return (
-    <div className="relative h-40 w-40 mx-auto">
-      {[0, 1, 2].map((i) => (
-        <motion.div
-          key={i}
-          className="absolute inset-0 rounded-full border border-primary/40"
-          animate={{ scale: [1, 1.35, 1.35, 1], opacity: [0.7, 0.7, 0.2, 0.7] }}
-          transition={{ repeat: Infinity, duration: 12, delay: i * 0.4, times: [0, 0.45, 0.55, 1] }}
-        />
-      ))}
-      <motion.div
-        className="absolute inset-8 rounded-full border border-primary/50 bg-primary/10"
-        animate={{ scale: [1, 1.2, 1.2, 1] }}
-        transition={{ repeat: Infinity, duration: 12, times: [0, 0.45, 0.55, 1] }}
-      />
     </div>
   );
 }

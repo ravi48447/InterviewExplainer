@@ -531,16 +531,47 @@ function ScoreStrip({ data }: { data: { ts: number; score: number; mode: string;
   );
 }
 
+function preparedSessionHref(config: {
+  domain: string;
+  mode: string;
+  preset: string;
+  tier: number;
+  persona: string;
+  minutes?: number;
+  count?: number;
+}) {
+  const params = new URLSearchParams({
+    domain: config.domain,
+    mode: config.mode,
+    preset: config.preset,
+    tier: String(config.tier),
+    persona: config.persona,
+    prepared: '1',
+  });
+  if (Number.isFinite(config.minutes)) params.set('minutes', String(config.minutes));
+  if (Number.isFinite(config.count)) params.set('count', String(config.count));
+  return `/mock-interviews/audio?${params.toString()}`;
+}
+
 function sessionHref(spec: any, campaign: any): string | null {
-  const domain = spec.domain ?? campaign.domains?.[0] ?? 'ruby-backend-fresher';
+  const campaignDomain = spec.domain ?? campaign.domains?.[0] ?? 'ruby-backend-fresher';
+  const prepared = (defaults: Omit<Parameters<typeof preparedSessionHref>[0], 'minutes'>) => preparedSessionHref({
+    ...defaults,
+    domain: spec.domain ?? defaults.domain,
+    preset: spec.preset ?? defaults.preset,
+    tier: spec.tier ?? defaults.tier,
+    persona: spec.persona ?? defaults.persona,
+    count: spec.count ?? defaults.count,
+    minutes: spec.minutes,
+  });
   switch (spec.mode) {
-    case 'quick': return `/mock-interviews/audio?mode=technical&preset=quick&tier=1&persona=mentor&domain=${domain}&count=5`;
-    case 'dsa': return `/mock-interviews/audio?mode=coding&preset=deep&tier=2&domain=dsa`;
-    case 'live-coding': return `/mock-interviews/audio?mode=coding&preset=deep&tier=3&persona=detail&domain=${domain}`;
-    case 'system-design': return `/mock-interviews/audio?mode=technical&preset=deep&tier=4&persona=architect&domain=${domain}`;
-    case 'behavioral': return `/mock-interviews/audio?mode=behavioral&preset=standard&tier=3&domain=${domain}`;
-    case 'full': return `/mock-interviews/audio?mode=mixed&preset=deep&tier=${spec.tier ?? 3}&domain=${domain}`;
-    case 'rapid': return `/mock-interviews/audio?mode=technical&preset=quick&tier=3&persona=rapid&domain=${domain}&count=12`;
+    case 'quick': return prepared({ domain: campaignDomain, mode: 'technical', preset: 'quick', tier: 1, persona: 'mentor', count: 5 });
+    case 'dsa': return prepared({ domain: 'dsa', mode: 'coding', preset: 'deep', tier: 2, persona: 'skeptic' });
+    case 'live-coding': return prepared({ domain: campaignDomain, mode: 'coding', preset: 'deep', tier: 3, persona: 'detail' });
+    case 'system-design': return prepared({ domain: campaignDomain, mode: 'technical', preset: 'deep', tier: 4, persona: 'architect' });
+    case 'behavioral': return prepared({ domain: campaignDomain, mode: 'behavioral', preset: 'standard', tier: 3, persona: 'skeptic' });
+    case 'full': return prepared({ domain: campaignDomain, mode: 'mixed', preset: 'deep', tier: 3, persona: 'skeptic' });
+    case 'rapid': return prepared({ domain: campaignDomain, mode: 'technical', preset: 'quick', tier: 3, persona: 'rapid', count: 12 });
     case 'peer': return `/mock-interviews/peer`;
     case 'company-loop': return `/mock-interviews/company`;
     default: return null;

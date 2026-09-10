@@ -22,7 +22,13 @@
  *  - echo cancellation + noise suppression + auto mic selection with test
  */
 
-import { speakNeural, probeServerVoice } from './neuralVoice';
+import {
+  pauseNeuralSpeech,
+  probeServerVoice,
+  resumeNeuralSpeech,
+  speakNeural,
+  stopNeuralSpeech,
+} from './neuralVoice';
 
 // ---------------------------------------------------------------------------
 // Technical pronunciation dictionary
@@ -187,6 +193,7 @@ export class VoiceController {
   private rate = 1;
   private stopped = true;
   private neural = false;
+  private speechGeneration = 0;
 
   constructor(options: VoiceControllerOptions = {}) {
     this.opts = {
@@ -262,6 +269,7 @@ export class VoiceController {
   /** Speak one full interviewer line. Resolves when the line completes. */
   async say(text: string): Promise<void> {
     if (this.stopped) return;
+    const generation = ++this.speechGeneration;
     const spoken = normalizeForSpeech(text);
     if (!spoken) return;
     this.setPhase('synthesizing');
@@ -276,12 +284,10 @@ export class VoiceController {
     await speakNeural(spoken, {
       persona: this.opts.persona ?? 'mentor',
       rate: this.rate,
-      onEnd: () => {
-        this.opts.onCaption?.(spoken, 1);
-        this.setPhase(this.listening ? 'listening' : 'idle');
-      },
     });
+    if (generation !== this.speechGeneration) return;
     this.opts.onCaption?.(spoken, 1);
+    this.setPhase(this.listening ? 'listening' : 'idle');
   }
 
   /** Queue-independent replay of the last line. */
@@ -294,19 +300,21 @@ export class VoiceController {
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (m) window.speechSynthesis.cancel();
+    if (m) this.stopSpeech();
   }
   setRate(r: number) {
     this.rate = r;
   }
   pause() {
-    window.speechSynthesis.pause();
+    pauseNeuralSpeech();
   }
   resume() {
-    window.speechSynthesis.resume();
+    resumeNeuralSpeech();
   }
   stopSpeech() {
-    window.speechSynthesis.cancel();
+    this.speechGeneration += 1;
+    stopNeuralSpeech();
+    this.setPhase(this.listening ? 'listening' : 'idle');
   }
 
   // ---------------- listening (ASR) ----------------
@@ -411,11 +419,14 @@ export class VoiceController {
   }
 
   // ---------------- lifecycle ----------------
-  async preflight(): Promise<{ neural: boolean; micOk: boolean; micError?: string }> {
+  async preflight(options: { testMic?: boolean } = {}): Promise<{ neural: boolean; micOk: boolean; micError?: string }> {
     this.stopped = false;
     this.setPhase('preflight');
     const neural = await probeServerVoice();
     this.neural = neural;
+    if (options.testMic === false) {
+      return { neural, micOk: true };
+    }
     const mic = await this.testMic();
     return { neural, micOk: mic.ok, micError: mic.error };
   }

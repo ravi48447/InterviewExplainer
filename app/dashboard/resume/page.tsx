@@ -24,7 +24,7 @@ interface Analysis {
   skillsByDomain: Record<string, string[]>;
   targetDomain: string | null;
   readiness: { domain: string; score: number; ratio: number; covered: number; partial: number; missing: number; conceptCount: number } | null;
-  gaps: { topicId: string; topic: string; title: string; importance: string; missingConcepts: string[]; learnUrl: string }[];
+  gaps: { topicId: string; topic: string; title: string; importance: string; missingConcepts: string[]; missingConceptIds?: string[]; learnUrl: string }[];
   hygiene: { score: number; checks: { id: string; label: string; ok: boolean; detail: string }[] };
   seam: string;
 }
@@ -41,6 +41,12 @@ const DOMAINS = [
   'python-backend-fresher',
   'frontend-fresher',
 ];
+
+function studioHref(domain: string, conceptIds: string[] = []) {
+  const params = new URLSearchParams({ domain });
+  if (conceptIds.length) params.set('concepts', conceptIds.join(','));
+  return `/mock-interviews?${params.toString()}`;
+}
 
 export default function ResumeAnalysisPage() {
   const [text, setText] = useState('');
@@ -275,7 +281,7 @@ export default function ResumeAnalysisPage() {
                             <BookOpen className="h-3 w-3" /> Study
                           </a>
                           <a
-                            href={`/mock-interviews/audio?domain=${g.topicId.split('/')[0]}`}
+                            href={studioHref(analysis.targetDomain || g.topicId.split('/')[0], g.missingConceptIds)}
                             className="px-2.5 py-1.5 rounded-lg bg-[#e8a33d]/15 hover:bg-[#e8a33d]/25 text-[#e8a33d] text-xs flex items-center gap-1"
                           >
                             <Mic className="h-3 w-3" /> Mock it

@@ -17,14 +17,16 @@ import {
 import { cn } from '@/lib/utils';
 import { buildReplayTimeline, replaySummary, transcriptWithTiming } from '@/lib/engine/replay.mjs';
 import { Button } from '@/components/ui/button';
+import MarkdownContent from '@/components/MarkdownContent';
 
 interface ReportQ {
   questionId: string;
   question: string;
   title?: string;
+  transcript?: string;
   move: string | null;
   score: number;
-  coverage: { hit: string[]; missed: string[]; ratio: number };
+  coverage: { hit: string[]; missed: string[]; hitIds?: string[]; missedIds?: string[]; ratio: number; basis?: 'concept-checklist' | 'expert-answer-alignment' };
   mistakeFlags: string[];
   suggested: { spoken: string; checklist: string[] };
   nextDrills: string[];
@@ -56,9 +58,14 @@ export default function ResultsPage() {
   // build the replay timeline from the report
   useEffect(() => {
     if (!report?.perQuestion?.length) return;
+    if (!report.perQuestion.some((q) => q.transcript?.trim())) {
+      setTimeline(null);
+      setSummary(null);
+      return;
+    }
     const turns = report.perQuestion.map((q: any) => ({
       questionId: q.questionId, question: q.question,
-      transcript: (q as any).transcript ?? q.suggested?.spoken ?? '',
+      transcript: q.transcript ?? '',
       move: q.move, score: q.score,
       ave: { score: q.score, coverage: q.coverage, mistakeFlags: q.mistakeFlags ?? [], signal: null },
     }));
@@ -88,48 +95,62 @@ export default function ResultsPage() {
   };
 
   useEffect(() => {
-    if (!sessionId) return;
-    // demo report: no login, no session — the full verdict experience
-    if (sessionId === 'demo') {
-      import('@/lib/offer-ready/demoEcosystem').then(({ DEMO_REPORT }) => {
-        setReport(DEMO_REPORT as any);
-      });
-      return;
-    }
-    const raw = sessionStorage.getItem(`ie_mock_report_${sessionId}`);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        setReport(parsed);
-        // durable copy for reloads after the tab closes
-        import('@/lib/engine/persist.mjs').then(({ saveFullReport }) => saveFullReport(sessionId, parsed)).catch(() => {});
-        return;
-      } catch {}
-    }
-    // tab closed / fresh load: the durable report store
-    import('@/lib/engine/persist.mjs').then(({ getFullReport }) => {
-      const durable = getFullReport(sessionId);
-      if (durable) setReport(durable);
-    }).catch(() => {});
-    // persist.mjs keeps session records (score + meta) even if the full
-    // report payload is gone (tab closed) — show the summary view then
-    import('@/lib/engine/persist.mjs').then(({ getSessionRecord }) => {
-      const rec = getSessionRecord(sessionId);
-      if (rec) {
-        setReport({
-          sessionId: rec.sessionId,
-          overallScore: rec.overallScore,
-          turnsCount: rec.turnsCount,
-          perQuestion: [],
-          strongConcepts: [],
-          weakConcepts: (rec.weakConcepts ?? []).map((c: string) => ({ id: c, label: c })),
-          moveLog: [],
-          methodology: 'Summary recovered from your saved sessions. Run a new mock for the full breakdown.',
-        } as any);
+    let cancelled = false;
+
+    async function restoreReport() {
+      if (!sessionId) {
+        if (!cancelled) setNotFound(true);
         return;
       }
-      setNotFound(true);
+
+      if (sessionId === 'demo') {
+        const { DEMO_REPORT } = await import('@/lib/offer-ready/demoEcosystem');
+        if (!cancelled) setReport(DEMO_REPORT as any);
+        return;
+      }
+
+      const raw = sessionStorage.getItem(`ie_mock_report_${sessionId}`);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const { saveFullReport } = await import('@/lib/engine/persist.mjs');
+          saveFullReport(sessionId, parsed);
+          if (!cancelled) setReport(parsed);
+          return;
+        } catch {}
+      }
+
+      const { getFullReport, getSessionRecord } = await import('@/lib/engine/persist.mjs');
+      const durable = getFullReport(sessionId);
+      if (durable) {
+        if (!cancelled) setReport(durable);
+        return;
+      }
+
+      const rec = getSessionRecord(sessionId);
+      if (rec) {
+        if (!cancelled) {
+          setReport({
+            sessionId: rec.sessionId,
+            overallScore: rec.overallScore,
+            turnsCount: rec.turnsCount,
+            perQuestion: [],
+            strongConcepts: [],
+            weakConcepts: (rec.weakConcepts ?? []).map((c: string) => ({ id: c, label: c })),
+            moveLog: [],
+            methodology: 'Summary recovered from your saved sessions. Run a new mock for the full breakdown.',
+          } as any);
+        }
+        return;
+      }
+
+      if (!cancelled) setNotFound(true);
+    }
+
+    restoreReport().catch(() => {
+      if (!cancelled) setNotFound(true);
     });
+    return () => { cancelled = true; };
   }, [sessionId]);
 
   if (notFound) {
@@ -240,7 +261,7 @@ export default function ResultsPage() {
               }
               if (e.type === 'verdict') {
                 const tone = e.score >= 75 ? 'hsl(var(--primary))' : e.score >= 55 ? 'hsl(var(--primary))' : e.score >= 35 ? 'hsl(var(--muted-foreground))' : 'hsl(var(--destructive))';
-                return <div key={i} title={`Q${e.turn} verdict: ${e.band} (${e.score})`} className="absolute top-2.5 h-3 w-3 rounded-full border-2" style={{ left: `calc(${left}% - 6px)`, borderColor: tone, background: playhead >= e.at ? tone : 'hsl(var(--background))' }} />;
+                return <div key={i} title={`Q${e.turn} verdict: ${e.band?.band ?? e.band} (${e.score})`} className="absolute top-2.5 h-3 w-3 rounded-full border-2" style={{ left: `calc(${left}% - 6px)`, borderColor: tone, background: playhead >= e.at ? tone : 'hsl(var(--background))' }} />;
               }
               if (e.type === 'mistake') {
                 return <div key={i} title={`⚠ ${e.label}`} className="absolute top-1 h-2.5 w-2.5 rotate-45 bg-destructive" style={{ left: `calc(${left}% - 5px)` }} />;
@@ -312,7 +333,11 @@ export default function ResultsPage() {
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-foreground truncate">{q.question}</div>
                 <div className="text-[11px] text-muted-foreground/80 flex gap-2 mt-0.5">
-                  <span>{q.coverage.hit.length}/{q.coverage.hit.length + q.coverage.missed.length} concepts</span>
+                  <span>
+                    {q.coverage.basis === 'expert-answer-alignment'
+                      ? 'expert-answer alignment'
+                      : `${q.coverage.hit.length}/${q.coverage.hit.length + q.coverage.missed.length} concepts`}
+                  </span>
                   {q.move && <span>· {q.move}</span>}
                   {q.mistakeFlags?.length > 0 && <span className="text-amber-400">· mistake flagged</span>}
                 </div>
@@ -329,7 +354,13 @@ export default function ResultsPage() {
                       <div key={h} className="flex items-start gap-1.5 text-foreground/70">
                         <CheckCircle2 className="h-3 w-3 mt-0.5 text-emerald-400 shrink-0" /> {h}
                       </div>
-                    )) : <span className="text-muted-foreground/80">none detected</span>}
+                    )) : (
+                      <span className="text-muted-foreground/80">
+                        {q.coverage.basis === 'expert-answer-alignment'
+                          ? `${Math.round(q.coverage.ratio * 100)}% match with the authored explanation`
+                          : 'none detected'}
+                      </span>
+                    )}
                   </div>
                   <div className="rounded-lg bg-rose-500/5 border border-rose-500/20 p-3">
                     <div className="text-rose-400 font-semibold mb-1.5">Missed</div>
@@ -337,16 +368,32 @@ export default function ResultsPage() {
                       <div key={m} className="flex items-start gap-1.5 text-muted-foreground">
                         <AlertTriangle className="h-3 w-3 mt-0.5 text-rose-400 shrink-0" /> {m}
                       </div>
-                    )) : <span className="text-muted-foreground/80">nothing — full coverage</span>}
+                    )) : (
+                      <span className="text-muted-foreground/80">
+                        {q.coverage.basis === 'expert-answer-alignment'
+                          ? 'This question is scored against the complete expert answer.'
+                          : 'nothing — full coverage'}
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {q.transcript?.trim() && (
+                  <div className="rounded-lg border border-border bg-surface-subtle p-3">
+                    <div className="mb-1.5 text-xs font-semibold text-foreground">Your answer</div>
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-content-secondary">{q.transcript}</p>
+                  </div>
+                )}
 
                 {/* suggested improved answer */}
                 <div className="rounded-lg bg-primary/[0.04] border border-border p-3">
                   <div className="text-primary font-semibold mb-1.5 text-xs flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5" /> How our expert answers it
                   </div>
-                  <p className="text-sm text-foreground/70 leading-relaxed">{q.suggested.spoken}</p>
+                  <MarkdownContent
+                    content={q.suggested.spoken}
+                    className="text-sm leading-6 text-content-secondary [&_p]:mb-3 [&_p:last-child]:mb-0 [&_pre]:my-3"
+                  />
                   {q.suggested.checklist?.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {q.suggested.checklist.slice(0, 5).map((c) => (
@@ -410,7 +457,7 @@ function currentCaption(timeline: any, at: number) {
   if (!cur) return null;
   if (cur.type === 'question') return `Q${cur.turn} asked: "${cur.label}"`;
   if (cur.type === 'answer-start') return `Q${cur.turn} — your answer`;
-  if (cur.type === 'verdict') return `Q${cur.turn} verdict: ${cur.band} (${cur.score}) — missed: ${cur.missed?.slice(0, 2).join(', ') || 'nothing'}`;
+  if (cur.type === 'verdict') return `Q${cur.turn} verdict: ${cur.band?.band ?? cur.band} (${cur.score}) — missed: ${cur.missed?.slice(0, 2).join(', ') || 'nothing'}`;
   if (cur.type === 'mistake') return `⚠ ${cur.label}`;
   if (cur.type === 'callback') return cur.label;
   return null;
@@ -419,7 +466,7 @@ function currentCaption(timeline: any, at: number) {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <main className="max-w-3xl mx-auto px-4 py-10">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">{children}</main>
     </div>
   );
 }

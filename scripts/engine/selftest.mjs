@@ -236,7 +236,7 @@ console.log('\n[5] Conversation Director v2 — beats, reactions, memory');
 
   // beat order: opener -> warmup
   const openerLine = sb.opener(persona.name);
-  check('opener names the persona', openerLine.includes('David Chen'), openerLine.slice(0, 50));
+  check('opener names the persona', openerLine.includes('Marcus'), openerLine.slice(0, 50));
   const wu = sb.warmupQuestion();
   check('warmup is easy', wu.question.difficulty === 'easy', wu.question.difficulty);
 

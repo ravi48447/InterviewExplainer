@@ -182,6 +182,7 @@ declare module '@/lib/engine/gating.mjs' {
   export function tierAllowed(planId: string, tier: number): boolean;
   export function personaAllowed(planId: string, personaId: string): boolean;
   export function minutesAllowed(planId: string, minutes: number): boolean;
+  export function modeAllowed(planId: string, mode: string): boolean;
 }
 
 declare module '@/lib/engine/codeDiscuss.mjs' {

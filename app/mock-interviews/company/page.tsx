@@ -116,9 +116,18 @@ export default function CompanyLoopPage() {
 
   const roundHref = (r: Round) => {
     const preset = r.minutes <= 20 ? 'quick' : r.minutes <= 35 ? 'standard' : 'deep';
-    const mode = r.mode === 'mixed' ? 'technical' : r.mode;
     const domain = loop?.companyId?.includes('java') || loop?.archetypeName?.toLowerCase().includes('big') ? 'java-backend-' + (level === 'fresher' ? 'fresher' : 'intermediate') : 'ruby-backend-' + (level === 'fresher' ? 'fresher' : 'intermediate');
-    return `/mock-interviews/audio?mode=${mode}&preset=${preset}&tier=${r.tier}&domain=${domain}&count=${Math.max(3, Math.round(r.minutes / 8))}`;
+    const params = new URLSearchParams({
+      domain,
+      mode: r.mode,
+      preset,
+      tier: String(r.tier),
+      persona: r.persona,
+      count: String(Math.max(3, Math.round(r.minutes / 8))),
+      minutes: String(r.minutes),
+      prepared: '1',
+    });
+    return `/mock-interviews/audio?${params.toString()}`;
   };
 
   const finishRound = (score: number) => {

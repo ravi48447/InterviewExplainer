@@ -121,6 +121,13 @@ const config: Config = {
           elevated: 'hsl(var(--hero-bg-elevated))',
           deep: 'hsl(var(--hero-bg-deep))',
         },
+        studio: {
+          DEFAULT: 'hsl(var(--studio-room))',
+          elevated: 'hsl(var(--studio-room-elevated))',
+          canvas: 'hsl(var(--studio-canvas))',
+          setup: 'hsl(var(--studio-setup))',
+          report: 'hsl(var(--studio-report))',
+        },
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',

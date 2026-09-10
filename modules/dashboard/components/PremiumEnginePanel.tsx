@@ -34,6 +34,11 @@ interface Analytics {
 
 const DOMAIN_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
 
+function quickStudioHref(domain: string) {
+  const params = new URLSearchParams({ domain, preset: 'quick' });
+  return `/mock-interviews?${params.toString()}`;
+}
+
 function Ring({ percent, color, size = 84 }: { percent: number; color: string; size?: number }) {
   const r = (size - 10) / 2;
   const c = 2 * Math.PI * r;
@@ -121,7 +126,7 @@ function DemoAnalyticsView() {
                   <div className="text-xs font-medium capitalize truncate">{a.domain.replace(/-/g, ' ')}</div>
                   <div className="text-[10px] text-stone-500">{a.action} · {a.percent}% covered</div>
                 </div>
-                <a href="/mock-interviews" className="text-[10px] px-2.5 py-1.5 rounded-lg bg-[#e8a33d]/15 border border-[#e8a33d]/30 text-[#e8a33d] shrink-0">drill</a>
+                <a href={quickStudioHref(a.domain)} className="text-[10px] px-2.5 py-1.5 rounded-lg bg-[#e8a33d]/15 border border-[#e8a33d]/30 text-[#e8a33d] shrink-0">drill</a>
               </div>
             ))}
           </div>
@@ -328,7 +333,7 @@ export function PremiumEnginePanel() {
                   <div className="text-[10px] text-slate-500">{a.action} · {a.percent}% covered</div>
                 </div>
                 <a
-                  href={`/mock-interviews/audio?domain=${a.domain}&preset=quick`}
+                  href={quickStudioHref(a.domain)}
                   className="text-[11px] px-2.5 py-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-200 shrink-0"
                 >
                   drill
