@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils';
 import type { ContentDomain } from '@/lib/types/content-domain';
 
 // Import modular dashboard components
-import { HeroSection } from '@/modules/dashboard/components/HeroSection';
 import { StatsGrid } from '@/modules/dashboard/components/StatsGrid';
 import { ReadinessCard } from '@/modules/dashboard/components/ReadinessCard';
 import { KnowledgeCard } from '@/modules/dashboard/components/KnowledgeCard';
@@ -30,7 +29,7 @@ import { AchievementsCard } from '@/modules/dashboard/components/AchievementsCar
 import { RoadmapCard } from '@/modules/dashboard/components/RoadmapCard';
 import { NextBestActionCard } from '@/modules/dashboard/components/NextBestActionCard';
 import { MockTrendsCard } from '@/modules/dashboard/components/MockTrendsCard';
-import { PremiumEnginePanel } from '@/modules/dashboard/components/PremiumEnginePanel';
+import { MissionControl } from '@/modules/dashboard/components/MissionControl';
 import { InsightsCard } from '@/modules/dashboard/components/InsightsCard';
 import { RecentActivityCard } from '@/modules/dashboard/components/RecentActivityCard';
 import { Card } from '@/components/ui/card';
@@ -343,32 +342,16 @@ export default function DashboardPage() {
 
   return (
     <div className="relative min-h-screen pb-16 bg-background">
-      {/* Hero Section */}
-      <HeroSection
-        user={user}
-        isGuest={isGuest}
-        lvl={lvl}
-        switchingDomain={switchingDomain}
-        domainMenuOpen={domainMenuOpen}
-        setDomainMenuOpen={setDomainMenuOpen}
-        domainDisplayName={domainDisplayName}
-        selectedDomains={selectedDomains}
-        activeSlug={activeSlug}
-        applyDomain={applyDomain}
-        chooseDomain={chooseDomain}
-        domainList={domainList}
-        continueHref={continueHref}
-        currentStreak={d.currentStreak || 0}
-        done={done}
-        greeting={greeting}
-        fmtExp={fmtExp}
-        initialsOf={initialsOf}
-      />
+      {/* ================= Interview Mission Control — the primary experience ================= */}
+      <div className="border-b border-[#1f1e1b] bg-[#0d0c0a] -mx-4 -mt-4 mb-2">
+        <div className="pt-6">
+          <MissionControl />
+        </div>
+      </div>
       <div className='grid gap-4 md:grid-cols-2'>
         <NextBestActionCard />
         <MockTrendsCard />
       </div>
-      <PremiumEnginePanel />
 
       {/* Offer Ready — campaign CTA */}
       <a href="/offer-ready" className="flex items-center gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-violet-500/5 to-transparent p-5 hover:border-amber-400/50 transition group">

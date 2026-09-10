@@ -90,7 +90,12 @@ export default function CampaignDashboard() {
   const { campaign, today, graphs, stats } = data;
   const daysLeft = Math.max(0, Math.ceil((new Date(campaign.interviewDate).getTime() - Date.now()) / 86400000));
   const hist = campaign.readinessHistory ?? [];
-  const currentReadiness = hist[hist.length - 1]?.value ?? data.readiness?.value ?? 0;
+  // Readiness honesty: with no evaluated history there is NO readiness number —
+  // "insufficient evidence" until a real session produces one.
+  const hasReadinessEvidence = hist.length > 0 || (data.readiness?.value ?? 0) > 0;
+  const currentReadiness = hasReadinessEvidence
+    ? hist[hist.length - 1]?.value ?? data.readiness?.value ?? 0
+    : null;
   const firstReadiness = hist[0]?.value ?? currentReadiness;
   const delta = hist.length > 1 ? currentReadiness - firstReadiness : undefined;
   const currentPhase = today?.phase ?? 'foundation';
@@ -136,12 +141,21 @@ export default function CampaignDashboard() {
             <svg width="128" height="128" className="-rotate-90">
               <circle cx="64" cy="64" r={R} fill="none" stroke="#26241f" strokeWidth="2.5" />
               <motion.circle cx="64" cy="64" r={R} fill="none" stroke="#e8a33d" strokeWidth="2.5" strokeLinecap="butt"
-                initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: `${(currentReadiness / 100) * C} ${C}` }}
+                initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: `${((currentReadiness ?? 0) / 100) * C} ${C}` }}
                 transition={{ duration: 1.3, ease: EASE }} />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <CountUp to={currentReadiness} className={`${TYPE.num} text-3xl text-[#f5f1e8]`} />
-              <span className="text-[9px] uppercase tracking-[0.2em] text-stone-600">ready</span>
+              {currentReadiness == null ? (
+                <>
+                  <span className={`${TYPE.num} text-lg text-stone-500 leading-tight`}>no data</span>
+                  <span className="text-[8px] uppercase tracking-[0.2em] text-stone-600 text-center px-3">run a session</span>
+                </>
+              ) : (
+                <>
+                  <CountUp to={currentReadiness} className={`${TYPE.num} text-3xl text-[#f5f1e8]`} />
+                  <span className="text-[9px] uppercase tracking-[0.2em] text-stone-600">ready</span>
+                </>
+              )}
             </div>
           </div>
           <div className="space-y-3">

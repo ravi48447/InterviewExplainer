@@ -50,7 +50,7 @@ async function fetchVoiceWav(text: string, voice: string): Promise<Blob | null> 
 let serverVoiceAvailable: boolean | null = null;
 
 /** Probe once per session whether server voice works. */
-async function probe(): Promise<boolean> {
+export async function probeServerVoice(): Promise<boolean> {
   if (serverVoiceAvailable !== null) return serverVoiceAvailable;
   const blob = await fetchVoiceWav('Ready.', 'amy');
   serverVoiceAvailable = !!blob;
@@ -77,7 +77,7 @@ export async function speakNeural(
 
   // try neural first
   try {
-    if (await probe()) {
+    if (await probeServerVoice()) {
       const sentences = splitSentences(t);
       const ctx = ensureCtx();
       if (!ctx) throw new Error('no audio ctx');

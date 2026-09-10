@@ -99,10 +99,18 @@ export default function ResultsPage() {
     const raw = sessionStorage.getItem(`ie_mock_report_${sessionId}`);
     if (raw) {
       try {
-        setReport(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        setReport(parsed);
+        // durable copy for reloads after the tab closes
+        import('@/lib/engine/persist.mjs').then(({ saveFullReport }) => saveFullReport(sessionId, parsed)).catch(() => {});
         return;
       } catch {}
     }
+    // tab closed / fresh load: the durable report store
+    import('@/lib/engine/persist.mjs').then(({ getFullReport }) => {
+      const durable = getFullReport(sessionId);
+      if (durable) setReport(durable);
+    }).catch(() => {});
     // persist.mjs keeps session records (score + meta) even if the full
     // report payload is gone (tab closed) — show the summary view then
     import('@/lib/engine/persist.mjs').then(({ getSessionRecord }) => {

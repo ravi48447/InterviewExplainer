@@ -146,6 +146,11 @@ declare module '@/lib/engine/persist.mjs' {
   export function getLatestResumeAnalysis(): any;
   export function syncToServer(): Promise<{ ok: boolean }>;
   export function syncFromServer(): Promise<{ ok: boolean }>;
+  export function saveFullReport(sessionId: string, report: any): any;
+  export function getFullReport(sessionId: string): any;
+  export function saveCompanyLoopState(state: any): void;
+  export function getCompanyLoopState(): any;
+  export function clearCompanyLoopState(): void;
 }
 
 declare module '@/lib/engine/personas.mjs' {

@@ -116,19 +116,33 @@ export async function POST(req: NextRequest) {
       const campaign = getCampaignFromStore(uid, String(body?.campaignId ?? ''));
       if (!campaign) return NextResponse.json({ error: 'not_found' }, { status: 404 });
       const engine = readEngine(uid);
+      // COMPLETION GATE: a day completes only against a REAL session record
+      // created for that day — a referenced attempt, not a button. Find the
+      // most recent session stored on/after the day's date.
+      const dayDate = String(body?.dayDate ?? '');
+      const dayStart = new Date(`${dayDate}T00:00:00`).getTime();
+      const session = (engine.sessions ?? []).find(
+        (s: any) => typeof s.savedAt === 'number' && s.savedAt >= dayStart && (s.overallScore ?? -1) >= 0
+      );
+      if (!session) {
+        return NextResponse.json(
+          { error: 'no_attempt_evidence', dayDate },
+          { status: 400 }
+        );
+      }
       const recent = engine.sessions.slice(0, 7);
       const recentTrend = recent.length ? Math.round(recent.reduce((a: number, s: any) => a + (s.overallScore ?? 0), 0) / recent.length) : 0;
-      const readiness = completeDay(campaign, String(body?.dayDate ?? ''), {
-        coverageRatio: body?.sessionResult?.coverageRatio ?? 0,
+      const readiness = completeDay(campaign, dayDate, {
+        coverageRatio: (session as any).coverageRatio ?? 0,
         recentTrend,
-        calibrationBias: body?.sessionResult?.calibrationBias ?? 0,
-        rehearsalBest: body?.sessionResult?.rehearsalBest ?? null,
+        calibrationBias: (session as any).calibrationBias ?? 0,
+        rehearsalBest: (session as any).rehearsalBest ?? null,
       });
       updateCampaignInStore(uid, campaign);
       // adaptive: replan future days with fresh mastery
       replanUpcomingDays(campaign, engine.mastery ?? {}, null);
       updateCampaignInStore(uid, campaign);
-      return NextResponse.json({ ok: true, readiness, campaign });
+      return NextResponse.json({ ok: true, readiness, campaign, completedFrom: session.sessionId });
     }
 
     if (action === 'replan') {
@@ -142,6 +156,28 @@ export async function POST(req: NextRequest) {
     if (action === 'certificate') {
       const campaign = getCampaignFromStore(uid, String(body?.campaignId ?? ''));
       if (!campaign) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+      // CERTIFICATE GATE: the certificate represents a COMPLETED campaign.
+      // Requirements (explicit, checkable):
+      //   1. The interview date has arrived or passed, OR >=90% of days completed
+      //   2. At least one full company-loop / dress-rehearsal run completed
+      //   3. At least 10 evaluated sessions recorded
+      const daysDone = campaign.days.filter((d: any) => d.status === 'completed').length;
+      const daysTotal = campaign.days.length || 1;
+      const datePassed = new Date(campaign.interviewDate).getTime() <= Date.now();
+      const loopsRun = campaign.days
+        .filter((d: any) => d.dayType === 'company-loop' || d.dayType === 'dress_rehearsal')
+        .filter((d: any) => d.status === 'completed').length;
+      const sessions = campaign.completedSessions ?? 0;
+      const unmet: string[] = [];
+      if (!datePassed && daysDone / daysTotal < 0.9) unmet.push('campaign not yet complete (90% of days or interview date)');
+      if (loopsRun < 1) unmet.push('no completed company-loop or dress-rehearsal run');
+      if (sessions < 10) unmet.push(`only ${sessions} evaluated sessions (need 10)`);
+      if (unmet.length) {
+        return NextResponse.json(
+          { error: 'certificate_requirements_unmet', unmet },
+          { status: 403 }
+        );
+      }
       const lastR = campaign.readinessHistory?.[campaign.readinessHistory.length - 1]?.value ?? 0;
       return NextResponse.json(certificateData(campaign, lastR));
     }

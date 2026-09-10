@@ -25,6 +25,7 @@ interface Round {
 }
 interface Loop {
   companyId: string; companyName: string; archetypeName: string;
+  vetted?: { confidence: string; sourceLabel: string; reviewedAt: string; source: string } | null;
   level: string; toughness: number; note: string; totalMinutes: number; rounds: Round[];
 }
 interface Company {
@@ -70,8 +71,30 @@ export default function CompanyLoopPage() {
       setRoundIdx(0);
       setRoundState('brief');
       setRoundScores({});
+      // persist so a refresh mid-loop doesn't lose the run
+      try { (await import('@/lib/engine/persist.mjs')).saveCompanyLoopState({ companyId, level, roundIdx: 0, scores: {}, startedAt: Date.now() }); } catch {}
     }
   };
+
+  // restore an interrupted loop on mount (persists across refreshes)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { getCompanyLoopState } = await import('@/lib/engine/persist.mjs');
+        const saved = getCompanyLoopState();
+        if (!saved?.companyId) return;
+        const res = await fetch(`/api/engine/company-loop?company=${saved.companyId}&level=${saved.level}`);
+        const data = await res.json();
+        if (data.rounds && saved.roundIdx > 0 && saved.roundIdx < data.rounds.length) {
+          setLoop(data);
+          setLevel(saved.level as 'fresher' | 'intermediate');
+          setRoundIdx(saved.roundIdx);
+          setRoundScores(saved.scores ?? {});
+          setRoundState('brief');
+        }
+      } catch {}
+    })();
+  }, []);
 
   const currentRound = loop?.rounds[roundIdx] ?? null;
 
@@ -111,9 +134,11 @@ export default function CompanyLoopPage() {
     if (roundIdx + 1 >= loop.rounds.length) {
       setRoundState('verdict');
       // loop complete — final summary handled by verdict view with all scores
+      try { import('@/lib/engine/persist.mjs').then(m => m.clearCompanyLoopState()); } catch {}
     } else {
       setRoundIdx((i) => i + 1);
       setRoundState('brief');
+      try { import('@/lib/engine/persist.mjs').then(m => m.saveCompanyLoopState({ companyId: loop.companyId, level, roundIdx: roundIdx + 1, scores: roundScores, startedAt: Date.now() })); } catch {}
     }
   };
 
@@ -194,8 +219,32 @@ export default function CompanyLoopPage() {
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-violet-400 shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-bold">{loop.companyName} <span className="text-stone-400 font-normal">· {loop.level}</span></div>
-            <div className="text-[11px] text-stone-400">{loop.archetypeName} · {loop.rounds.length} rounds · {loop.totalMinutes} min · toughness {loop.toughness.toFixed(2)}</div>
+            <div className="font-bold">
+              {loop.companyName} <span className="text-stone-400 font-normal">· {loop.level}</span>
+              {loop.vetted ? (
+                <span
+                  className="ml-2 align-middle text-[9px] uppercase tracking-wide rounded-full border border-emerald-800/60 bg-emerald-950/40 text-emerald-300 px-2 py-0.5"
+                  title={`Vetted against public sources (reviewed ${loop.vetted.reviewedAt}). Source: ${loop.vetted.sourceLabel}`}
+                >
+                  vetted · {loop.vetted.confidence} confidence
+                </span>
+              ) : (
+                <span
+                  className="ml-2 align-middle text-[9px] uppercase tracking-wide rounded-full border border-[#33404d] bg-[#131820] text-[#9ab8d4] px-2 py-0.5"
+                  title="This loop is modeled on the company's archetype — a representative practice sequence, not their confidential process."
+                >
+                  archetype practice
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-stone-400">
+              {loop.archetypeName} · {loop.rounds.length} rounds · {loop.totalMinutes} min · toughness {loop.toughness.toFixed(2)}
+            </div>
+            {loop.vetted && (
+              <div className="text-[10px] text-stone-500">
+                Based on: {loop.vetted.sourceLabel} · reviewed {loop.vetted.reviewedAt}
+              </div>
+            )}
           </div>
           <button onClick={() => { setLoop(null); setRoundScores({}); }} className="text-stone-600 hover:text-stone-300"><X className="h-4 w-4" /></button>
         </div>
