@@ -1,18 +1,19 @@
 'use client';
 /**
- * InterviewRoom.tsx — the immersive interview room shell.
+ * InterviewRoom — the immersive room shell, now on the DESIGN TOKEN system.
  *
- * A real interview has PRESENCE: you see the interviewer, they speak in
- * turns, your words appear as you say them, and time pressure is visible.
- * This shell hosts any mode workspace beneath it.
+ * Rules this file follows (the "premium product" contract):
+ *  - colors: only token classes (bg-background/surface, border-border,
+ *    text-foreground/muted-foreground, primary for the ONE accent) — zero hex
+ *  - type: the type-* scale (display/title/section/body/caption) — no random sizes
+ *  - spacing: 4px grid via the standard classes only
+ *  - elevation: surface + border, no drop-shadow soup
+ *  - one accent color (primary) — semantic colors only for status (emerald=live, rose=danger)
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Mic, MicOff, Volume2, VolumeX, Pause, Play, RotateCcw,
-  Timer, Brain, Wifi, WifiOff, Gauge, ChevronDown,
-} from 'lucide-react';
+import { Mic, Volume2, VolumeX, Pause, Play, RotateCcw, Brain, Gauge } from 'lucide-react';
 import type { VoicePhase, DeliveryMetrics } from '@/lib/engine/voiceController';
 
 export interface RoomPersona {
@@ -22,7 +23,7 @@ export interface RoomPersona {
   vibe: string;
 }
 
-const PHASE_LABEL: Record<VoicePhase, string> = {
+const PHASE_LABEL: Record<string, string> = {
   idle: 'Ready',
   preflight: 'Preparing…',
   synthesizing: 'Interviewer thinking…',
@@ -30,6 +31,11 @@ const PHASE_LABEL: Record<VoicePhase, string> = {
   listening: 'Your turn — speak',
   thinking: 'Evaluating…',
   error: 'Audio error',
+  asking: 'Question',
+  coding: 'Coding round',
+  review: 'Review',
+  done: 'Complete',
+  gated: 'Session limit',
 };
 
 export function InterviewRoom({
@@ -51,11 +57,11 @@ export function InterviewRoom({
   onReplay,
   muted,
   paused,
-  children, // mode workspace
+  children,
 }: {
   persona: RoomPersona;
   neural: boolean;
-  phase: VoicePhase | 'asking' | 'review' | 'done' | 'gated' | 'coding' | 'starting' | 'thinking' | 'listening' | 'ritual' | 'setup';
+  phase: string;
   voiceError?: string | null;
   timeLeftSec: number;
   totalSec: number;
@@ -78,190 +84,198 @@ export function InterviewRoom({
   const progress = totalSec > 0 ? 1 - timeLeftSec / totalSec : 0;
   const mins = Math.floor(Math.max(0, timeLeftSec) / 60);
   const secs = Math.max(0, timeLeftSec) % 60;
+  const lowTime = timeLeftSec < 60;
 
   return (
-    <div className="min-h-screen bg-[#0d0c0a] text-stone-200 flex flex-col">
-      {/* ================= top bar: persona + session telemetry ================= */}
-      <header className="border-b border-[#26241f] bg-[#12110e]/95 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
-          {/* interviewer presence */}
-          <div className="flex items-center gap-2.5 min-w-0">
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-background">
+      {/* ============ context bar ============ */}
+      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-4xl items-center gap-4 px-4 lg:px-6">
+          {/* persona */}
+          <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
               <div
-                className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold text-[15px] transition-colors ${
-                  isSpeaking ? 'bg-[#e8a33d] text-[#1a1408]' : 'bg-[#26241f] text-[#a3c291]'
+                className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold transition-colors ${
+                  isSpeaking ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
                 }`}
               >
                 {persona.name.slice(0, 1)}
               </div>
               {isSpeaking && (
                 <motion.span
-                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-[#12110e]"
-                  animate={{ scale: [1, 1.25, 1] }}
+                  className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-emerald-500"
+                  animate={{ scale: [1, 1.3, 1] }}
                   transition={{ repeat: Infinity, duration: 1.1 }}
                 />
               )}
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-bold leading-tight truncate">{persona.name}</div>
-              <div className="text-[10px] text-stone-500 truncate">{persona.role} · {persona.vibe}</div>
+              <div className="truncate text-sm font-semibold text-foreground">{persona.name}</div>
+              <div className="truncate text-caption text-muted-foreground">
+                {persona.role} · {persona.vibe}
+              </div>
             </div>
           </div>
 
           <div className="flex-1" />
 
-          {/* live status */}
-          <div className="flex items-center gap-3 text-[10px]">
-            <span
-              className={`flex items-center gap-1 ${isListening ? 'text-emerald-400 font-semibold' : 'text-stone-500'}`}
-            >
-              {isListening ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+          {/* status chips — quiet, uniform */}
+          <div className="hidden items-center gap-1.5 text-caption text-muted-foreground md:flex">
+            <span className={`rounded-md border px-1.5 py-0.5 ${isListening ? 'border-emerald-600/40 text-emerald-600' : 'border-border'}`}>
               {isListening ? 'rec' : 'idle'}
             </span>
-            <span className="flex items-center gap-1 text-stone-500">
-              {neural ? <Volume2 className="h-3 w-3 text-[#a3c291]" /> : <VolumeX className="h-3 w-3" />}
-              {neural ? 'neural' : 'browser'}
+            <span className="rounded-md border border-border px-1.5 py-0.5">
+              {neural ? 'neural voice' : 'browser voice'}
             </span>
-            <span className="hidden sm:flex items-center gap-1 text-stone-500">
-              <Gauge className="h-3 w-3" /> {modeLabel}
-            </span>
+            <span className="rounded-md border border-border px-1.5 py-0.5">{modeLabel}</span>
           </div>
 
-          {/* timer ring */}
+          {/* timer */}
           <div className="relative h-10 w-10 shrink-0">
             <svg viewBox="0 0 36 36" className="h-10 w-10 -rotate-90">
-              <circle cx="18" cy="18" r="15.5" fill="none" stroke="#26241f" strokeWidth="2.5" />
+              <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-border" strokeWidth="2.5" />
               <circle
                 cx="18" cy="18" r="15.5" fill="none"
-                stroke={timeLeftSec < 60 ? '#f87171' : '#a3c291'}
+                className={lowTime ? 'stroke-destructive' : 'stroke-primary'}
                 strokeWidth="2.5" strokeLinecap="round"
                 strokeDasharray={`${progress * 97.4} 97.4`}
               />
             </svg>
-            <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${timeLeftSec < 60 ? 'text-rose-400' : ''}`}>
+            <div className={`absolute inset-0 flex items-center justify-center text-[11px] font-semibold tabular-nums ${lowTime ? 'text-destructive' : 'text-foreground'}`}>
               {mins}:{String(secs).padStart(2, '0')}
             </div>
           </div>
         </div>
-        {/* question progress rail */}
-        <div className="h-0.5 bg-[#1a1916]">
+        {/* progress rail */}
+        <div className="h-0.5 bg-border/50">
           <motion.div
-            className="h-full bg-[#e8a33d]"
+            className="h-full bg-primary"
             animate={{ width: `${(questionIndex / Math.max(1, questionTotal)) * 100}%` }}
             transition={{ duration: 0.4 }}
           />
         </div>
       </header>
 
-      {/* ================= interviewer speech bubble ================= */}
-      <div className="max-w-3xl mx-auto w-full px-4 pt-5">
+      {/* ============ content column ============ */}
+      <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 lg:px-6">
+        {/* interviewer bubble */}
         <AnimatePresence mode="wait">
           <motion.div
-            key={caption.slice(0, 40)}
-            initial={{ opacity: 0, y: 8 }}
+            key={caption.slice(0, 48)}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            className={`rounded-2xl p-4 border transition-colors ${
-              isSpeaking ? 'border-[#e8a33d]/50 bg-[#171410]' : 'border-[#26241f] bg-[#141311]'
+            exit={{ opacity: 0 }}
+            className={`mb-5 rounded-xl border p-4 transition-colors lg:p-5 ${
+              isSpeaking ? 'border-primary/40 bg-primary/[0.04]' : 'border-border bg-surface'
             }`}
           >
-            <div className="flex items-start gap-3">
-              <Brain className={`h-4 w-4 mt-0.5 shrink-0 ${isSpeaking ? 'text-[#e8a33d]' : 'text-stone-600'}`} />
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-stone-500 mb-1">
-                  {PHASE_LABEL[(phase as VoicePhase) ?? 'idle'] ?? 'Interviewer'}
-                </div>
-                <p className="text-[15px] leading-relaxed text-stone-200">{caption || '…'}</p>
-              </div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">
+              <Brain className={`h-3.5 w-3.5 ${isSpeaking ? 'text-primary' : 'text-muted-foreground'}`} />
+              {PHASE_LABEL[phase] ?? 'Interviewer'}
             </div>
+            <p className="text-base leading-relaxed text-foreground">{caption || '…'}</p>
           </motion.div>
         </AnimatePresence>
-      </div>
 
-      {/* ================= mode workspace ================= */}
-      <div className="max-w-3xl mx-auto w-full px-4 py-5 flex-1">{children}</div>
+        {/* mode workspace */}
+        {children}
 
-      {/* ================= your answer panel ================= */}
-      <div className="border-t border-[#26241f] bg-[#100f0d] sticky bottom-0">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          {voiceError && (
-            <div className="mb-2 text-[11px] text-rose-300 bg-rose-950/40 border border-rose-900/50 rounded-lg px-3 py-2">
-              {voiceError === 'mic_denied'
-                ? 'Microphone permission denied — allow mic access in your browser to answer by voice.'
-                : voiceError === 'speech_recognition_unsupported'
-                  ? 'Live speech recognition needs Chrome or Edge. You can still answer by typing below.'
-                  : voiceError}
-            </div>
-          )}
-          <div
-            className={`rounded-xl border p-3 min-h-[64px] transition-colors ${
-              isListening ? 'border-emerald-800/60 bg-emerald-950/20' : 'border-[#26241f] bg-[#141311]'
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className={`text-[10px] uppercase tracking-wider ${isListening ? 'text-emerald-400' : 'text-stone-600'}`}>
-                {isListening ? 'Listening' : 'Your answer'}
+        {/* answer transcript panel */}
+        <div
+          className={`mt-5 rounded-xl border p-4 transition-colors ${
+            isListening ? 'border-emerald-600/40 bg-emerald-500/[0.04]' : 'border-border bg-surface'
+          }`}
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className={`text-caption font-medium uppercase tracking-wider ${isListening ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+              {isListening ? 'Listening' : 'Your answer'}
+            </span>
+            {isListening && (
+              <span className="flex h-3 items-end gap-0.5">
+                {[0, 1, 2, 3].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="w-0.5 rounded-sm bg-emerald-500"
+                    animate={{ height: [4, 12, 6, 10, 4] }}
+                    transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.12 }}
+                  />
+                ))}
               </span>
-              {isListening && (
-                <span className="flex gap-0.5 items-end h-3">
-                  {[0, 1, 2, 3].map((i) => (
-                    <motion.span
-                      key={i}
-                      className="w-0.5 rounded bg-emerald-400"
-                      animate={{ height: [4, 12, 6, 10, 4] }}
-                      transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.12 }}
-                    />
-                  ))}
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-stone-300 leading-relaxed">
-              {finalTranscript || interim || <span className="text-stone-600">{isListening ? '…listening' : 'Your words appear here as you speak'}</span>}
-              {interim && finalTranscript && <span className="text-stone-500 italic"> {interim}</span>}
-            </p>
+            )}
           </div>
+          <p className="min-h-12 text-sm leading-relaxed text-foreground">
+            {finalTranscript || interim || (
+              <span className="text-muted-foreground">
+                {isListening ? '…listening' : 'Your words appear here as you speak'}
+              </span>
+            )}
+          </p>
 
-          {/* delivery chips */}
+          {/* delivery metrics — uniform chips */}
           {delivery && (
-            <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-stone-500">
-              <span className="rounded-full border border-[#26241f] px-2 py-0.5">{delivery.words} words</span>
-              <span className="rounded-full border border-[#26241f] px-2 py-0.5">{delivery.paceWpm} wpm</span>
-              <span className={`rounded-full border px-2 py-0.5 ${delivery.fillerRate > 0.06 ? 'text-amber-400 border-amber-900/50' : 'border-[#26241f]'}`}>
-                {delivery.fillers} fillers
-              </span>
-              {delivery.longPauses > 0 && (
-                <span className="rounded-full border border-[#26241f] px-2 py-0.5">{delivery.longPauses} long pauses</span>
-              )}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <MetricChip label={`${delivery.words} words`} />
+              <MetricChip label={`${delivery.paceWpm} wpm`} />
+              <MetricChip
+                label={`${delivery.fillers} fillers`}
+                tone={delivery.fillerRate > 0.06 ? 'warn' : 'default'}
+              />
+              {delivery.longPauses > 0 && <MetricChip label={`${delivery.longPauses} long pauses`} />}
             </div>
           )}
-
-          {/* controls */}
-          <div className="flex items-center justify-center gap-2 mt-3">
-            <ControlButton onClick={onToggleMute} active={muted} title={muted ? 'Unmute interviewer' : 'Mute interviewer'}>
-              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-            </ControlButton>
-            <ControlButton onClick={onTogglePause} active={paused} title={paused ? 'Resume' : 'Pause'}>
-              {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-            </ControlButton>
-            <ControlButton onClick={onReplay} title="Replay question">
-              <RotateCcw className="h-4 w-4" />
-            </ControlButton>
-          </div>
         </div>
+
+        {/* controls — one row, consistent sizes */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <RoomControl onClick={onToggleMute} active={muted} title={muted ? 'Unmute' : 'Mute'}>
+            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </RoomControl>
+          <RoomControl onClick={onTogglePause} active={paused} title={paused ? 'Resume' : 'Pause'}>
+            {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+          </RoomControl>
+          <RoomControl onClick={onReplay} title="Replay question">
+            <RotateCcw className="h-4 w-4" />
+          </RoomControl>
+        </div>
+
+        {voiceError && (
+          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+            {voiceError === 'mic_denied'
+              ? 'Microphone permission denied — allow mic access in your browser to answer by voice.'
+              : voiceError === 'speech_recognition_unsupported'
+                ? 'Live speech recognition needs Chrome or Edge. You can still answer by typing.'
+                : voiceError}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function ControlButton({
+function MetricChip({ label, tone = 'default' }: { label: string; tone?: 'default' | 'warn' }) {
+  return (
+    <span
+      className={`rounded-md border px-2 py-0.5 text-caption ${
+        tone === 'warn' ? 'border-amber-500/40 text-amber-600' : 'border-border text-muted-foreground'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function RoomControl({
   children, onClick, active, title,
 }: { children: React.ReactNode; onClick: () => void; active?: boolean; title: string }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`h-9 w-9 rounded-xl border flex items-center justify-center transition-colors ${
-        active ? 'border-[#e8a33d]/60 bg-[#241c10] text-[#e8a33d]' : 'border-[#26241f] bg-[#141311] text-stone-400 hover:text-stone-200'
+      aria-label={title}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+        active
+          ? 'border-primary/50 bg-primary/10 text-primary'
+          : 'border-border bg-surface text-muted-foreground hover:bg-muted hover:text-foreground'
       }`}
     >
       {children}

@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { PublicHeader } from '@/components/shell/public-header'
+import { ProductShell } from '@/components/shell/product-shell'
 import { PublicFooter } from '@/components/shell/public-footer'
 import { resolveShellVariant, shellHasFooter } from '@/lib/shell/shell-config'
 
@@ -35,6 +36,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/'
   const variant = resolveShellVariant(pathname)
   const showFooter = shellHasFooter(variant)
+
+  // The product surfaces are APPLICATIONS: sidebar shell, no marketing chrome.
+  if (variant === 'product') {
+    return (
+      <ProductShell>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:ring-2 focus:ring-ring"
+        >
+          Skip to content
+        </a>
+        <main id="main-content" className="flex-1" tabIndex={-1}>
+          {children}
+        </main>
+      </ProductShell>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col">

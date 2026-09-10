@@ -10,14 +10,22 @@
 
 import { classifyRoute, type RouteFamily } from '@/lib/seo/route-registry'
 
-/** The four legitimate shell variants (P03-T007). */
-export type ShellVariant = 'public' | 'auth' | 'dashboard' | 'app'
+/** The five legitimate shell variants (P03-T007 + product). */
+export type ShellVariant = 'public' | 'auth' | 'dashboard' | 'app' | 'product'
 
 /** Page width tiers, mapped to Phase 01 container tokens (P03-T133..T136). */
 export type ContainerWidth = 'default' | 'wide' | 'reading' | 'full'
 
 /** Route prefixes that opt into the authenticated (dashboard) shell. */
 const DASHBOARD_PREFIXES = ['/dashboard', '/account', '/profile', '/admin'] as const
+
+/**
+ * Route prefixes that opt into the PRODUCT shell — the app-style sidebar
+ * surface for the three core product experiences. These are application
+ * destinations (not marketing/SEO pages): the interview room, company
+ * preparation, and the Offer Ready campaign manager.
+ */
+const PRODUCT_PREFIXES = ['/mock-interviews', '/offer-ready'] as const
 
 /** Route prefixes that opt into the auth shell. */
 const AUTH_PREFIXES = [
@@ -39,6 +47,10 @@ export function resolveShellVariant(pathname: string): ShellVariant {
   if (AUTH_PREFIXES.some((p) => lower === p || lower.startsWith(p + '/'))) {
     return 'auth'
   }
+  // The product surfaces are apps, not pages — sidebar shell first.
+  if (PRODUCT_PREFIXES.some((p) => lower === p || lower.startsWith(p + '/'))) {
+    return 'product'
+  }
   if (DASHBOARD_PREFIXES.some((p) => lower === p || lower.startsWith(p + '/'))) {
     return 'dashboard'
   }
@@ -59,6 +71,11 @@ export function resolveShellVariant(pathname: string): ShellVariant {
  */
 export function shellHasFooter(variant: ShellVariant): boolean {
   return variant === 'public'
+}
+
+/** Whether a variant renders the app-style sidebar (product surfaces). */
+export function shellHasSidebar(variant: ShellVariant): boolean {
+  return variant === 'product'
 }
 
 /** Whether a shell variant renders the primary public navigation. */

@@ -74,7 +74,7 @@ export default function CampaignDashboard() {
       <main className="relative max-w-xl mx-auto px-5 py-24 text-center space-y-4">
         <Clock className="h-9 w-9 text-stone-600 mx-auto" />
         <p className="text-stone-400">Campaign not found — sign in with the account that created it.</p>
-        <Link href="/offer-ready/start" className="text-[#e8a33d] text-sm underline underline-offset-4">Start a new campaign</Link>
+        <Link href="/offer-ready/start" className="text-primary text-sm underline underline-offset-4">Start a new campaign</Link>
       </main>
     </div>
   );
@@ -118,10 +118,10 @@ export default function CampaignDashboard() {
         {/* demo-mode banner: purpose visible without login; real data hardens it */}
         {isDemo && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="border border-[#3d4a34] bg-[#161a13] px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            className="border border-border bg-surface px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1">
-              <div className="text-sm text-[#f5f1e8]">
-                You're viewing a <span className="italic text-[#e8a33d]">demo campaign</span> — 14 days in.
+              <div className="text-sm text-foreground">
+                You're viewing a <span className="italic text-primary">demo campaign</span> — 14 days in.
               </div>
               <div className="text-xs text-stone-500 mt-0.5">
                 Sign in free and every graph hardens with your real sessions — this preview shows the shape of what's coming.
@@ -139,8 +139,8 @@ export default function CampaignDashboard() {
           className="grid grid-cols-[auto_1fr] gap-8 items-center">
           <div className="relative w-[128px] h-[128px]">
             <svg width="128" height="128" className="-rotate-90">
-              <circle cx="64" cy="64" r={R} fill="none" stroke="#26241f" strokeWidth="2.5" />
-              <motion.circle cx="64" cy="64" r={R} fill="none" stroke="#e8a33d" strokeWidth="2.5" strokeLinecap="butt"
+              <circle cx="64" cy="64" r={R} fill="none" stroke="hsl(var(--border))" strokeWidth="2.5" />
+              <motion.circle cx="64" cy="64" r={R} fill="none" stroke="hsl(var(--primary))" strokeWidth="2.5" strokeLinecap="butt"
                 initial={{ strokeDasharray: `0 ${C}` }} animate={{ strokeDasharray: `${((currentReadiness ?? 0) / 100) * C} ${C}` }}
                 transition={{ duration: 1.3, ease: EASE }} />
             </svg>
@@ -152,7 +152,7 @@ export default function CampaignDashboard() {
                 </>
               ) : (
                 <>
-                  <CountUp to={currentReadiness} className={`${TYPE.num} text-3xl text-[#f5f1e8]`} />
+                  <CountUp to={currentReadiness} className={`${TYPE.num} text-3xl text-foreground`} />
                   <span className="text-[9px] uppercase tracking-[0.2em] text-stone-600">ready</span>
                 </>
               )}
@@ -160,19 +160,19 @@ export default function CampaignDashboard() {
           </div>
           <div className="space-y-3">
             <div className={TYPE.eyebrow}>{campaign.companyName ?? 'Your interview'} · {campaign.level}</div>
-            <h1 className={`${TYPE.display} text-3xl sm:text-4xl text-[#f5f1e8] leading-[1.05]`}>
+            <h1 className={`${TYPE.display} text-3xl sm:text-4xl text-foreground leading-[1.05]`}>
               {daysLeft === 0
-                ? <>Interview day.<br /><span className="italic text-[#e8a33d]">You are ready.</span></>
-                : <><span className="italic text-[#e8a33d]">{daysLeft} days</span> to go.</>}
+                ? <>Interview day.<br /><span className="italic text-primary">You are ready.</span></>
+                : <><span className="italic text-primary">{daysLeft} days</span> to go.</>}
             </h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-stone-500">
               <span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${ps.dot}`} /> {currentPhase} phase</span>
-              <span className="flex items-center gap-1"><Flame className="h-3 w-3 text-[#c08a5a]" /> {doneDays} days done</span>
+              <span className="flex items-center gap-1"><Flame className="h-3 w-3 text-primary" /> {doneDays} days done</span>
               {today && <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ~{today.estMinutes} min today</span>}
             </div>
             {delta != null && delta !== 0 && (
               <p className="text-xs text-stone-500 flex items-center gap-1.5">
-                <TrendingUp className={cn('h-3 w-3', delta >= 0 ? 'text-[#7d9a6b]' : 'text-[#c08a5a]')} />
+                <TrendingUp className={cn('h-3 w-3', delta >= 0 ? 'text-primary' : 'text-primary')} />
                 readiness {delta >= 0 ? 'up' : 'down'} {Math.abs(delta)} pts since day one
               </p>
             )}
@@ -187,9 +187,9 @@ export default function CampaignDashboard() {
               today — {new Date(today.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
             <div className="space-y-2">
-              <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>{today.title}</h2>
+              <h2 className={`${TYPE.h1} text-foreground`}>{today.title}</h2>
               <p className="text-[15px] text-stone-300">
-                The one thing: <span className="italic text-[#f5f1e8]">{today.oneThing}</span>
+                The one thing: <span className="italic text-foreground">{today.oneThing}</span>
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -205,7 +205,7 @@ export default function CampaignDashboard() {
               {!isDemo && (
               <button onClick={completeToday} disabled={busy}
                 className={`inline-flex items-center gap-2 px-6 py-3 rounded-none ${CTA_QUIET} text-sm`}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" style={{ color: '#7d9a6b' }} />}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" style={{ color: 'hsl(var(--primary))' }} />}
                 Mark day complete
               </button>
               )}
@@ -214,13 +214,13 @@ export default function CampaignDashboard() {
         )}
         {today?.status === 'completed' && (
           <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="border border-[#3d4a34] bg-[#161a13] p-6 flex items-center gap-4">
-            <CheckCircle2 className="h-6 w-6 shrink-0" style={{ color: '#7d9a6b' }} />
+            className="border border-border bg-surface p-6 flex items-center gap-4">
+            <CheckCircle2 className="h-6 w-6 shrink-0" style={{ color: 'hsl(var(--primary))' }} />
             <div className="flex-1">
-              <div className="font-medium text-sm text-[#f5f1e8]">Today's done — {today.title}</div>
+              <div className="font-medium text-sm text-foreground">Today's done — {today.title}</div>
               <div className="text-xs text-stone-500 mt-0.5">{today.oneThing}</div>
             </div>
-            <a href="/mock-interviews" className="text-xs text-stone-400 hover:text-[#e8a33d] underline underline-offset-4 shrink-0">bonus session</a>
+            <a href="/mock-interviews" className="text-xs text-stone-400 hover:text-primary underline underline-offset-4 shrink-0">bonus session</a>
           </motion.section>
         )}
 
@@ -269,7 +269,7 @@ export default function CampaignDashboard() {
 
             {/* stat row — editorial numbers */}
             {stats && (
-              <div className="grid grid-cols-4 divide-x divide-[#26241f] border-y border-[#26241f]">
+              <div className="grid grid-cols-4 divide-x divide-border border-y border-border">
                 {[
                   { val: stats.totalSessions, label: 'sessions' },
                   { val: stats.minutesPracticed, label: 'minutes' },
@@ -277,7 +277,7 @@ export default function CampaignDashboard() {
                   { val: stats.bestScore, label: 'best' },
                 ].map((s) => (
                   <div key={s.label} className="py-4 text-center space-y-1">
-                    <div className={`${TYPE.num} text-2xl text-[#f5f1e8]`}>{s.val}</div>
+                    <div className={`${TYPE.num} text-2xl text-foreground`}>{s.val}</div>
                     <div className="text-[9px] uppercase tracking-[0.2em] text-stone-600">{s.label}</div>
                   </div>
                 ))}
@@ -331,7 +331,7 @@ export default function CampaignDashboard() {
 
             {/* stat row — editorial numbers */}
             {stats && (
-              <div className="grid grid-cols-4 divide-x divide-[#26241f] border-y border-[#26241f]">
+              <div className="grid grid-cols-4 divide-x divide-border border-y border-border">
                 {[
                   { val: stats.totalSessions, label: 'sessions' },
                   { val: stats.minutesPracticed, label: 'minutes' },
@@ -339,7 +339,7 @@ export default function CampaignDashboard() {
                   { val: stats.bestScore, label: 'best' },
                 ].map((s) => (
                   <div key={s.label} className="py-4 text-center space-y-1">
-                    <div className={`${TYPE.num} text-2xl text-[#f5f1e8]`}>{s.val}</div>
+                    <div className={`${TYPE.num} text-2xl text-foreground`}>{s.val}</div>
                     <div className="text-[9px] uppercase tracking-[0.2em] text-stone-600">{s.label}</div>
                   </div>
                 ))}
@@ -358,15 +358,15 @@ export default function CampaignDashboard() {
               return (
                 <div key={d.date} className={cn(
                   'flex flex-col items-center gap-2 py-3 border-t-2 transition-colors',
-                  d.status === 'completed' ? 'border-[#7d9a6b]'
-                    : isToday ? 'border-[#e8a33d]'
-                    : 'border-[#26241f]'
+                  d.status === 'completed' ? 'border-border'
+                    : isToday ? 'border-border'
+                    : 'border-border'
                 )}>
                   <span className="text-[10px] uppercase tracking-widest text-stone-600">
                     {new Date(d.date).toLocaleDateString('en-IN', { weekday: 'narrow' })}
                   </span>
                   <Icon className={cn('h-4 w-4',
-                    d.status === 'completed' ? 'text-[#7d9a6b]' : isToday ? 'text-[#e8a33d]' : 'text-stone-600')} />
+                    d.status === 'completed' ? 'text-primary' : isToday ? 'text-primary' : 'text-stone-600')} />
                   <span className="text-[8px] text-stone-700 capitalize text-center leading-tight w-full truncate">
                     {d.dayType.replace(/-/g, ' ')}
                   </span>
@@ -383,7 +383,7 @@ export default function CampaignDashboard() {
         <section className={`${RULE} pt-8 space-y-5`}>
           <div className="flex items-center justify-between">
             <div className={TYPE.eyebrow}>the journey</div>
-            <Link href={`/offer-ready/certificate/${campaign.id}`} className="text-xs text-stone-400 hover:text-[#e8a33d] transition-colors flex items-center gap-1.5">
+            <Link href={`/offer-ready/certificate/${campaign.id}`} className="text-xs text-stone-400 hover:text-primary transition-colors flex items-center gap-1.5">
               <Trophy className="h-3 w-3" /> certificate
             </Link>
           </div>
@@ -396,7 +396,7 @@ export default function CampaignDashboard() {
               const isCurrent = p === currentPhase;
               return (
                 <div key={p} className="space-y-2">
-                  <div className={cn('h-0.5', complete ? 'bg-[#7d9a6b]' : isCurrent ? s.dot : 'bg-[#26241f]')} />
+                  <div className={cn('h-0.5', complete ? 'bg-primary' : isCurrent ? s.dot : 'bg-primary')} />
                   <div className={cn('text-[10px] capitalize', isCurrent ? s.text : 'text-stone-600')}>{p}</div>
                   <div className="text-[9px] text-stone-700">{done}/{total}</div>
                 </div>
@@ -435,7 +435,7 @@ function CountUp({ to, className }: { to: number; className?: string }) {
 function PlanStrip({ days }: { days: { phase: string; dayType: string; status: string }[] }) {
   const phaseOrder = ['foundation', 'depth', 'pressure', 'rehearsal'];
   const colorOf = (p: string) =>
-    p === 'foundation' ? '#7d9a6b' : p === 'depth' ? '#7a93ad' : p === 'pressure' ? '#c08a5a' : '#a98ba3';
+    p === 'foundation' ? 'hsl(var(--primary))' : p === 'depth' ? 'hsl(var(--muted-foreground))' : p === 'pressure' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))';
   return (
     <div className="flex items-end gap-[3px] h-20">
       {days.map((d, i) => {
@@ -473,11 +473,11 @@ function ArcChart({ data }: { data: { ts: number; value: number }[] }) {
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
         {/* hairline baseline + top rule — quiet grid */}
-        <line x1={PAD_L} y1={H - PAD_B} x2={W - PAD_R} y2={H - PAD_B} stroke="#26241f" strokeWidth="1" />
-        <line x1={PAD_L} y1={PAD_T} x2={W - PAD_R} y2={PAD_T} stroke="#26241f" strokeWidth="1" />
+        <line x1={PAD_L} y1={H - PAD_B} x2={W - PAD_R} y2={H - PAD_B} stroke="hsl(var(--border))" strokeWidth="1" />
+        <line x1={PAD_L} y1={PAD_T} x2={W - PAD_R} y2={PAD_T} stroke="hsl(var(--border))" strokeWidth="1" />
         {/* the line — draws in */}
         <motion.polyline
-          fill="none" stroke="#e8a33d" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+          fill="none" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
           points={pts.map((p) => p.join(',')).join(' ')}
           initial={{ pathLength: 0 }}
           animate={{ pathLength: 1 }}
@@ -485,19 +485,19 @@ function ArcChart({ data }: { data: { ts: number; value: number }[] }) {
         />
         {/* point ticks */}
         {pts.map((p, i) => (
-          <motion.circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill="#121110" stroke="#e8a33d" strokeWidth="1.5"
+          <motion.circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill="#121110" stroke="hsl(var(--primary))" strokeWidth="1.5"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 + i * 0.08 }} />
         ))}
         {/* last value emphasis */}
         {pts.length > 0 && (
-          <motion.circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="4" fill="#e8a33d"
+          <motion.circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="4" fill="hsl(var(--primary))"
             initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 1.2, duration: 0.3 }} />
         )}
         {/* date ticks: first + last */}
-        <text x={PAD_L} y={H - 4} fontSize="9" fill="#78716c" fontFamily="inherit">
+        <text x={PAD_L} y={H - 4} fontSize="9" fill="hsl(var(--muted-foreground))" fontFamily="inherit">
           {new Date(data[0].ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
         </text>
-        <text x={W - PAD_R} y={H - 4} fontSize="9" fill="#78716c" textAnchor="end">
+        <text x={W - PAD_R} y={H - 4} fontSize="9" fill="hsl(var(--muted-foreground))" textAnchor="end">
           {new Date(data[data.length - 1].ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
         </text>
       </svg>
@@ -514,7 +514,7 @@ function ScoreStrip({ data }: { data: { ts: number; score: number; mode: string;
     <div className="flex items-end gap-1.5 h-20">
       {data.map((s, i) => {
         const h = Math.max(4, (s.score / 100) * 100);
-        const barColor = s.score >= 70 ? '#e8a33d' : s.score >= 45 ? '#c08a5a' : '#5a544c';
+        const barColor = s.score >= 70 ? 'hsl(var(--primary))' : s.score >= 45 ? 'hsl(var(--muted-foreground))' : 'hsl(var(--border))';
         return (
           <motion.div
             key={s.ts + '-' + i}

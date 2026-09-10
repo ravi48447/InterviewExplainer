@@ -102,35 +102,35 @@ export function MissionControl() {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto p-6 space-y-4 animate-pulse">
-        {[0, 1, 2].map((i) => <div key={i} className="h-28 rounded-2xl bg-[#141311] border border-[#26241f]" />)}
+        {[0, 1, 2].map((i) => <div key={i} className="h-28 rounded-xl border border-border bg-surface" />)}
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
+    <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 lg:px-6">
       {/* ============ target bar ============ */}
-      <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4">
+      <div className="rounded-xl border border-border bg-surface p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-stone-500">
+            <div className="flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-muted-foreground">
               <Target className="h-3 w-3" /> Active target
             </div>
-            <h2 className="text-lg font-black mt-1">
+            <h2 className="mt-1 font-display text-title tracking-tight">
               {profile?.targetDomains?.[0]?.replace(/-/g, ' ') ?? 'Pick your target to focus everything'}
             </h2>
             {daysTo != null && (
-              <div className={`text-xs mt-0.5 flex items-center gap-1 ${daysTo <= 7 ? 'text-amber-400' : 'text-stone-400'}`}>
+              <div className={`mt-0.5 flex items-center gap-1 text-sm ${daysTo <= 7 ? 'text-amber-600' : 'text-muted-foreground'}`}>
                 <Calendar className="h-3 w-3" />
                 {daysTo > 0 ? `${daysTo} days to interview` : 'Interview day'} · {interviewDate}
               </div>
             )}
           </div>
           <div className="flex gap-2">
-            <Link href="/mock-interviews" className="text-xs rounded-xl border border-[#26241f] bg-[#100f0d] px-3 py-2 hover:border-[#3d3a33] flex items-center gap-1.5 text-stone-300">
+            <Link href="/mock-interviews" className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-muted">
               <Mic className="h-3.5 w-3.5" /> New mock
             </Link>
-            <Link href="/offer-ready/start" className="text-xs rounded-xl bg-[#e8a33d] text-[#1a1408] font-bold px-3 py-2 flex items-center gap-1.5">
+            <Link href="/offer-ready/start" className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">
               <Sparkles className="h-3.5 w-3.5" /> Plan campaign
             </Link>
           </div>
@@ -139,30 +139,30 @@ export function MissionControl() {
 
       {/* ============ next best action ============ */}
       {nba ? (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-[#e8a33d]/40 bg-[#1c1810] p-5">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#e8a33d] mb-2">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-primary/40 bg-primary/[0.04] p-5">
+          <div className="mb-2 flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-primary">
             <Zap className="h-3 w-3" /> Next best action
           </div>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-bold">{nba.cta}</div>
-              <div className="text-xs text-stone-400 mt-1">
+              <div className="text-base font-semibold text-foreground">{nba.cta}</div>
+              <div className="mt-1 text-sm text-muted-foreground">
                 {nba.domain.replace(/-/g, ' ')} · weakest: {nba.concepts?.slice(0, 3).join(', ') || 'coverage gaps'}
               </div>
             </div>
-            <ArrowRight className="h-5 w-5 text-[#e8a33d] shrink-0 mt-1" />
+            <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-primary" />
           </div>
         </motion.div>
       ) : sessions.length === 0 ? (
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-5">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-stone-500 mb-2">
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="mb-2 flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-muted-foreground">
             <Zap className="h-3 w-3" /> Start here
           </div>
-          <div className="font-bold">Run your first mock — 15 minutes</div>
-          <div className="text-xs text-stone-400 mt-1">
+          <div className="text-base font-semibold text-foreground">Run your first mock — 15 minutes</div>
+          <div className="mt-1 text-sm text-muted-foreground">
             One session calibrates the engine: your weak concepts become your plan.
           </div>
-          <Link href="/mock-interviews" className="mt-3 inline-flex items-center gap-1.5 text-xs bg-[#e8a33d] text-[#1a1408] font-bold px-3 py-2 rounded-lg">
+          <Link href="/mock-interviews" className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">
             Enter the interview room <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -174,49 +174,49 @@ export function MissionControl() {
           label="Readiness"
           value={readiness != null ? `${readiness}%` : '—'}
           sub={coverage.length ? `${coverage.reduce((a, c) => a + c.covered, 0)} concepts evidenced` : 'run a mock to seed'}
-          icon={<Trophy className="h-4 w-4 text-[#e8a33d]" />}
+          icon={<Trophy className="h-4 w-4 text-primary" />}
         />
         <StatCard
           label="Sessions"
           value={String(sessions.length)}
           sub={avg != null ? `avg score ${avg}` : 'no scores yet'}
-          icon={<Mic className="h-4 w-4 text-[#a3c291]" />}
+          icon={<Mic className="h-4 w-4 text-emerald-600" />}
         />
         <StatCard
           label="Streak"
           value={`${streak}d`}
           sub={streak > 0 ? 'keep it alive' : 'start today'}
-          icon={<Flame className="h-4 w-4 text-orange-400" />}
+          icon={<Flame className="h-4 w-4 text-amber-600" />}
         />
         <StatCard
           label="Resume"
           value={sessions.length ? 'on file' : 'none'}
           sub="claims seed your gaps"
-          icon={<FileText className="h-4 w-4 text-[#9ab8d4]" />}
+          icon={<FileText className="h-4 w-4 text-muted-foreground" />}
         />
       </div>
 
       {/* ============ competency gap map ============ */}
       {coverage.length > 0 && (
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4">
-          <div className="text-[10px] uppercase tracking-wider text-stone-500 mb-3">Competency coverage</div>
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="mb-3 text-caption font-medium uppercase tracking-wider text-muted-foreground">Competency coverage</div>
           <div className="space-y-2.5">
             {coverage.map((c) => {
               const pct = c.total ? Math.round((c.covered / c.total) * 100) : 0;
               return (
                 <div key={c.domain} className="flex items-center gap-3">
-                  <div className="text-[11px] w-40 shrink-0 text-stone-400 truncate">
+                  <div className="w-40 shrink-0 truncate text-sm text-foreground">
                     {c.domain.replace(/-/g, ' ')}
                   </div>
-                  <div className="flex-1 h-2 rounded-full bg-[#0f0e0c] overflow-hidden">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <motion.div
-                      className={`h-full rounded-full ${pct >= 60 ? 'bg-emerald-500' : pct >= 30 ? 'bg-[#e8a33d]' : 'bg-rose-500'}`}
+                      className={`h-full rounded-full ${pct >= 60 ? 'bg-emerald-600' : pct >= 30 ? 'bg-amber-500' : 'bg-destructive'}`}
                       initial={{ width: 0 }}
                       animate={{ width: `${pct}%` }}
                       transition={{ duration: 0.6 }}
                     />
                   </div>
-                  <div className="text-[11px] w-16 text-right text-stone-500 font-mono">{c.covered}/{c.total}</div>
+                  <div className="w-16 text-right font-mono text-caption text-muted-foreground">{c.covered}/{c.total}</div>
                 </div>
               );
             })}
@@ -226,27 +226,27 @@ export function MissionControl() {
 
       {/* ============ recent sessions ============ */}
       {sessions.length > 0 && (
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-[10px] uppercase tracking-wider text-stone-500">Recent sessions</div>
-            <Link href="/mock-interviews/history" className="text-[10px] text-stone-500 hover:text-stone-300 flex items-center gap-1">
+            <div className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Recent sessions</div>
+            <Link href="/mock-interviews/history" className="flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground">
               history <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="divide-y divide-[#1f1e1b]">
+          <div className="divide-y divide-border">
             {sessions.slice(0, 4).reverse().map((s) => (
-              <div key={s.sessionId} className="py-2.5 flex items-center gap-3">
+              <div key={s.sessionId} className="flex items-center gap-3 py-2.5">
                 <ScoreBadge score={s.overallScore ?? 0} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate">{s.domain?.replace(/-/g, ' ')}</div>
-                  <div className="text-[10px] text-stone-500">
+                  <div className="truncate text-sm font-medium text-foreground">{s.domain?.replace(/-/g, ' ')}</div>
+                  <div className="text-caption text-muted-foreground">
                     {s.turnsCount ?? '?'} questions · {s.mode ?? 'technical'} · {s.at ? new Date(s.at).toLocaleDateString() : ''}
                   </div>
                 </div>
                 {s.weakConcepts?.length ? (
                   <div className="hidden sm:flex gap-1">
                     {s.weakConcepts.slice(0, 2).map((w) => (
-                      <span key={w} className="text-[9px] rounded-full border border-rose-900/50 text-rose-300 px-2 py-0.5 truncate max-w-28">
+                      <span key={w} className="max-w-28 truncate rounded-md border border-destructive/40 px-2 py-0.5 text-caption text-destructive">
                         {w.replace(/-/g, ' ')}
                       </span>
                     ))}
@@ -263,22 +263,22 @@ export function MissionControl() {
 
 function StatCard({ label, value, sub, icon }: { label: string; value: string; sub: string; icon: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-3.5">
+    <div className="rounded-xl border border-border bg-surface p-3.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-stone-500">{label}</span>
+        <span className="text-caption font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
         {icon}
       </div>
-      <div className="text-xl font-black mt-1.5">{value}</div>
-      <div className="text-[10px] text-stone-500 mt-0.5">{sub}</div>
+      <div className="mt-1.5 text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-caption text-muted-foreground">{sub}</div>
     </div>
   );
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  const tone = score >= 70 ? 'border-emerald-800/60 bg-emerald-950/40 text-emerald-300'
-    : score >= 40 ? 'border-[#4d3a28] bg-[#1a1510] text-[#d4a778]'
-    : 'border-rose-900/60 bg-rose-950/40 text-rose-300';
-  return <span className={`text-xs font-black rounded-lg border px-2 py-1 shrink-0 ${tone}`}>{score}</span>;
+  const tone = score >= 70 ? 'border-emerald-600/40 bg-emerald-500/10 text-emerald-700'
+    : score >= 40 ? 'border-amber-600/40 bg-amber-500/10 text-amber-700'
+    : 'border-destructive/40 bg-destructive/10 text-destructive';
+  return <span className={`shrink-0 rounded-lg border px-2 py-1 text-sm font-semibold tabular-nums ${tone}`}>{score}</span>;
 }
 
 export default MissionControl;

@@ -160,7 +160,7 @@ export default function ResultsPage() {
     <Shell>
       {/* header */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 rounded-2xl border border-[#26241f] bg-[#141311] p-6 space-y-3">
+        <div className="md:col-span-2 rounded-2xl border border-border bg-surface p-6 space-y-3">
           <div className="flex items-center gap-3">
             <Brain className="h-8 w-8 text-blue-400" />
             <div>
@@ -171,7 +171,7 @@ export default function ResultsPage() {
           <div className="flex items-end gap-3">
             <span className={cn('text-5xl font-black', scoreColor)}>{report.overallScore}</span>
             <span className="text-stone-400 pb-2">/ 100 concept-coverage score</span>
-            <button onClick={speakReview} className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1917] hover:bg-white/15 text-xs shrink-0">
+            <button onClick={speakReview} className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-white/15 text-xs shrink-0">
               {speaking ? <><VolumeX className="h-3.5 w-3.5" /> stop</> : <><Volume2 className="h-3.5 w-3.5" /> hear review</>}
             </button>
           </div>
@@ -182,7 +182,7 @@ export default function ResultsPage() {
         </div>
 
         {/* concepts */}
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-6 space-y-3">
+        <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
           <div className="text-sm font-semibold flex items-center gap-2">
             <Target className="h-4 w-4 text-blue-400" /> Concepts
           </div>
@@ -212,7 +212,7 @@ export default function ResultsPage() {
 
       {/* ============ REPLAY TIMELINE — re-hear the session, marked ============ */}
       {timeline && summary && (
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-5 space-y-5 mt-6">
+        <div className="rounded-2xl border border-border bg-surface p-5 space-y-5 mt-6">
           <div className="flex items-baseline justify-between">
             <div className="text-xs uppercase tracking-[0.18em] text-stone-500">session replay</div>
             <div className="text-[11px] text-stone-600 tabular-nums">
@@ -223,12 +223,12 @@ export default function ResultsPage() {
           {/* the scrub bar with markers */}
           <div className="relative h-14">
             {/* base track */}
-            <div className="absolute top-6 left-0 right-0 h-1 bg-[#26241f] rounded" />
+            <div className="absolute top-6 left-0 right-0 h-1 bg-primary rounded" />
             {/* progress fill */}
-            <div className="absolute top-6 left-0 h-1 bg-[#e8a33d] rounded transition-all duration-500"
+            <div className="absolute top-6 left-0 h-1 bg-primary rounded transition-all duration-500"
               style={{ width: `${timeline.totalSeconds ? (playhead / timeline.totalSeconds) * 100 : 0}%` }} />
             {/* playhead handle */}
-            <div className="absolute top-3.5 w-4 h-4 rounded-full bg-[#e8a33d] border-2 border-[#121110] cursor-pointer shadow-sm transition-all duration-500"
+            <div className="absolute top-3.5 w-4 h-4 rounded-full bg-primary border-2 border-border cursor-pointer shadow-sm transition-all duration-500"
               style={{ left: `calc(${timeline.totalSeconds ? (playhead / timeline.totalSeconds) * 100 : 0}% - 8px)` }}
               onClick={() => setPlaying(!playing)} />
 
@@ -236,17 +236,17 @@ export default function ResultsPage() {
             {timeline.events.map((e: any, i: number) => {
               const left = timeline.totalSeconds ? (e.at / timeline.totalSeconds) * 100 : 0;
               if (e.type === 'question') {
-                return <div key={i} title={`Q${e.turn}: ${e.label}`} className="absolute top-4 h-5 w-px bg-[#9ab8d4]" style={{ left: `${left}%` }} />;
+                return <div key={i} title={`Q${e.turn}: ${e.label}`} className="absolute top-4 h-5 w-px bg-primary" style={{ left: `${left}%` }} />;
               }
               if (e.type === 'verdict') {
-                const tone = e.score >= 75 ? '#a3c291' : e.score >= 55 ? '#e8a33d' : e.score >= 35 ? '#c08a5a' : '#d49b9b';
-                return <div key={i} title={`Q${e.turn} verdict: ${e.band} (${e.score})`} className="absolute top-2.5 h-3 w-3 rounded-full border-2" style={{ left: `calc(${left}% - 6px)`, borderColor: tone, background: playhead >= e.at ? tone : '#121110' }} />;
+                const tone = e.score >= 75 ? 'hsl(var(--primary))' : e.score >= 55 ? 'hsl(var(--primary))' : e.score >= 35 ? 'hsl(var(--muted-foreground))' : 'hsl(var(--destructive))';
+                return <div key={i} title={`Q${e.turn} verdict: ${e.band} (${e.score})`} className="absolute top-2.5 h-3 w-3 rounded-full border-2" style={{ left: `calc(${left}% - 6px)`, borderColor: tone, background: playhead >= e.at ? tone : 'hsl(var(--background))' }} />;
               }
               if (e.type === 'mistake') {
-                return <div key={i} title={`⚠ ${e.label}`} className="absolute top-1 h-2.5 w-2.5 rotate-45 bg-[#d49b9b]" style={{ left: `calc(${left}% - 5px)` }} />;
+                return <div key={i} title={`⚠ ${e.label}`} className="absolute top-1 h-2.5 w-2.5 rotate-45 bg-destructive" style={{ left: `calc(${left}% - 5px)` }} />;
               }
               if (e.type === 'callback') {
-                return <div key={i} title={e.label} className="absolute bottom-0 h-2.5 w-2.5 rounded-full border border-[#c3aabf]" style={{ left: `calc(${left}% - 5px)`, background: playhead >= e.at ? '#c3aabf' : '#121110' }} />;
+                return <div key={i} title={e.label} className="absolute bottom-0 h-2.5 w-2.5 rounded-full border border-border" style={{ left: `calc(${left}% - 5px)`, background: playhead >= e.at ? 'hsl(var(--muted-foreground))' : 'hsl(var(--background))' }} />;
               }
               return null;
             })}
@@ -254,7 +254,7 @@ export default function ResultsPage() {
 
           {/* controls + current context */}
           <div className="flex items-center gap-4">
-            <button onClick={() => setPlaying(!playing)} className="h-9 w-9 rounded-full border border-[#3a362e] flex items-center justify-center hover:border-[#55503f] transition-colors">
+            <button onClick={() => setPlaying(!playing)} className="h-9 w-9 rounded-full border border-border flex items-center justify-center hover:border-border transition-colors">
               {playing ? '❚❚' : '▶'}
             </button>
             <div className="flex-1 min-w-0">
@@ -269,7 +269,7 @@ export default function ResultsPage() {
             {summary.weakestTurn && (
               <button
                 onClick={() => setPlayhead(timeline.events.find((e: any) => e.type === 'verdict' && e.turn === summary.weakestTurn.turn)?.at ?? 0)}
-                className="text-[10px] px-2.5 py-1.5 border border-[#4a2d2d] text-[#d49b9b] hover:bg-[#1a1112] transition-colors shrink-0">
+                className="text-[10px] px-2.5 py-1.5 border border-border text-destructive hover:bg-surface transition-colors shrink-0">
                 jump to weakest (Q{summary.weakestTurn.turn})
               </button>
             )}
@@ -277,17 +277,17 @@ export default function ResultsPage() {
 
           {/* legend */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-stone-600">
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#a3c291]" /> strong</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#e8a33d]" /> solid</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#d49b9b]" /> mistake flagged</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full border border-[#c3aabf]" /> circle-back</span>
-            <span className="flex items-center gap-1"><span className="h-3 w-px bg-[#9ab8d4]" /> question</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> strong</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> solid</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-destructive" /> mistake flagged</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full border border-border" /> circle-back</span>
+            <span className="flex items-center gap-1"><span className="h-3 w-px bg-primary" /> question</span>
           </div>
 
           {/* weakest-turn receipts under the replay */}
           {summary.weakestTurn && summary.weakestTurn.missed?.length > 0 && (
-            <div className="border-t border-[#1f1d18] pt-3 text-[11px] text-stone-500">
-              <span className="text-[#d49b9b]">Weakest turn</span> missed: {summary.weakestTurn.missed.slice(0, 4).join(', ')}
+            <div className="border-t border-border pt-3 text-[11px] text-stone-500">
+              <span className="text-destructive">Weakest turn</span> missed: {summary.weakestTurn.missed.slice(0, 4).join(', ')}
             </div>
           )}
         </div>
@@ -299,10 +299,10 @@ export default function ResultsPage() {
           <TrendingUp className="h-4 w-4" /> Question by question
         </h2>
         {report.perQuestion.map((q, i) => (
-          <div key={q.questionId + i} className="rounded-2xl border border-[#26241f] bg-[#141311] overflow-hidden">
+          <div key={q.questionId + i} className="rounded-2xl border border-border bg-surface overflow-hidden">
             <button
               onClick={() => setOpen(open === i ? null : i)}
-              className="w-full flex items-center gap-3 p-4 text-left hover:bg-[#141311]"
+              className="w-full flex items-center gap-3 p-4 text-left hover:bg-surface"
             >
               <span className={cn(
                 'h-9 w-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
@@ -320,7 +320,7 @@ export default function ResultsPage() {
               <ChevronDown className={cn('h-4 w-4 text-stone-600 transition-transform', open === i && 'rotate-180')} />
             </button>
             {open === i && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="border-t border-[#1f1d18] px-4 py-4 space-y-4">
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="border-t border-border px-4 py-4 space-y-4">
                 {/* receipts */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3">
@@ -342,8 +342,8 @@ export default function ResultsPage() {
                 </div>
 
                 {/* suggested improved answer */}
-                <div className="rounded-lg bg-[#e8a33d]/[0.04] border border-[#3a362e] p-3">
-                  <div className="text-[#e8a33d] font-semibold mb-1.5 text-xs flex items-center gap-1.5">
+                <div className="rounded-lg bg-primary/[0.04] border border-border p-3">
+                  <div className="text-primary font-semibold mb-1.5 text-xs flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5" /> How our expert answers it
                   </div>
                   <p className="text-sm text-stone-300 leading-relaxed">{q.suggested.spoken}</p>
@@ -373,13 +373,13 @@ export default function ResultsPage() {
 
       {/* move log replay */}
       {report.moveLog?.length > 0 && (
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4 mt-6">
+        <div className="rounded-2xl border border-border bg-surface p-4 mt-6">
           <h2 className="text-sm font-semibold text-stone-300 mb-3">Why the interviewer asked what it asked</h2>
           <ol className="space-y-1.5 text-xs text-stone-400">
             {report.moveLog.map((m, i) => (
               <li key={i} className="flex gap-2">
                 <span className="text-stone-600 w-6 text-right">{m.turn}</span>
-                <span className="px-1.5 rounded bg-[#e8a33d]/10 text-[#e8a33d] w-20 text-center shrink-0">{m.move}</span>
+                <span className="px-1.5 rounded bg-primary/10 text-primary w-20 text-center shrink-0">{m.move}</span>
                 <span className="truncate">{m.reason}</span>
               </li>
             ))}
@@ -418,7 +418,7 @@ function currentCaption(timeline: any, at: number) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#121110] text-[#f5f1e8]">
+    <div className="min-h-screen bg-background text-foreground">
       <main className="max-w-3xl mx-auto px-4 py-10">{children}</main>
     </div>
   );

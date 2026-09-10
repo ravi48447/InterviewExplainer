@@ -26,29 +26,29 @@ export function TechnicalWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4">
-        <div className="text-[10px] uppercase tracking-wider text-stone-500 mb-1.5">Question</div>
-        <h2 className="text-lg font-bold text-stone-100 leading-snug">{question.question}</h2>
+      <div className="rounded-xl border border-border bg-surface p-4 lg:p-5">
+        <div className="mb-1.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">Question</div>
+        <h2 className="text-section font-semibold text-foreground leading-snug">{question.question}</h2>
       </div>
       {rubricChecklist.length > 0 && (
-        <div className="rounded-2xl border border-[#33404d] bg-[#131820] p-4">
-          <div className="flex items-center gap-2 mb-2.5">
-            <ListChecks className="h-4 w-4 text-[#9ab8d4]" />
-            <span className="text-xs font-semibold text-[#9ab8d4]">What the interviewer is listening for</span>
-            <span className="text-[10px] text-stone-500">(tick as you cover them — not scored)</span>
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="mb-2.5 flex items-center gap-2">
+            <ListChecks className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">What the interviewer is listening for</span>
+            <span className="text-caption text-muted-foreground">(tick as you cover them — not scored)</span>
           </div>
-          <div className="grid sm:grid-cols-2 gap-1.5">
+          <div className="grid gap-1.5 sm:grid-cols-2">
             {rubricChecklist.map((c, i) => (
               <button
                 key={i}
                 onClick={() => onCheck?.(i)}
-                className={`flex items-start gap-2 text-left text-xs rounded-lg px-2.5 py-2 border transition-colors ${
+                className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left text-sm transition-colors ${
                   checked[i]
-                    ? 'border-emerald-800/60 bg-emerald-950/30 text-emerald-200'
-                    : 'border-[#1e2a33] bg-[#0f141a] text-stone-400 hover:border-[#33404d]'
+                    ? 'border-emerald-600/40 bg-emerald-500/10 text-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted'
                 }`}
               >
-                {checked[i] ? <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+                {checked[i] ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-4 w-4 shrink-0" />}
                 <span>{c}</span>
               </button>
             ))}
@@ -82,42 +82,42 @@ export function DsaWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-[#3d4a34] bg-[#161a13] p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Code2 className="h-4 w-4 text-[#a3c291]" />
-          <span className="text-[10px] uppercase tracking-wider text-[#a3c291]">DSA round</span>
+      <div className="rounded-xl border border-border bg-surface p-4 lg:p-5">
+        <div className="mb-2 flex items-center gap-2">
+          <Code2 className="h-4 w-4 text-primary" />
+          <span className="text-caption font-medium uppercase tracking-wider text-muted-foreground">DSA round</span>
         </div>
-        <h2 className="text-[15px] font-bold text-stone-100 leading-relaxed whitespace-pre-wrap">{problem.question}</h2>
+        <h2 className="whitespace-pre-wrap text-base font-medium leading-relaxed text-foreground">{problem.question}</h2>
         {problem.constraints && (
-          <p className="mt-3 text-xs text-stone-400 whitespace-pre-wrap border-t border-[#26241f] pt-2.5">{problem.constraints}</p>
+          <p className="mt-3 whitespace-pre-wrap border-t border-border pt-2.5 text-sm text-muted-foreground">{problem.constraints}</p>
         )}
       </div>
 
       {problem.examples && problem.examples.length > 0 && (
-        <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-stone-500">Examples</div>
+        <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
+          <div className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Examples</div>
           {problem.examples.map((ex, i) => (
-            <div key={i} className="text-xs font-mono bg-[#0f0e0c] rounded-lg px-3 py-2 border border-[#1f1e1b]">
-              <div><span className="text-stone-500">Input: </span><span className="text-stone-300">{ex.input}</span></div>
-              <div><span className="text-stone-500">Output: </span><span className="text-emerald-300">{ex.output}</span></div>
+            <div key={i} className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm">
+              <div><span className="text-muted-foreground">Input: </span><span className="text-foreground">{ex.input}</span></div>
+              <div><span className="text-muted-foreground">Output: </span><span className="text-emerald-600">{ex.output}</span></div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="rounded-2xl border border-[#26241f] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2 bg-[#141311] border-b border-[#26241f]">
-          <span className="text-[10px] uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-            <Code2 className="h-3 w-3" /> Your solution
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2">
+          <span className="flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">
+            <Code2 className="h-3.5 w-3.5" /> Your solution
           </span>
-          <span className="text-[10px] text-stone-600 font-mono">{lang || 'java'}</span>
+          <span className="font-mono text-caption text-muted-foreground">{lang || 'java'}</span>
         </div>
         <textarea
           value={code}
           onChange={(e) => onCodeChange(e.target.value)}
           spellCheck={false}
           rows={14}
-          className="w-full bg-[#0d0c0a] text-stone-200 font-mono text-[13px] leading-relaxed p-4 outline-none resize-y"
+          className="w-full resize-y bg-background p-4 font-mono text-sm leading-relaxed text-foreground outline-none"
           placeholder="Write your solution — think complexity out loud as you type…"
         />
       </div>
@@ -138,29 +138,29 @@ export function BehavioralWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-[#4d3a28] bg-[#1a1510] p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Star className="h-4 w-4 text-[#d4a778]" />
-          <span className="text-[10px] uppercase tracking-wider text-[#d4a778]">Behavioral round</span>
+      <div className="rounded-xl border border-border bg-surface p-4 lg:p-5">
+        <div className="mb-2 flex items-center gap-2">
+          <Star className="h-4 w-4 text-primary" />
+          <span className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Behavioral round</span>
         </div>
-        <h2 className="text-[15px] font-bold text-stone-100 leading-relaxed">{question.question}</h2>
+        <h2 className="text-base font-medium leading-relaxed text-foreground">{question.question}</h2>
       </div>
-      <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-4">
-        <div className="text-[10px] uppercase tracking-wider text-stone-500 mb-3">STAR structure — live detection</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 text-caption font-medium uppercase tracking-wider text-muted-foreground">STAR structure — live detection</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {starParts.map((p) => (
             <div
               key={p.part}
               className={`rounded-xl border p-3 text-center transition-colors ${
-                p.detected ? 'border-emerald-800/60 bg-emerald-950/30' : 'border-[#26241f] bg-[#100f0d]'
+                p.detected ? 'border-emerald-600/40 bg-emerald-500/10' : 'border-border bg-background'
               }`}
             >
-              <div className={`text-xl font-black ${p.detected ? 'text-emerald-300' : 'text-stone-700'}`}>{p.part}</div>
-              <div className={`text-[10px] ${p.detected ? 'text-emerald-400' : 'text-stone-600'}`}>{p.name}</div>
+              <div className={`text-xl font-bold ${p.detected ? 'text-emerald-600' : 'text-muted-foreground/40'}`}>{p.part}</div>
+              <div className={`text-caption ${p.detected ? 'text-emerald-600' : 'text-muted-foreground'}`}>{p.name}</div>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[10px] text-stone-600">
+        <p className="mt-3 text-caption text-muted-foreground">
           Parts light up as your story covers them — Situation, Task, Action, Result. Metrics in the Result make it stick.
         </p>
       </div>

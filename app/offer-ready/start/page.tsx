@@ -100,7 +100,7 @@ export default function OfferReadyStartPage() {
           </Link>
           <div>
             <div className={TYPE.eyebrow}>Offer Ready</div>
-            <h1 className={`${TYPE.h2} text-[#f5f1e8] -mt-0.5`}>Build your campaign</h1>
+            <h1 className={`${TYPE.h2} text-foreground -mt-0.5`}>Build your campaign</h1>
           </div>
         </div>
 
@@ -111,7 +111,7 @@ export default function OfferReadyStartPage() {
               <button onClick={() => s.n < step && setStep(s.n)}
                 className={cn(
                   'transition-colors',
-                  step === s.n ? 'text-[#e8a33d]' : step > s.n ? 'text-stone-400 hover:text-stone-200' : 'text-stone-700'
+                  step === s.n ? 'text-primary' : step > s.n ? 'text-stone-400 hover:text-stone-200' : 'text-stone-700'
                 )}>
                 {step > s.n && <CheckCircle2 className="inline h-3 w-3 -mt-0.5 mr-1" />}
                 {s.label}
@@ -122,7 +122,7 @@ export default function OfferReadyStartPage() {
         </div>
 
         {error && (
-          <div className="border border-[#4d3a28] bg-[#1a1510] px-4 py-3 text-sm text-[#c08a5a]">
+          <div className="border border-border bg-surface px-4 py-3 text-sm text-primary">
             {error}
           </div>
         )}
@@ -134,15 +134,15 @@ export default function OfferReadyStartPage() {
               className="space-y-8">
               <div className="space-y-2">
                 <div className={TYPE.eyebrow}>Step one</div>
-                <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>When's the interview?</h2>
+                <h2 className={`${TYPE.h1} text-foreground`}>When's the interview?</h2>
               </div>
               <div className="space-y-4">
                 <input type="date" value={interviewDate} min={new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)}
                   onChange={(e) => setInterviewDate(e.target.value)}
-                  className="w-full bg-transparent border-b-2 border-[#26241f] focus:border-[#e8a33d] outline-none px-1 py-3 text-lg text-[#f5f1e8] transition-colors" />
+                  className="w-full bg-transparent border-b-2 border-border focus:border-border outline-none px-1 py-3 text-lg text-foreground transition-colors" />
                 {daysUntil != null && daysUntil > 0 && (
                   <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-stone-400">
-                    {daysUntil} days out — <span className="text-[#e8a33d] italic">{trackName}</span>
+                    {daysUntil} days out — <span className="text-primary italic">{trackName}</span>
                   </motion.p>
                 )}
               </div>
@@ -162,14 +162,14 @@ export default function OfferReadyStartPage() {
               className="space-y-8">
               <div className="space-y-2">
                 <div className={TYPE.eyebrow}>Step two</div>
-                <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>Which company & level?</h2>
+                <h2 className={`${TYPE.h1} text-foreground`}>Which company & level?</h2>
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-y-2 gap-x-3">
                 {COMPANIES.map((c) => (
                   <button key={c.id} onClick={() => setCompany(c.id)}
                     className={cn(
                       'text-left py-1.5 text-[13px] transition-colors border-b',
-                      company === c.id ? 'text-[#e8a33d] border-[#e8a33d]' : 'text-stone-400 border-transparent hover:text-stone-200'
+                      company === c.id ? 'text-primary border-border' : 'text-stone-400 border-transparent hover:text-stone-200'
                     )}>
                     {c.label}
                   </button>
@@ -180,7 +180,7 @@ export default function OfferReadyStartPage() {
                   <button key={l} onClick={() => setLevel(l)}
                     className={cn(
                       'py-1.5 text-sm border-b transition-colors capitalize',
-                      level === l ? 'text-[#e8a33d] border-[#e8a33d]' : 'text-stone-400 border-transparent hover:text-stone-200'
+                      level === l ? 'text-primary border-border' : 'text-stone-400 border-transparent hover:text-stone-200'
                     )}>
                     {l}
                   </button>
@@ -204,7 +204,7 @@ export default function OfferReadyStartPage() {
               className="space-y-8">
               <div className="space-y-2">
                 <div className={TYPE.eyebrow}>Step three</div>
-                <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>Your prep reality</h2>
+                <h2 className={`${TYPE.h1} text-foreground`}>Your prep reality</h2>
               </div>
               <div className="space-y-2">
                 <div className="text-xs text-stone-500">Domains — up to 3</div>
@@ -213,7 +213,7 @@ export default function OfferReadyStartPage() {
                     <button key={d} onClick={() => toggleDomain(d)}
                       className={cn(
                         'text-left py-1.5 text-[13px] border-b transition-colors',
-                        domains.includes(d) ? 'text-[#e8a33d] border-[#e8a33d]' : 'text-stone-500 border-transparent hover:text-stone-300'
+                        domains.includes(d) ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300'
                       )}>
                       {d.replace(/-/g, ' ')}
                     </button>
@@ -227,7 +227,7 @@ export default function OfferReadyStartPage() {
                     {[15, 30, 45, 60].map((m) => (
                       <button key={m} onClick={() => setMinutesPerDay(m)}
                         className={cn('py-1 text-sm border-b transition-colors',
-                          minutesPerDay === m ? 'text-[#e8a33d] border-[#e8a33d]' : 'text-stone-500 border-transparent hover:text-stone-300')}>
+                          minutesPerDay === m ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300')}>
                         {m}
                       </button>
                     ))}
@@ -239,7 +239,7 @@ export default function OfferReadyStartPage() {
                     {[3, 4, 5, 6].map((d) => (
                       <button key={d} onClick={() => setDaysPerWeek(d)}
                         className={cn('py-1 text-sm border-b transition-colors',
-                          daysPerWeek === d ? 'text-[#e8a33d] border-[#e8a33d]' : 'text-stone-500 border-transparent hover:text-stone-300')}>
+                          daysPerWeek === d ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300')}>
                         {d}
                       </button>
                     ))}
@@ -265,9 +265,9 @@ export default function OfferReadyStartPage() {
               className="space-y-8">
               <div className="space-y-2">
                 <div className={TYPE.eyebrow}>Week one, shaped for you</div>
-                <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>Your first days</h2>
+                <h2 className={`${TYPE.h1} text-foreground`}>Your first days</h2>
               </div>
-              <div className="divide-y divide-[#1f1d18] border-y border-[#1f1d18]">
+              <div className="divide-y divide-border border-y border-border">
                 {preview.days.map((d: any) => {
                   const s = PHASE_STYLE[d.phase] ?? PHASE_STYLE.foundation;
                   return (
@@ -276,7 +276,7 @@ export default function OfferReadyStartPage() {
                         {new Date(d.date).toLocaleDateString('en-IN', { weekday: 'short' })}
                       </span>
                       <div className="flex-1">
-                        <div className="text-sm font-medium text-[#f5f1e8]">{d.title}</div>
+                        <div className="text-sm font-medium text-foreground">{d.title}</div>
                         <div className="text-xs text-stone-500 mt-0.5">{d.oneThing}</div>
                       </div>
                       <span className={`h-1.5 w-1.5 rounded-full ${s.dot} shrink-0`} />
@@ -302,11 +302,11 @@ export default function OfferReadyStartPage() {
         {/* CREATED */}
         {created && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
-            className="border border-[#3d4a34] bg-[#161a13] p-8 space-y-5 text-center">
-            <CheckCircle2 className="h-8 w-8 mx-auto" style={{ color: '#7d9a6b' }} />
-            <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>Campaign created</h2>
+            className="border border-border bg-surface p-8 space-y-5 text-center">
+            <CheckCircle2 className="h-8 w-8 mx-auto" style={{ color: 'hsl(var(--primary))' }} />
+            <h2 className={`${TYPE.h1} text-foreground`}>Campaign created</h2>
             <p className="text-sm text-stone-400">
-              {created.days.length} days to <span className="text-[#f5f1e8]">{created.companyName ?? 'your interview'}</span> on {created.interviewDate}.
+              {created.days.length} days to <span className="text-foreground">{created.companyName ?? 'your interview'}</span> on {created.interviewDate}.
             </p>
             <button onClick={() => (location.href = `/offer-ready/campaign/${created.id}`)}
               className={`group inline-flex items-center gap-2.5 px-7 py-3.5 rounded-none ${CTA} text-sm`}>

@@ -65,8 +65,8 @@ export default function MockHubPage() {
         {/* header */}
         <header className="space-y-6">
           <div className={TYPE.eyebrow}>Mock Interview</div>
-          <h1 className={`${TYPE.displayLg} text-[#f5f1e8]`}>
-            Pick your<br /><span className="italic text-[#e8a33d]">round.</span>
+          <h1 className={`${TYPE.displayLg} text-foreground`}>
+            Pick your<br /><span className="italic text-primary">round.</span>
           </h1>
           <p className={`${TYPE.lead} max-w-md text-[15px]`}>
             Every kind of interview practice in one place. The interviewer adapts
@@ -82,7 +82,7 @@ export default function MockHubPage() {
               <button key={d} onClick={() => setDomain(d)}
                 className={cn(
                   'text-[13px] py-0.5 border-b transition-colors capitalize',
-                  domain === d ? 'text-[#e8a33d] border-[#e8a33d]' : 'text-stone-500 border-transparent hover:text-stone-300'
+                  domain === d ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300'
                 )}>
                 {d.replace(/-/g, ' ')}
               </button>
@@ -92,7 +92,7 @@ export default function MockHubPage() {
 
         {/* the mode list — editorial rows, not cards */}
         <section className={`${RULE} pt-2`}>
-          <div className="divide-y divide-[#1f1d18]">
+          <div className="divide-y divide-border">
             {modes.map((m, i) => {
               const Icon = ICONS[m.icon] ?? Brain;
               const locked = m.plan !== 'free';
@@ -106,14 +106,14 @@ export default function MockHubPage() {
                   className="group w-full text-left grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-6"
                 >
                   <div className="flex items-center justify-center">
-                    <Icon className={cn('h-5 w-5', locked ? 'text-stone-600' : 'text-[#e8a33d]')} />
+                    <Icon className={cn('h-5 w-5', locked ? 'text-stone-600' : 'text-primary')} />
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex items-baseline gap-2.5">
-                      <h2 className={`${TYPE.h2} text-[#f5f1e8]`}>{m.name}</h2>
+                      <h2 className={`${TYPE.h2} text-foreground`}>{m.name}</h2>
                       <span className="text-[11px] text-stone-600">{m.tagline.split('·')[0].trim()}</span>
                       {locked && (
-                        <span className="text-[9px] uppercase tracking-widest text-[#c08a5a] border border-[#4d3a28] px-1.5 py-0.5">
+                        <span className="text-[9px] uppercase tracking-widest text-primary border border-border px-1.5 py-0.5">
                           {m.plan === 'interview_pro' ? 'pro' : 'pass'}
                         </span>
                       )}
@@ -122,7 +122,7 @@ export default function MockHubPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] text-stone-600 tabular-nums">{m.minutes > 0 ? `${m.minutes}m` : '—'}</span>
-                    <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-[#e8a33d] transition-colors" />
+                    <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-primary transition-colors" />
                   </div>
                 </motion.button>
               );
@@ -134,37 +134,37 @@ export default function MockHubPage() {
         <section className={`${RULE} pt-8`}>
           <Link href="/mock-interviews/results?session=demo" className="group grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-4">
             <div className="flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-[#7a93ad]" />
+              <Sparkles className="h-5 w-5 text-muted-foreground" />
             </div>
             <div className="space-y-1">
-              <h3 className={`${TYPE.h2} text-[#f5f1e8]`}>See a sample verdict first</h3>
+              <h3 className={`${TYPE.h2} text-foreground`}>See a sample verdict first</h3>
               <p className="text-[13px] text-stone-500">
                 A finished session's full report — receipts, expert answers, why each question followed yours.
               </p>
             </div>
-            <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-[#7a93ad] transition-colors" />
+            <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-muted-foreground transition-colors" />
           </Link>
         </section>
 
         {/* people surfaces — peer + live rooms */}
         <section className={`${RULE} pt-8 space-y-8`}>
           <div className={TYPE.eyebrow}>with real people</div>
-          <div className="divide-y divide-[#1f1d18]">
+          <div className="divide-y divide-border">
             <Link href="/mock-interviews/peer" className="group grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-5">
-              <Users className="h-5 w-5 text-[#a98ba3]" />
+              <Users className="h-5 w-5 text-muted-foreground" />
               <div className="space-y-1">
-                <h3 className={`${TYPE.h2} text-[#f5f1e8]`}>Peer Practice</h3>
+                <h3 className={`${TYPE.h2} text-foreground`}>Peer Practice</h3>
                 <p className="text-[13px] text-stone-500">Role-swap with a real person — both seats train you.</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-[#a98ba3] transition-colors" />
+              <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-muted-foreground transition-colors" />
             </Link>
             <Link href="/mock-interviews/live" className="group grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-5">
-              <Radio className="h-5 w-5 text-[#7a93ad]" />
+              <Radio className="h-5 w-5 text-muted-foreground" />
               <div className="space-y-1">
-                <h3 className={`${TYPE.h2} text-[#f5f1e8]`}>Live 1:1 Room</h3>
+                <h3 className={`${TYPE.h2} text-foreground`}>Live 1:1 Room</h3>
                 <p className="text-[13px] text-stone-500">Direct-link room with Director-assist for the interviewer.</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-[#7a93ad] transition-colors" />
+              <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-muted-foreground transition-colors" />
             </Link>
           </div>
         </section>

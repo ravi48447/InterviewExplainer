@@ -343,7 +343,7 @@ export default function DashboardPage() {
   return (
     <div className="relative min-h-screen pb-16 bg-background">
       {/* ================= Interview Mission Control — the primary experience ================= */}
-      <div className="border-b border-[#1f1e1b] bg-[#0d0c0a] -mx-4 -mt-4 mb-2">
+      <div className="-mt-4 mb-2 border-b border-border bg-surface-subtle">
         <div className="pt-6">
           <MissionControl />
         </div>

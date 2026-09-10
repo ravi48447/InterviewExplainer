@@ -147,7 +147,7 @@ export default function CompanyLoopPage() {
     return (
       <Shell>
         <header className="text-center space-y-3 pt-4">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-[#c08a5a]/10 border border-[#4d3a28] flex items-center justify-center">
+          <div className="mx-auto h-16 w-16 rounded-2xl bg-primary/10 border border-border flex items-center justify-center">
             <Building2 className="h-7 w-7 text-violet-400" />
           </div>
           <h1 className="text-2xl font-black">Company Loop Runner</h1>
@@ -161,10 +161,10 @@ export default function CompanyLoopPage() {
 
         {/* level + search */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex rounded-xl border border-[#26241f] overflow-hidden">
+          <div className="flex rounded-xl border border-border overflow-hidden">
             {(['fresher', 'intermediate'] as const).map((l) => (
               <button key={l} onClick={() => setLevel(l)}
-                className={cn('px-4 py-2.5 text-sm capitalize flex-1 transition', level === l ? 'bg-[#c08a5a]/15 text-[#d4a778]' : 'bg-[#141311] text-stone-400 hover:bg-[#1a1917]')}>
+                className={cn('px-4 py-2.5 text-sm capitalize flex-1 transition', level === l ? 'bg-primary/15 text-primary' : 'bg-surface text-stone-400 hover:bg-primary')}>
                 {l}
               </button>
             ))}
@@ -173,7 +173,7 @@ export default function CompanyLoopPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-600" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search companies — 'fintech', 'flipkart', 'HFT'…"
-              className="w-full rounded-xl bg-[#100f0d] border border-[#26241f] pl-9 pr-3 py-2.5 text-sm outline-none focus:border-[#c08a5a]/50" />
+              className="w-full rounded-xl bg-background border border-border pl-9 pr-3 py-2.5 text-sm outline-none focus:border-border/50" />
           </div>
         </div>
 
@@ -181,13 +181,13 @@ export default function CompanyLoopPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {companies.map((c) => (
             <button key={c.id} onClick={() => openLoop(c.id)}
-              className="rounded-2xl border border-[#26241f] bg-[#141311] hover:bg-[#1a1917] hover:border-violet-400/40 p-4 text-left space-y-2 transition group">
+              className="rounded-2xl border border-border bg-surface hover:bg-primary hover:border-violet-400/40 p-4 text-left space-y-2 transition group">
               <div className="flex items-start justify-between gap-2">
                 <span className="font-bold text-sm">{c.name}</span>
                 <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0',
                   c.toughness >= 1.3 ? 'bg-rose-500/20 text-rose-300' :
-                  c.toughness >= 1.15 ? 'bg-[#c08a5a]/20 text-[#d4a778]' :
-                  c.toughness >= 1.0 ? 'bg-[#e8a33d]/10 text-[#e8a33d]' : 'bg-[#7d9a6b]/15 text-[#a3c291]')}>
+                  c.toughness >= 1.15 ? 'bg-primary/20 text-primary' :
+                  c.toughness >= 1.0 ? 'bg-primary/10 text-primary' : 'bg-primary/15 text-primary')}>
                   {TOUGH_LABEL(c.toughness)}
                 </span>
               </div>
@@ -215,7 +215,7 @@ export default function CompanyLoopPage() {
   return (
     <Shell>
       {/* loop header */}
-      <div className="rounded-2xl border border-[#463643] bg-[#a98ba3]/[0.04] p-4 space-y-3">
+      <div className="rounded-2xl border border-border bg-primary/[0.04] p-4 space-y-3">
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-violet-400 shrink-0" />
           <div className="flex-1 min-w-0">
@@ -230,7 +230,7 @@ export default function CompanyLoopPage() {
                 </span>
               ) : (
                 <span
-                  className="ml-2 align-middle text-[9px] uppercase tracking-wide rounded-full border border-[#33404d] bg-[#131820] text-[#9ab8d4] px-2 py-0.5"
+                  className="ml-2 align-middle text-[9px] uppercase tracking-wide rounded-full border border-border bg-surface text-muted-foreground px-2 py-0.5"
                   title="This loop is modeled on the company's archetype — a representative practice sequence, not their confidential process."
                 >
                   archetype practice
@@ -268,9 +268,9 @@ export default function CompanyLoopPage() {
       {/* ============ ROUND BRIEF ============ */}
       {roundState === 'brief' && currentRound && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-6 space-y-4">
+          <div className="rounded-2xl border border-border bg-surface p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <span className="h-9 w-9 rounded-full bg-[#a98ba3]/15 border border-[#463643] flex items-center justify-center text-sm font-bold text-[#c3aabf]">
+              <span className="h-9 w-9 rounded-full bg-primary/15 border border-border flex items-center justify-center text-sm font-bold text-muted-foreground">
                 {currentRound.index}
               </span>
               <div className="flex-1">
@@ -281,7 +281,7 @@ export default function CompanyLoopPage() {
               </div>
               {currentRound.camera !== 'off' && (
                 <span className={cn('flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg',
-                  currentRound.camera === 'required' ? 'bg-[#c08a5a]/15 text-[#d4a778]' : 'bg-[#1a1917] text-stone-300')}>
+                  currentRound.camera === 'required' ? 'bg-primary/15 text-primary' : 'bg-primary text-stone-300')}>
                   <Camera className="h-3 w-3" /> {currentRound.camera}
                 </span>
               )}
@@ -292,7 +292,7 @@ export default function CompanyLoopPage() {
 
           {/* camera gate */}
           {currentRound.camera === 'required' && !camReady ? (
-            <div className="rounded-2xl border border-[#4a2d2d] bg-[#1a1112] p-6 space-y-4 text-center">
+            <div className="rounded-2xl border border-border bg-surface p-6 space-y-4 text-center">
               <Video className="h-10 w-10 text-rose-300 mx-auto" />
               <p className="text-sm text-stone-300">This round runs with camera on — like the real one.</p>
               <div className="flex gap-2 justify-center">
@@ -303,7 +303,7 @@ export default function CompanyLoopPage() {
           ) : (
             <div className="space-y-4">
               {camStream && (
-                <div className="rounded-2xl border border-[#26241f] overflow-hidden aspect-video bg-[#100f0d] relative max-w-md mx-auto">
+                <div className="rounded-2xl border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
                   <video ref={camRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                   <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] bg-black/50 px-2 py-1 rounded-lg">
                     <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> live · round {currentRound.index}
@@ -322,14 +322,14 @@ export default function CompanyLoopPage() {
       {roundState === 'live' && currentRound && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           {camStream && (
-            <div className="rounded-2xl border border-[#26241f] overflow-hidden aspect-video bg-[#100f0d] relative max-w-md mx-auto">
+            <div className="rounded-2xl border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
               <video ref={camRef} autoPlay muted playsInline className="w-full h-full object-cover" />
               <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] bg-black/50 px-2 py-1 rounded-lg">
                 <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> rec · {currentRound.label.split(' —')[0]}
               </span>
             </div>
           )}
-          <div className="rounded-2xl border border-[#26241f] bg-[#141311] p-5 space-y-3">
+          <div className="rounded-2xl border border-border bg-surface p-5 space-y-3">
             <p className="text-sm text-stone-300">
               Round in progress. The engine runs this exactly like the real thing:
               {currentRound.mode === 'coding'
@@ -339,7 +339,7 @@ export default function CompanyLoopPage() {
                   : ' adaptive questioning at this company\'s bar.'}
             </p>
             <a href={roundHref(currentRound)} target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full rounded-xl bg-[#e8a33d] hover:bg-[#f0b355] text-[#1a1408] py-3 font-medium text-sm transition">
+              className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary hover:bg-primary text-primary-foreground py-3 font-medium text-sm transition">
               {React.createElement(MODE_ICON[currentRound.mode] ?? Brain, { className: 'h-4 w-4' })}
               Open round {currentRound.index} engine →
             </a>
@@ -357,7 +357,7 @@ export default function CompanyLoopPage() {
                 min={0}
                 max={100}
                 defaultValue={65}
-                className="w-20 rounded-lg border border-[#26241f] bg-[#100f0d] px-2 py-1.5 text-sm text-stone-200"
+                className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-stone-200"
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   if (!Number.isNaN(v)) setSelfScore(Math.max(0, Math.min(100, Math.round(v))));
@@ -373,7 +373,7 @@ export default function CompanyLoopPage() {
 
       {/* ============ ROUND VERDICT ============ */}
       {roundState === 'verdict' && !allDone && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-[#26241f] bg-[#141311] p-6 space-y-4 text-center">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-border bg-surface p-6 space-y-4 text-center">
           <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto" />
           <h3 className="font-bold">Round {currentRound?.index} complete</h3>
           <p className="text-sm text-stone-400">
@@ -403,7 +403,7 @@ export default function CompanyLoopPage() {
             </div>
             <div className="space-y-1.5">
               {loop.rounds.map((r, i) => (
-                <div key={r.index} className="flex items-center gap-3 text-xs bg-[#141311] rounded-lg px-3 py-2">
+                <div key={r.index} className="flex items-center gap-3 text-xs bg-surface rounded-lg px-3 py-2">
                   <span className="text-stone-600">{r.index}.</span>
                   <span className="flex-1 truncate">{r.label}</span>
                   <span className={cn('font-bold', (roundScores[i] ?? 0) >= 70 ? 'text-emerald-400' : 'text-rose-400')}>
@@ -436,7 +436,7 @@ function RotateCcwIcon() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#121110] text-[#f5f1e8]">
+    <div className="min-h-screen bg-background text-foreground">
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-5">{children}</main>
     </div>
   );

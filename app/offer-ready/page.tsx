@@ -48,13 +48,13 @@ export default function OfferReadyLanding() {
           <motion.h1
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08, duration: 0.8, ease: EASE }}
-            className={`${TYPE.displayLg} text-[#f5f1e8]`}
+            className={`${TYPE.displayLg} text-foreground`}
           >
             You have an interview.
             <br />
             We have the
             <br />
-            <span className="italic text-[#e8a33d]">thirty days</span> before it.
+            <span className="italic text-primary">thirty days</span> before it.
           </motion.h1>
 
           <motion.p
@@ -91,7 +91,7 @@ export default function OfferReadyLanding() {
         <section className={`${RULE} pt-14 pb-16 space-y-12`}>
           <div className="space-y-2">
             <div className={TYPE.eyebrow}>The method</div>
-            <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>Four phases. One outcome.</h2>
+            <h2 className={`${TYPE.h1} text-foreground`}>Four phases. One outcome.</h2>
           </div>
 
           <div className="space-y-0">
@@ -113,7 +113,7 @@ export default function OfferReadyLanding() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2.5">
                       <p.icon className={`h-4 w-4 ${s.text}`} />
-                      <h3 className={`${TYPE.h2} text-[#f5f1e8]`}>{p.name}</h3>
+                      <h3 className={`${TYPE.h2} text-foreground`}>{p.name}</h3>
                     </div>
                     <p className="text-sm text-stone-400 leading-relaxed max-w-md">{p.what}</p>
                   </div>
@@ -130,7 +130,7 @@ export default function OfferReadyLanding() {
         <section className={`${RULE} pt-14 pb-16 space-y-8`}>
           <div className="space-y-2">
             <div className={TYPE.eyebrow}>The arsenal</div>
-            <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>Everything works for you here</h2>
+            <h2 className={`${TYPE.h1} text-foreground`}>Everything works for you here</h2>
           </div>
           <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3.5">
             {INSIDE.map((f, i) => (
@@ -140,8 +140,8 @@ export default function OfferReadyLanding() {
                 viewport={{ once: true }} transition={{ delay: i * 0.03, duration: 0.4 }}
                 className="flex items-center gap-3 text-sm text-stone-300"
               >
-                <span className="h-4 w-4 rounded-full border border-[#3a362e] flex items-center justify-center shrink-0">
-                  <Check className="h-2.5 w-2.5 text-[#e8a33d]" />
+                <span className="h-4 w-4 rounded-full border border-border flex items-center justify-center shrink-0">
+                  <Check className="h-2.5 w-2.5 text-primary" />
                 </span>
                 {f}
               </motion.div>
@@ -153,9 +153,9 @@ export default function OfferReadyLanding() {
         <section className={`${RULE} pt-14 pb-16 space-y-8`}>
           <div className="space-y-2">
             <div className={TYPE.eyebrow}>A real week</div>
-            <h2 className={`${TYPE.h1} text-[#f5f1e8]`}>This is what it asks of you</h2>
+            <h2 className={`${TYPE.h1} text-foreground`}>This is what it asks of you</h2>
           </div>
-          <div className="divide-y divide-[#1f1d18] border-y border-[#1f1d18]">
+          <div className="divide-y divide-border border-y border-border">
             {[
               { day: 'Mon', t: 'Weakness drill', o: 'Redeem: connection pooling', m: '15 min', phase: 'foundation' },
               { day: 'Tue', t: 'DSA practice', o: 'One problem + complexity defense', m: '30 min', phase: 'foundation' },
@@ -173,7 +173,7 @@ export default function OfferReadyLanding() {
                 >
                   <span className="text-[11px] uppercase tracking-widest text-stone-600 w-8 shrink-0">{d.day}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-[#f5f1e8]">{d.t}</div>
+                    <div className="text-sm font-medium text-foreground">{d.t}</div>
                     <div className="text-xs text-stone-500 mt-0.5">{d.o}</div>
                   </div>
                   <span className="text-[11px] text-stone-600 shrink-0">{d.m}</span>
@@ -189,7 +189,7 @@ export default function OfferReadyLanding() {
 
         {/* ============ CLOSING ============ */}
         <section className={`${RULE} pt-16 pb-28 space-y-8`}>
-          <h2 className={`${TYPE.displayLg} text-[#f5f1e8]`}>
+          <h2 className={`${TYPE.displayLg} text-foreground`}>
             Walk in like<br />you've been there.
           </h2>
           <p className={`${TYPE.lead} max-w-md text-[15px]`}>
