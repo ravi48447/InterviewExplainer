@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { PublicHeader } from '@/components/shell/public-header'
 import { ProductShell } from '@/components/shell/product-shell'
+import { BrandLogo } from '@/components/shell/brand-logo'
 import { PublicFooter } from '@/components/shell/public-footer'
 import { resolveShellVariant, shellHasFooter } from '@/lib/shell/shell-config'
 
@@ -95,6 +96,7 @@ function AuthShellFrame() {
           className="inline-flex items-center gap-2 text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md px-1"
           aria-label="InterviewExplainer home"
         >
+          <BrandLogo size="sm" />
           <span className="font-semibold tracking-tight">InterviewExplainer</span>
         </a>
       </div>

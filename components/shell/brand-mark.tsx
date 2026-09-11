@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { BrandLogo } from '@/components/shell/brand-logo'
 
 /**
  * BrandMark — canonical logo + wordmark (P03-T049..T056).
@@ -42,16 +43,10 @@ export function BrandMark({
 
   const mark = (
     <span className="flex items-center gap-2.5 group">
-      <span
-        className={cn(
-          'relative flex shrink-0 items-center justify-center rounded-[11px] border border-[#9FC5F8]',
-          'bg-white text-primary shadow-[0_3px_10px_rgba(30,122,242,.08)] dark:bg-surface',
-          s.box,
-        )}
-        aria-hidden="true"
-      >
-        <span className="text-[14px] font-bold tracking-[-0.08em]">IE</span>
-      </span>
+      <BrandLogo
+        size={size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : 'md'}
+        className={s.box}
+      />
       {withWordmark && (
         <span
           className={cn(

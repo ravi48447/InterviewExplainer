@@ -1,3 +1,4 @@
+import { BrandLogo } from '@/components/shell/brand-logo';
 import { BarChart3, Braces, Cloud, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +37,7 @@ export function DomainExplorerVisual({ groups }: { groups: DomainVisualGroup[] }
       </svg>
 
       <div className="absolute left-1/2 top-1/2 z-10 grid h-24 w-24 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-2xl border border-[#a996dc] bg-white/95 shadow-[0_18px_40px_rgba(120,87,216,0.20)] sm:h-28 sm:w-28">
-        <span className="font-display text-3xl font-semibold tracking-[-0.04em] text-[#7857D8] sm:text-4xl">IE</span>
+        <BrandLogo size="lg" />
         <span className="absolute -bottom-7 whitespace-nowrap text-[10px] font-medium text-muted-foreground">Your preparation map</span>
       </div>
 

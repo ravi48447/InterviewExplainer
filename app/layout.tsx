@@ -48,6 +48,14 @@ export const metadata: Metadata = {
   },
   keywords: ["interview preparation", "Java interview questions", "system design", "coding interviews", "developer interviews"],
   authors: [{ name: "InterviewExplainer" }],
+  icons: {
+    icon: [
+      { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/brand/logo.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {

@@ -7,6 +7,7 @@
  * desktop rail into the viewport.
  */
 
+import { BrandLogo } from '@/components/shell/brand-logo'
 import type { ComponentType } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -128,14 +129,7 @@ function isActivePath(pathname: string, href: string) {
 }
 
 function BrandMark() {
-  return (
-    <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated text-xs font-semibold tracking-tight text-foreground shadow-sm"
-      aria-hidden="true"
-    >
-      IE
-    </span>
-  );
+  return <BrandLogo size="sm" />;
 }
 
 function DesktopRail({ pathname }: { pathname: string }) {
