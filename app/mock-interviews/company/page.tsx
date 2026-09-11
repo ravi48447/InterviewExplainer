@@ -171,9 +171,13 @@ export default function CompanyLoopPage() {
   const currentRound = loop?.rounds[roundIdx] ?? null;
 
   // ---- camera gate for camera-required rounds ----
+  // Video-only request: the loop runner never records audio (the interview
+  // room owns the mic), so don't ask for it — fewer permission prompts and
+  // no "recording your mic" anxiety. No recording happens: the stream is
+  // previewed live and stopped the moment the round ends.
   const startCamera = useCallback(async () => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       setCamStream(s);
       setCamReady(true);
       if (camRef.current) camRef.current.srcObject = s;
@@ -561,7 +565,7 @@ export default function CompanyLoopPage() {
             <div className="rounded-lg border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
               <video ref={camRef} autoPlay muted playsInline className="w-full h-full object-cover" />
               <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] bg-black/50 px-2 py-1 rounded-lg">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> rec · {currentRound.label.split(' —')[0]}
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> live preview · {currentRound.label.split(' —')[0]}
               </span>
             </div>
           )}

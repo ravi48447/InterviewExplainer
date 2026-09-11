@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowRight,
   BarChart3,
@@ -30,6 +30,7 @@ import {
   Sparkles,
   Volume2,
   Waves,
+  X,
 } from 'lucide-react';
 import { TechIcon } from '@/components/tech-icon';
 import { useAuth } from '@/context/auth-context';
@@ -117,7 +118,6 @@ export function MockInterviewStudio() {
   const [speaking, setSpeaking] = useState(false);
   const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [micLevel, setMicLevel] = useState(0);
-  const [showAllDomains, setShowAllDomains] = useState(false);
   const [recentSession, setRecentSession] = useState<RecentSession | null>(null);
   const micCleanupRef = useRef<null | (() => void)>(null);
 
@@ -128,12 +128,12 @@ export function MockInterviewStudio() {
   const requiresPass = personaOption.plan !== 'free' || tier > 2 || minutes > 30 || !['technical', 'behavioral'].includes(mode);
   const hasPass = user?.plan === 'pro';
 
+  const [roleLibraryOpen, setRoleLibraryOpen] = useState(false);
   const visibleDomains = useMemo(() => {
-    if (showAllDomains) return STUDIO_DOMAINS;
     const base = STUDIO_DOMAINS.filter((item) => COLLAPSED_DOMAIN_IDS.includes(item.id));
     if (base.some((item) => item.id === domain)) return base;
     return [...base.slice(0, 3), domainOption];
-  }, [domain, domainOption, showAllDomains]);
+  }, [domain, domainOption]);
 
   const sessionQuery = useMemo(() => {
     const params = new URLSearchParams({
@@ -327,12 +327,11 @@ export function MockInterviewStudio() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowAllDomains((current) => !current)}
-                aria-expanded={showAllDomains}
+                onClick={() => setRoleLibraryOpen(true)}
                 className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {showAllDomains ? 'Show fewer roles' : `See all ${STUDIO_DOMAINS.length} roles`}
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllDomains ? 'rotate-180' : ''}`} />
+                Browse all {STUDIO_DOMAINS.length} roles
+                <ChevronRight className="h-3.5 w-3.5" />
               </button>
 
               <div className="my-5 h-px bg-border" />
@@ -496,6 +495,64 @@ export function MockInterviewStudio() {
         </div>
 
         {/* footer — real detail: how scoring works, where data lives, what's free */}
+        {/* ============ role library overlay — all roles, searchable ============ */}
+        <AnimatePresence>
+          {roleLibraryOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+              onClick={() => setRoleLibraryOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.97, y: 8 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.97, y: 8 }}
+                className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-label="Role library"
+              >
+                <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+                  <div>
+                    <h2 className="text-base font-semibold tracking-tight text-foreground">Role library</h2>
+                    <p className="text-xs text-muted-foreground">{STUDIO_DOMAINS.length} interview tracks — pick one to load into the studio</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRoleLibraryOpen(false)}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Close role library"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid gap-2 overflow-y-auto p-4 sm:grid-cols-2">
+                  {STUDIO_DOMAINS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => { changeDomain(item.id); setRoleLibraryOpen(false); }}
+                      className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                        domain === item.id
+                          ? 'border-primary/40 bg-primary/[0.06]'
+                          : 'border-border bg-background hover:bg-muted'
+                      }`}
+                    >
+                      <TechIcon name={domainIconName(item.id)} className="h-5 w-5 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-foreground">{item.label}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{item.level}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <footer className="mt-5 grid gap-4 border-t border-border pt-4 text-xs text-content-muted lg:grid-cols-3">
           <div>
             <div className="mb-1.5 font-medium text-foreground">How scoring works</div>

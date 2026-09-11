@@ -218,7 +218,18 @@ console.log('\n[3] No-repeat — 100 seeded sessions');
 console.log('\n[4] Gap-targeting');
 {
   const withConcepts = index.questions.filter((q) => (q.concepts ?? []).length > 0);
-  const target = withConcepts[0].concepts[0];
+  // Target a concept that ACTUALLY has multiple carriers — with every question
+  // now indexed (incl. -qN suffixes), the first concept may live on exactly one
+  // question and can never surface in a top-6 queue. Pick from concepts with
+  // >= 3 carriers so the gap-targeting contract is testable.
+  const carrierCount = new Map();
+  for (const q of withConcepts) {
+    for (const c of q.concepts) carrierCount.set(c, (carrierCount.get(c) ?? 0) + 1);
+  }
+  const wellCarried = withConcepts.find(
+    (q) => q.concepts.filter((c) => carrierCount.get(c) >= 3).length > 0
+  );
+  const target = wellCarried.concepts.find((c) => carrierCount.get(c) >= 3);
   const rand = mulberry32(5);
   const queue = buildSessionQueue({ index, targetConcepts: [target], count: 6, rand });
   const targeted = queue.filter((q) => (q.concepts ?? []).includes(target));
